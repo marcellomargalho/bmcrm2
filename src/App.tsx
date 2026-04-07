@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AppLayout } from '@/components/AppLayout';
+import { useAuthInactivity } from '@/hooks/useAuthInactivity';
 import { Login } from '@/pages/Login';
 import { Signup } from '@/pages/Signup';
 import { Dashboard } from '@/pages/Dashboard';
@@ -146,13 +147,16 @@ export default function App() {
     }
   }, [sessionUserId]);
 
-  const logout = async () => {
+  const logout = React.useCallback(async () => {
     setIsAuthenticated(false);
     setIsApproved(false);
     setUserRole(null);
     setIsLoading(false);
     await supabase.auth.signOut();
-  };
+  }, []);
+
+  // Ativa o monitor de inatividade (Logout após 30 minutos sem ação)
+  useAuthInactivity(logout, 30 * 60 * 1000);
 
   return (
     <Routes>
