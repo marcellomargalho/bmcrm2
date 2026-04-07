@@ -59,6 +59,22 @@ export function Atendimento() {
 
   useEffect(() => {
     fetchAppointments();
+
+    const channel = supabase
+      .channel('lista-atendimentos')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'appointments' },
+        (payload) => {
+          // Prepend the new appointment to the local state so the grid updates instantly
+          setAppointments(prev => [payload.new, ...prev]);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const updateStatus = async (id: string, newStatus: string) => {
@@ -223,6 +239,12 @@ export function Atendimento() {
                         <Calendar className="w-3.5 h-3.5" />
                         {formatDate(lead.preferred_date)} às {lead.preferred_time || '--:--'}
                       </p>
+                    </div>
+                  )}
+                  {lead.description && (
+                    <div className="mt-4 p-3 bg-surface-container rounded-xl border border-outline-variant/10">
+                      <p className="text-[10px] text-outline font-bold uppercase tracking-widest mb-1">Contexto / Descrição</p>
+                      <p className="text-sm text-on-surface font-medium whitespace-pre-wrap">{lead.description}</p>
                     </div>
                   )}
                 </div>
