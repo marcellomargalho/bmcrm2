@@ -135,6 +135,7 @@ function LineChart({ data }: { data: DayCount[] }) {
 export function Analytics() {
   const [range, setRange] = useState<7 | 30 | 90>(30);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
 
   // Totals
@@ -152,107 +153,115 @@ export function Analytics() {
   const [referrers, setReferrers] = useState<{ referrer: string; count: number }[]>([]);
 
   const fetchData = async () => {
-    setLoading(true);
-    const since = new Date();
-    since.setDate(since.getDate() - range);
-    const sinceISO = since.toISOString();
+    try {
+      setLoading(true);
+      setError(null);
+      const since = new Date();
+      since.setDate(since.getDate() - range);
+      const sinceISO = since.toISOString();
 
-    // ── 1. Total views ───────────────────────────────────────────────────────
-    const { count: viewCount } = await supabase
-      .from('page_views')
-      .select('*', { count: 'exact', head: true })
-      .gte('viewed_at', sinceISO);
+      // ── 1. Total views ───────────────────────────────────────────────────────
+      const { count: viewCount } = await supabase
+        .from('page_views')
+        .select('*', { count: 'exact', head: true })
+        .gte('viewed_at', sinceISO);
 
-    setTotalViews(viewCount || 0);
+      setTotalViews(viewCount || 0);
 
-    // ── 2. Total leads (artigo) ──────────────────────────────────────────────
-    const { count: leadCount } = await supabase
-      .from('blog_leads')
-      .select('*', { count: 'exact', head: true })
-      .eq('source', 'article_cta')
-      .gte('created_at', sinceISO);
+      // ── 2. Total leads (artigo) ──────────────────────────────────────────────
+      const { count: leadCount } = await supabase
+        .from('blog_leads')
+        .select('*', { count: 'exact', head: true })
+        .eq('source', 'article_cta')
+        .gte('created_at', sinceISO);
 
-    setTotalLeads(leadCount || 0);
+      setTotalLeads(leadCount || 0);
 
-    // ── 3. Leads homepage ────────────────────────────────────────────────────
-    const { count: hpCount } = await supabase
-      .from('blog_leads')
-      .select('*', { count: 'exact', head: true })
-      .eq('source', 'homepage_cta')
-      .gte('created_at', sinceISO);
+      // ── 3. Leads homepage ────────────────────────────────────────────────────
+      const { count: hpCount } = await supabase
+        .from('blog_leads')
+        .select('*', { count: 'exact', head: true })
+        .eq('source', 'homepage_cta')
+        .gte('created_at', sinceISO);
 
-    setTotalHomepageLeads(hpCount || 0);
+      setTotalHomepageLeads(hpCount || 0);
 
-    // ── 4. Views por artigo ──────────────────────────────────────────────────
-    const { data: viewsData } = await supabase
-      .from('page_views')
-      .select('post_id, post_title')
-      .gte('viewed_at', sinceISO);
+      // ── 4. Views por artigo ──────────────────────────────────────────────────
+      const { data: viewsData } = await supabase
+        .from('page_views')
+        .select('post_id, post_title, viewed_at')
+        .gte('viewed_at', sinceISO);
 
-    const { data: leadsData } = await supabase
-      .from('blog_leads')
-      .select('post_id, post_title, source')
-      .eq('source', 'article_cta')
-      .gte('created_at', sinceISO);
+      const { data: leadsData } = await supabase
+        .from('blog_leads')
+        .select('post_id, post_title, source, created_at')
+        .eq('source', 'article_cta')
+        .gte('created_at', sinceISO);
 
-    // Aggregate by post
-    const map: Record<string, PostStat> = {};
+      // Aggregate by post
+      const map: Record<string, PostStat> = {};
 
-    (viewsData || []).forEach((v) => {
-      const key = v.post_id || '__null__';
-      if (!map[key]) map[key] = { post_id: v.post_id, post_title: v.post_title, views: 0, leads: 0, conversion: 0 };
-      map[key].views += 1;
-    });
+      (viewsData || []).forEach((v) => {
+        const key = v.post_id || '__null__';
+        if (!map[key]) map[key] = { post_id: v.post_id, post_title: v.post_title, views: 0, leads: 0, conversion: 0 };
+        map[key].views += 1;
+      });
 
-    (leadsData || []).forEach((l) => {
-      const key = l.post_id || '__null__';
-      if (!map[key]) map[key] = { post_id: l.post_id, post_title: l.post_title, views: 0, leads: 0, conversion: 0 };
-      map[key].leads += 1;
-    });
+      (leadsData || []).forEach((l) => {
+        const key = l.post_id || '__null__';
+        if (!map[key]) map[key] = { post_id: l.post_id, post_title: l.post_title, views: 0, leads: 0, conversion: 0 };
+        map[key].leads += 1;
+      });
 
-    const stats: PostStat[] = Object.values(map)
-      .filter(s => s.post_id) // exclude null post entries
-      .map(s => ({ ...s, conversion: pct(s.leads, s.views) }))
-      .sort((a, b) => b.views - a.views);
+      const stats: PostStat[] = Object.values(map)
+        .filter(s => s.post_id) // exclude null post entries
+        .map(s => ({ ...s, conversion: pct(s.leads, s.views) }))
+        .sort((a, b) => b.views - a.views);
 
-    setPostStats(stats);
+      setPostStats(stats);
 
-    // ── 5. Timeline (views por dia) ──────────────────────────────────────────
-    const days: DayCount[] = [];
-    for (let i = range - 1; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      days.push({ day: d.toISOString().slice(0, 10), count: 0 });
+      // ── 5. Timeline (views por dia) ──────────────────────────────────────────
+      const days: DayCount[] = [];
+      for (let i = range - 1; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        days.push({ day: d.toISOString().slice(0, 10), count: 0 });
+      }
+
+      (viewsData || []).forEach((v: any) => {
+        if (!v.viewed_at) return;
+        const day = new Date(v.viewed_at).toISOString().slice(0, 10);
+        const found = days.find(d => d.day === day);
+        if (found) found.count += 1;
+      });
+
+      setViewsTimeline(days);
+
+      // ── 6. Referrers ─────────────────────────────────────────────────────────
+      const { data: refData } = await supabase
+        .from('page_views')
+        .select('referrer')
+        .gte('viewed_at', sinceISO);
+
+      const refMap: Record<string, number> = {};
+      (refData || []).forEach((r: any) => {
+        const key = r.referrer || 'direto';
+        refMap[key] = (refMap[key] || 0) + 1;
+      });
+
+      const refArr = Object.entries(refMap)
+        .map(([referrer, count]) => ({ referrer, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 6);
+
+      setReferrers(refArr);
+      setLastUpdate(new Date());
+    } catch (err) {
+      console.error('Error fetching analytics:', err);
+      setError('Ocorreu um erro ao carregar os dados de analytics. Verifique sua conexão ou tente novamente.');
+    } finally {
+      setLoading(false);
     }
-
-    (viewsData || []).forEach((v: any) => {
-      const day = new Date(v.viewed_at || '').toISOString().slice(0, 10);
-      const found = days.find(d => d.day === day);
-      if (found) found.count += 1;
-    });
-
-    setViewsTimeline(days);
-
-    // ── 6. Referrers ─────────────────────────────────────────────────────────
-    const { data: refData } = await supabase
-      .from('page_views')
-      .select('referrer')
-      .gte('viewed_at', sinceISO);
-
-    const refMap: Record<string, number> = {};
-    (refData || []).forEach((r: any) => {
-      const key = r.referrer || 'direto';
-      refMap[key] = (refMap[key] || 0) + 1;
-    });
-
-    const refArr = Object.entries(refMap)
-      .map(([referrer, count]) => ({ referrer, count }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 6);
-
-    setReferrers(refArr);
-    setLastUpdate(new Date());
-    setLoading(false);
   };
 
   useEffect(() => {
@@ -316,6 +325,17 @@ export function Analytics() {
         <div className="flex items-center justify-center py-32 text-on-surface-variant">
           <RefreshCw className="w-6 h-6 animate-spin mr-3" />
           <span className="text-sm">Carregando dados...</span>
+        </div>
+      ) : error ? (
+        <div className="bg-error-container/20 border border-error/20 p-8 rounded-xl text-center">
+          <TrendingUp className="w-12 h-12 text-error mx-auto mb-4 opacity-50" />
+          <p className="text-on-error-container font-medium mb-4">{error}</p>
+          <button
+            onClick={fetchData}
+            className="px-4 py-2 bg-primary text-on-primary rounded-lg text-sm font-semibold hover:bg-primary-hover transition-colors"
+          >
+            Tentar Novamente
+          </button>
         </div>
       ) : (
         <>
