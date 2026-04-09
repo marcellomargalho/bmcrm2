@@ -94,7 +94,6 @@ function NewClientModal({ isOpen, onClose, onSuccess }: { isOpen: boolean; onClo
             <div className="space-y-1">
               <label className="text-xs font-bold text-on-surface-variant uppercase tracking-wider">CPF/CNPJ</label>
               <input 
-                required
                 type="text" 
                 value={formData.cpf_cnpj}
                 onChange={e => setFormData({ ...formData, cpf_cnpj: e.target.value })}
@@ -105,7 +104,6 @@ function NewClientModal({ isOpen, onClose, onSuccess }: { isOpen: boolean; onClo
             <div className="space-y-1">
               <label className="text-xs font-bold text-on-surface-variant uppercase tracking-wider">Telefone</label>
               <input 
-                required
                 type="text" 
                 value={formData.phone}
                 onChange={e => setFormData({ ...formData, phone: e.target.value })}
@@ -117,7 +115,6 @@ function NewClientModal({ isOpen, onClose, onSuccess }: { isOpen: boolean; onClo
           <div className="space-y-1">
             <label className="text-xs font-bold text-on-surface-variant uppercase tracking-wider">E-mail</label>
             <input 
-              required
               type="email" 
               value={formData.email}
               onChange={e => setFormData({ ...formData, email: e.target.value })}
@@ -342,16 +339,16 @@ function EditClientModal({ isOpen, onClose, onSuccess, client }: { isOpen: boole
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
               <label className="text-xs font-bold text-on-surface-variant uppercase tracking-wider">CPF/CNPJ</label>
-              <input required type="text" value={formData.cpf_cnpj} onChange={e => setFormData({ ...formData, cpf_cnpj: e.target.value })} className="w-full bg-surface-container-highest border-none rounded-xl px-4 py-3 text-on-surface focus:ring-2 focus:ring-secondary font-medium" />
+              <input type="text" value={formData.cpf_cnpj} onChange={e => setFormData({ ...formData, cpf_cnpj: e.target.value })} className="w-full bg-surface-container-highest border-none rounded-xl px-4 py-3 text-on-surface focus:ring-2 focus:ring-secondary font-medium" />
             </div>
             <div className="space-y-1">
               <label className="text-xs font-bold text-on-surface-variant uppercase tracking-wider">Telefone</label>
-              <input required type="text" value={formData.phone} onChange={e => setFormData({ ...formData, phone: e.target.value })} className="w-full bg-surface-container-highest border-none rounded-xl px-4 py-3 text-on-surface focus:ring-2 focus:ring-secondary font-medium" />
+              <input type="text" value={formData.phone} onChange={e => setFormData({ ...formData, phone: e.target.value })} className="w-full bg-surface-container-highest border-none rounded-xl px-4 py-3 text-on-surface focus:ring-2 focus:ring-secondary font-medium" />
             </div>
           </div>
           <div className="space-y-1">
             <label className="text-xs font-bold text-on-surface-variant uppercase tracking-wider">E-mail</label>
-            <input required type="email" value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} className="w-full bg-surface-container-highest border-none rounded-xl px-4 py-3 text-on-surface focus:ring-2 focus:ring-secondary font-medium" />
+            <input type="email" value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} className="w-full bg-surface-container-highest border-none rounded-xl px-4 py-3 text-on-surface focus:ring-2 focus:ring-secondary font-medium" />
           </div>
 
           {/* Adicionar novo processo */}
