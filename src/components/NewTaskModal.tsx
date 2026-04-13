@@ -287,6 +287,7 @@ export function NewTaskModal({ isOpen, onClose, onSuccess, lockedProcessId, edit
                 { value: 'Diligência', icon: '🔍' },
                 { value: 'Audiência de Instrução ou Conciliação', icon: '⚖️' },
                 { value: 'Análise de Processo', icon: '📂' },
+                { value: 'Acompanhamento de Processo', icon: '🔄' },
               ].map(({ value, icon }) => (
                 <button
                   key={value}

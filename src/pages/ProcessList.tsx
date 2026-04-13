@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Filter, Plus, Edit2, Eye, ChevronLeft, ChevronRight, History, Upload, Mail, Calendar as CalendarIcon, Calculator, TrendingUp, Clock, X, Loader2, Search } from 'lucide-react';
+import { Filter, Plus, Edit2, Eye, ChevronLeft, ChevronRight, History, Upload, Mail, Calendar as CalendarIcon, Calculator, TrendingUp, Clock, X, Loader2, Search, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Client } from '@/types';
 import { supabase } from '@/lib/supabase';
@@ -43,6 +43,13 @@ export function ProcessList() {
     fetchProcesses();
     fetchMovements();
   }, []);
+
+  async function handleDeleteProcess(id: string) {
+    if (window.confirm('Tem certeza que deseja excluir este processo? Essa ação não pode ser desfeita.')) {
+      await supabase.from('processes').delete().eq('id', id);
+      fetchProcesses();
+    }
+  }
 
   const activeCount = processes.filter(p => p.status === 'Em Andamento').length;
 
@@ -255,6 +262,13 @@ export function ProcessList() {
                           className="w-8 h-8 rounded-lg flex items-center justify-center text-outline hover:text-on-surface hover:bg-surface-container-high transition-all"
                         >
                           <Eye className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteProcess(proc.id)}
+                          className="w-8 h-8 rounded-lg flex items-center justify-center text-outline hover:text-error hover:bg-error/10 transition-all"
+                          title="Excluir Processo"
+                        >
+                          <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
                     </td>

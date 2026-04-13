@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, Gavel, Loader2 } from 'lucide-react';
+import { ChevronLeft, Gavel, Loader2, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 
@@ -33,6 +33,13 @@ export function ProcessDetails() {
   useEffect(() => {
     fetchProcess();
   }, [fetchProcess]);
+
+  async function handleDelete() {
+    if (window.confirm('Tem certeza que deseja excluir este processo? Essa ação não pode ser desfeita e todas as movimentações, tarefas e documentos associados podem ser perdidos.')) {
+      await supabase.from('processes').delete().eq('id', id);
+      navigate('/processos');
+    }
+  }
 
   if (loading) {
     return <div className="flex justify-center items-center h-64"><Loader2 className="w-8 h-8 animate-spin text-secondary" /></div>;
@@ -100,6 +107,12 @@ export function ProcessDetails() {
                   className="px-4 py-2 bg-surface-container-high text-on-surface text-xs font-bold rounded-xl hover:bg-surface-bright transition-all h-fit border border-outline-variant/10"
                 >
                   Editar Processo
+                </button>
+                <button 
+                  onClick={handleDelete}
+                  className="px-4 py-2 bg-error/10 text-error hover:bg-error hover:text-white text-xs font-bold rounded-xl transition-all h-fit flex items-center gap-2"
+                >
+                  <Trash2 className="w-4 h-4" />
                 </button>
               </div>
             </div>

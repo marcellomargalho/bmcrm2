@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, UserPlus, Filter, SortAsc, Mail, Phone, Scale, ChevronRight, Edit2, Share2, TrendingUp, X, Loader2, UserX, UserCheck } from 'lucide-react';
+import { Users, UserPlus, Filter, SortAsc, Mail, Phone, Scale, ChevronRight, Edit2, Share2, TrendingUp, X, Loader2, UserX, UserCheck, Trash2, MapPin, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Client } from '@/types';
 import { supabase } from '@/lib/supabase';
@@ -204,18 +204,27 @@ function ClientProcesses({ clientId }: { clientId: string }) {
   const [processes, setProcesses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  async function fetchProcesses() {
     setLoading(true);
-    supabase
+    const { data } = await supabase
       .from('processes')
       .select('*')
       .eq('client_id', clientId)
-      .order('created_at', { ascending: false })
-      .then(({ data }) => {
-        setProcesses(data || []);
-        setLoading(false);
-      });
+      .order('created_at', { ascending: false });
+    setProcesses(data || []);
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    fetchProcesses();
   }, [clientId]);
+
+  async function handleDeleteProcess(id: string) {
+    if (window.confirm('Tem certeza que deseja excluir este processo? Essa ação não pode ser desfeita.')) {
+      await supabase.from('processes').delete().eq('id', id);
+      fetchProcesses();
+    }
+  }
 
   return (
     <div>
@@ -236,21 +245,36 @@ function ClientProcesses({ clientId }: { clientId: string }) {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-bold text-on-surface truncate">{proc.number}</p>
-                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                  <div className="flex items-center gap-3 mt-0.5 flex-wrap">
                     {proc.court && (
-                      <span className="text-[10px] text-on-surface-variant">📍 {proc.court}</span>
+                      <span className="flex items-center gap-1 text-[10px] text-on-surface-variant font-medium">
+                        <MapPin className="w-3 h-3 text-secondary/70" /> {proc.court}
+                      </span>
                     )}
                     {proc.area && (
-                      <span className="text-[10px] text-on-surface-variant">⚖️ {proc.area}</span>
+                      <span className="flex items-center gap-1 text-[10px] text-on-surface-variant font-medium">
+                        <Scale className="w-3 h-3 text-secondary/70" /> {proc.area}
+                      </span>
                     )}
                     {proc.responsible && (
-                      <span className="text-[10px] text-on-surface-variant">👤 {proc.responsible}</span>
+                      <span className="flex items-center gap-1 text-[10px] text-on-surface-variant font-medium">
+                        <User className="w-3 h-3 text-secondary/70" /> {proc.responsible}
+                      </span>
                     )}
                   </div>
                 </div>
-                <span className="px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded-full bg-secondary/10 text-secondary whitespace-nowrap">
-                  {proc.status}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded-full bg-secondary/10 text-secondary whitespace-nowrap">
+                    {proc.status}
+                  </span>
+                  <button 
+                    onClick={() => handleDeleteProcess(proc.id)}
+                    className="p-1.5 text-outline hover:text-error hover:bg-error/10 rounded-md transition-all"
+                    title="Excluir Processo"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
             </div>
           ))}
