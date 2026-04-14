@@ -36,6 +36,8 @@ export function DocumentTab({ processId }: { processId: string }) {
     fetchDocuments();
   }, [processId]);
 
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragOver(true);
@@ -46,39 +48,79 @@ export function DocumentTab({ processId }: { processId: string }) {
     setIsDragOver(false);
   };
 
+  const handleFiles = async (files: File[]) => {
+    if (!files || files.length === 0) return;
+    if (!window.confirm(`Fazer upload de ${files.length} arquivo(s)?`)) return;
+    
+    setLoading(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Usuário não logado');
+
+      for (const file of files) {
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${Math.random().toString(36).substring(2)}-${Date.now()}.${fileExt}`;
+        const filePath = `${processId}/${fileName}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('process_documents')
+          .upload(filePath, file);
+
+        if (uploadError) throw uploadError;
+
+        const { data: urlData } = supabase.storage
+          .from('process_documents')
+          .getPublicUrl(filePath);
+
+        const payload = {
+          process_id: processId,
+          title: file.name,
+          type: activeType === 'Todos' ? 'Outros' : activeType,
+          size: file.size,
+          file_url: urlData.publicUrl,
+          // user_id might not exist in the table, checking previous code it was provided
+          user_id: user.id
+        };
+
+        const { error: dbError } = await supabase.from('process_documents').insert([payload]);
+        if (dbError) throw dbError;
+      }
+      
+      fetchDocuments();
+    } catch (err: any) {
+      console.error('Erro no upload:', err);
+      alert('Erro ao fazer upload do arquivo. Verifique se o bucket "process_documents" existe público no Supabase Storage e tem as permissões corretas.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragOver(false);
 
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      if (!window.confirm(`Fazer upload de ${e.dataTransfer.files.length} arquivo(s)?`)) return;
-      
-      setLoading(true);
-      const token = await supabase.auth.getUser();
-      const userId = token.data.user?.id;
-
-      // Mock the upload inserting into database with a dummy url
-      const file = e.dataTransfer.files[0];
-      const payload = {
-        process_id: processId,
-        title: file.name,
-        type: activeType === 'Todos' ? 'Outros' : activeType,
-        size: file.size,
-        file_url: 'blob://mock-url-' + Math.random(),
-        user_id: userId
-      };
-
-      await supabase.from('process_documents').insert([payload]);
-      
-      // Delay mock to pretend uploading
-      setTimeout(() => {
-        fetchDocuments();
-      }, 1000);
+      handleFiles(Array.from(e.dataTransfer.files));
     }
   };
 
   async function handleDelete(id: string) {
     if (!window.confirm('Excluir este arquivo permanentemente?')) return;
+    
+    const docToDelete = documents.find(d => d.id === id);
+    if (docToDelete && docToDelete.file_url) {
+      try {
+        const urlParts = docToDelete.file_url.split('/');
+        const fileName = urlParts.pop();
+        const folderName = urlParts.pop();
+        if (fileName && folderName) {
+          await supabase.storage.from('process_documents').remove([`${folderName}/${fileName}`]);
+        }
+      } catch (e) {
+        console.error('Erro ao excluir do storage:', e);
+      }
+    }
+
     await supabase.from('process_documents').delete().eq('id', id);
     fetchDocuments();
   }
@@ -123,9 +165,22 @@ export function DocumentTab({ processId }: { processId: string }) {
         </div>
         <h4 className="text-base font-bold text-on-surface">Arraste seus arquivos para cá</h4>
         <p className="text-sm text-on-surface-variant mt-1 mb-4">Suporta PDF, DOCX, Imagens (Até 50MB)</p>
-        <button className="px-6 py-2.5 bg-surface-container-highest text-secondary border border-secondary/20 font-bold text-sm rounded-xl hover:bg-surface-bright transition-all">
+        <button 
+          onClick={() => fileInputRef.current?.click()}
+          className="px-6 py-2.5 bg-surface-container-highest text-secondary border border-secondary/20 font-bold text-sm rounded-xl hover:bg-surface-bright transition-all"
+        >
           Selecionar no Computador
         </button>
+        <input 
+          type="file" 
+          ref={fileInputRef} 
+          onChange={(e) => {
+            if (e.target.files) handleFiles(Array.from(e.target.files));
+            if (fileInputRef.current) fileInputRef.current.value = '';
+          }} 
+          className="hidden" 
+          multiple 
+        />
       </div>
 
       <div className="bg-surface-container-low rounded-2xl border border-outline-variant/5 overflow-hidden">
