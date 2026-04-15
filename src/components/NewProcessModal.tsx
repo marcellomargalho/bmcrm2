@@ -33,6 +33,7 @@ export function NewProcessModal({ isOpen, onClose, onSuccess, editingProcess }: 
     area: '',
     type: '',
     responsible: '',
+    status: 'Em Andamento',
   });
   const [clients, setClients] = useState<Client[]>([]);
   const [profiles, setProfiles] = useState<any[]>([]);
@@ -64,9 +65,10 @@ export function NewProcessModal({ isOpen, onClose, onSuccess, editingProcess }: 
           area: editingProcess.area || '',
           type: editingProcess.type || '',
           responsible: editingProcess.responsible || '',
+          status: editingProcess.status || 'Em Andamento',
         });
       } else {
-        setFormData({ client_id: '', number: '', court: '', comarca: '', vara: '', autor: '', reu: '', area: '', type: '', responsible: '' });
+        setFormData({ client_id: '', number: '', court: '', comarca: '', vara: '', autor: '', reu: '', area: '', type: '', responsible: '', status: 'Em Andamento' });
       }
     }
   }, [isOpen, editingProcess]);
@@ -97,7 +99,7 @@ export function NewProcessModal({ isOpen, onClose, onSuccess, editingProcess }: 
         area: formData.area || null,
         type: formData.type || null,
         responsible: formData.responsible || null,
-        status: editingProcess ? editingProcess.status : 'Em Andamento',
+        status: formData.status,
       };
 
       if (editingProcess) {
@@ -117,7 +119,7 @@ export function NewProcessModal({ isOpen, onClose, onSuccess, editingProcess }: 
 
       onSuccess();
       onClose();
-      setFormData({ client_id: '', number: '', court: '', comarca: '', vara: '', autor: '', reu: '', area: '', type: '', responsible: '' });
+      setFormData({ client_id: '', number: '', court: '', comarca: '', vara: '', autor: '', reu: '', area: '', type: '', responsible: '', status: 'Em Andamento' });
     } catch (err: any) {
       setError(err.message || 'Erro ao criar processo.');
     } finally {
@@ -285,8 +287,21 @@ export function NewProcessModal({ isOpen, onClose, onSuccess, editingProcess }: 
 
           {/* Classificação */}
           <div className="pt-2 border-t border-outline-variant/10">
-            <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-3">Classificação</p>
-            <div className="grid grid-cols-2 gap-4">
+            <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-3">Classificação e Status</p>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-1">
+                <label className={labelCls}>Status</label>
+                <select
+                  value={formData.status}
+                  onChange={e => setFormData({ ...formData, status: e.target.value })}
+                  className={cn(inputCls, "appearance-none")}
+                >
+                  <option value="Em Andamento">Em Andamento</option>
+                  <option value="Urgente">Urgente</option>
+                  <option value="Concluído">Concluído</option>
+                  <option value="Arquivado">Arquivado</option>
+                </select>
+              </div>
               <div className="space-y-1">
                 <label className={labelCls}>Área</label>
                 <select
@@ -314,7 +329,7 @@ export function NewProcessModal({ isOpen, onClose, onSuccess, editingProcess }: 
                   value={formData.type}
                   onChange={e => setFormData({ ...formData, type: e.target.value })}
                   className={inputCls}
-                  placeholder="Ex: Indenizatória, Execução..."
+                  placeholder="Ex: Indenizatória..."
                 />
               </div>
             </div>
