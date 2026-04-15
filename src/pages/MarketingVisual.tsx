@@ -359,8 +359,8 @@ function buildInformativoTemplate(format: Format, logoDataUrl: string = ''): str
   const wmH        = isStories ? 242 : isSquare ? 180 : 212;
   const wmBottom   = isStories ? 110 : isSquare ? 50  : 80;
   const gridSz     = isStories ? 80  : isSquare ? 56  : 68;
-  // Distribuicao vertical: Stories = texto no fundo (editorial), Feed = centralizado, Square = do topo
-  const cJust      = isStories ? 'flex-end' : isSquare ? 'flex-start' : 'center';
+  // Distribuicao vertical: todos centralizados para facilitar leitura
+  const cJust      = 'center';
 
   return `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -387,7 +387,19 @@ function buildInformativoTemplate(format: Format, logoDataUrl: string = ''): str
   .corner-bl { bottom: 0; left: 0; border-bottom: 2px solid rgba(241,189,137,0.18); border-left: 2px solid rgba(241,189,137,0.18); border-radius: 0 0 0 ${bRadius}px; }
   .corner-br { bottom: 0; right: 0; border-bottom: 2px solid rgba(241,189,137,0.10); border-right: 2px solid rgba(241,189,137,0.10); border-radius: 0 0 ${bRadius}px 0; }
   .header { padding: ${hVPad}px ${hPad}px 0; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
-  .logo-img { width: ${logoW}px; height: ${logoH}px; flex-shrink: 0; display: block; object-fit: contain; object-position: left center; }
+  .logo-area { display: flex; align-items: center; }
+  .logo-img { 
+    width: ${logoW}px; height: ${logoH}px; flex-shrink: 0; display: block; 
+    background-color: #f1bd89;
+    -webkit-mask-image: url("${logoDataUrl || ''}");
+    -webkit-mask-size: contain;
+    -webkit-mask-position: left center;
+    -webkit-mask-repeat: no-repeat;
+    mask-image: url("${logoDataUrl || ''}");
+    mask-size: contain;
+    mask-position: left center;
+    mask-repeat: no-repeat;
+  }
   .header-tag { font-family: 'Inter', sans-serif; font-size: ${tagSize}px; font-weight: 400; color: rgba(241,189,137,0.32); letter-spacing: ${isStories ? 3 : 2}px; text-transform: uppercase; }
   .header-hr { margin: ${hrMT}px ${hPad}px 0; height: 1px; flex-shrink: 0; background: linear-gradient(to right, rgba(241,189,137,0.16), rgba(241,189,137,0.04), transparent); }
   .badge-row { padding: ${badgePadT}px ${hPad}px 0; display: flex; align-items: stretch; align-self: flex-start; flex-shrink: 0; }
@@ -412,7 +424,12 @@ function buildInformativoTemplate(format: Format, logoDataUrl: string = ''): str
   <div class="corner corner-tl"></div><div class="corner corner-tr"></div>
   <div class="corner corner-bl"></div><div class="corner corner-br"></div>
   <div class="header">
-    <div class="logo-img" title="BM Juris Advocacia">${logoDataUrl ? `<img src="${logoDataUrl}" style="width:100%;height:100%;object-fit:contain;object-position:left center;display:block;" alt="BM Juris">` : '<span style="font-family:\'Playfair Display\',serif;font-size:' + Math.round(logoH * 0.55) + 'px;font-weight:700;color:#f1bd89;letter-spacing:2px;">BM Juris</span>'}</div>
+    <div class="logo-area">
+      ${logoDataUrl
+        ? `<div class="logo-img"></div>`
+        : `<span style="font-family:'Playfair Display',serif;font-size:${Math.round(logoH * 0.55)}px;font-weight:700;color:#f1bd89;letter-spacing:2px;">BM Juris</span>`
+      }
+    </div>
     <span class="header-tag" data-editable="header-tag" data-label="Tag do Header" data-type="text">OAB/SP</span>
   </div>
   <div class="header-hr"></div>
