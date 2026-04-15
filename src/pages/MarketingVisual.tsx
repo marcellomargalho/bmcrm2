@@ -350,158 +350,73 @@ function buildInformativoTemplate(): string {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Informativo Jurídico — BM Juris</title>
+<title>Informativo Jur\u00eddico \u2014 BM Juris</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800\u0026family=Inter:wght@300;400;500;600;700\u0026display=swap');
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body {
-    width: 1080px;
-    height: 1920px;
-    overflow: hidden;
-    font-family: 'Montserrat', 'Arial Black', sans-serif;
-    background-color: #0d2825;
-    position: relative;
+  body { width: 1080px; height: 1920px; overflow: hidden; font-family: 'Manrope', sans-serif; background: #08151b; position: relative; }
+  .bg {
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(ellipse 120% 60% at 80% -10%, rgba(241,189,137,0.06) 0%, transparent 60%),
+      radial-gradient(ellipse 100% 80% at -10% 80%, rgba(19,32,38,0.9) 0%, transparent 70%),
+      linear-gradient(160deg, #0d1f27 0%, #08151b 40%, #06111a 100%);
   }
-  .watermark {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    pointer-events: none;
-    overflow: hidden;
-    z-index: 0;
-  }
-  .watermark-bm {
-    font-family: 'Montserrat', sans-serif;
-    font-weight: 900;
-    font-size: 700px;
-    letter-spacing: -40px;
-    color: rgba(185, 148, 82, 0.06);
-    line-height: 1;
-    user-select: none;
-    white-space: nowrap;
-    transform: translateY(100px);
-  }
-  .deco-lines { position: absolute; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
-  .deco-line { position: absolute; width: 2px; height: 600px; background: linear-gradient(to bottom, transparent, rgba(185, 148, 82, 0.06), transparent); transform-origin: top center; }
-  .deco-line:nth-child(1) { left: 15%; top: 30%; transform: rotate(15deg); }
-  .deco-line:nth-child(2) { left: 60%; top: 10%; transform: rotate(-10deg); height: 800px; }
-  .deco-line:nth-child(3) { right: 5%;  top: 40%; transform: rotate(20deg); }
-  .card {
-    position: absolute;
-    inset: 70px;
-    background: linear-gradient(160deg, #0f2e2b 0%, #0a2220 60%, #081e1c 100%);
-    border-radius: 48px;
-    border: 1.5px solid rgba(185, 148, 82, 0.15);
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    z-index: 10;
-    box-shadow: 0 0 0 1px rgba(0,0,0,0.3), 0 60px 120px rgba(0,0,0,0.4);
-  }
-  .header { padding: 80px 90px 0; display: flex; align-items: center; justify-content: space-between; }
-  .logo-bm {
-    font-family: 'Montserrat', sans-serif;
-    font-weight: 900;
-    font-size: 72px;
-    color: #b99452;
-    letter-spacing: -4px;
-    line-height: 1;
-  }
-  .logo-separator { display: block; width: 90px; height: 2px; background: rgba(185, 148, 82, 0.25); margin-left: 40px; align-self: center; }
-  .badge-area { padding: 90px 90px 0; display: flex; align-items: center; }
-  .badge-light {
-    background: rgba(185, 148, 82, 0.9);
-    color: #0a1a18;
-    font-size: 26px;
-    font-weight: 800;
-    letter-spacing: 3px;
-    text-transform: uppercase;
-    padding: 16px 32px;
-    border-radius: 8px 0 0 8px;
-  }
-  .badge-dark {
-    background: transparent;
-    color: #b99452;
-    font-size: 26px;
-    font-weight: 800;
-    letter-spacing: 3px;
-    text-transform: uppercase;
-    padding: 14px 32px;
-    border: 2px solid rgba(185, 148, 82, 0.5);
-    border-left: none;
-    border-radius: 0 8px 8px 0;
-  }
-  .content { flex: 1; padding: 80px 90px 60px; display: flex; flex-direction: column; justify-content: flex-start; }
-  .titulo {
-    font-size: 112px;
-    font-weight: 900;
-    line-height: 1.06;
-    color: #ffffff;
-    letter-spacing: -2px;
-    margin-bottom: 70px;
-    word-break: break-word;
-    hyphens: auto;
-  }
-  .subtitulo {
-    font-size: 42px;
-    font-weight: 400;
-    line-height: 1.55;
-    color: rgba(255, 255, 255, 0.75);
-    max-width: 95%;
-  }
-  .footer {
-    background: #061714;
-    border-top: 1.5px solid rgba(185, 148, 82, 0.15);
-    padding: 52px 90px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 20px;
-  }
-  .footer-cta {
-    font-size: 38px;
-    font-weight: 600;
-    color: #b99452;
-    line-height: 1.3;
-    flex: 1;
-  }
-  .footer-arrow {
-    width: 72px;
-    height: 72px;
-    border-radius: 50%;
-    border: 2px solid rgba(185, 148, 82, 0.4);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #b99452;
-    font-size: 30px;
-    flex-shrink: 0;
-  }
+  .watermark { position: absolute; right: -60px; bottom: 80px; pointer-events: none; z-index: 1; overflow: hidden; }
+  .watermark-text { font-family: 'Manrope', sans-serif; font-weight: 800; font-size: 520px; color: transparent; -webkit-text-stroke: 1.5px rgba(241,189,137,0.05); line-height: 1; user-select: none; letter-spacing: -20px; }
+  .top-accent { position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(to right, transparent, rgba(241,189,137,0.6), rgba(241,189,137,0.2), transparent); z-index: 20; }
+  .card { position: absolute; inset: 60px; background: linear-gradient(165deg, #132026 0%, #0d1c23 50%, #08151b 100%); border-radius: 44px; border: 1px solid rgba(241,189,137,0.12); display: flex; flex-direction: column; overflow: hidden; z-index: 10; box-shadow: inset 0 1px 0 rgba(241,189,137,0.08), 0 80px 160px rgba(0,0,0,0.6), 0 0 0 1px rgba(0,0,0,0.4); }
+  .header { padding: 72px 80px 0; display: flex; align-items: center; }
+  .logo-mark { display: flex; align-items: center; gap: 16px; }
+  .logo-icon { width: 64px; height: 64px; position: relative; }
+  .logo-icon::before { content: ''; position: absolute; inset: 0; border: 3px solid #f1bd89; border-radius: 6px; }
+  .logo-icon::after { content: ''; position: absolute; top: 10px; left: 10px; right: -10px; bottom: -10px; border: 1.5px solid rgba(241,189,137,0.3); border-radius: 6px; }
+  .logo-letters { font-family: 'Manrope', sans-serif; font-weight: 800; font-size: 28px; color: #f1bd89; letter-spacing: -1px; line-height: 1; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+  .logo-divider { width: 1px; height: 48px; background: rgba(241,189,137,0.15); margin: 0 24px; }
+  .logo-name { font-family: 'Manrope', sans-serif; font-weight: 600; font-size: 26px; color: rgba(241,189,137,0.7); letter-spacing: 3px; text-transform: uppercase; }
+  .badge-row { padding: 64px 80px 0; display: flex; align-items: stretch; align-self: flex-start; }
+  .badge-filled { background: #f1bd89; color: #08151b; font-family: 'Manrope', sans-serif; font-size: 22px; font-weight: 800; letter-spacing: 4px; text-transform: uppercase; padding: 14px 28px; border-radius: 8px 0 0 8px; display: flex; align-items: center; }
+  .badge-outline { color: #f1bd89; font-family: 'Manrope', sans-serif; font-size: 22px; font-weight: 700; letter-spacing: 4px; text-transform: uppercase; padding: 12px 28px; border: 1.5px solid rgba(241,189,137,0.45); border-left: none; border-radius: 0 8px 8px 0; display: flex; align-items: center; background: rgba(241,189,137,0.05); }
+  .content { flex: 1; padding: 72px 80px 56px; display: flex; flex-direction: column; justify-content: flex-start; }
+  .pre-line { width: 48px; height: 3px; background: linear-gradient(to right, #f1bd89, rgba(241,189,137,0.2)); border-radius: 2px; margin-bottom: 40px; }
+  .titulo { font-family: 'Manrope', sans-serif; font-size: 100px; font-weight: 800; line-height: 1.08; color: #d7e5ed; letter-spacing: -3px; margin-bottom: 60px; word-break: break-word; hyphens: auto; }
+  .subtitulo { font-family: 'Inter', sans-serif; font-size: 38px; font-weight: 400; line-height: 1.6; color: rgba(187,201,209,0.65); max-width: 92%; }
+  .card-divider { margin: 0 80px; height: 1px; background: linear-gradient(to right, rgba(241,189,137,0.15), transparent); }
+  .footer { padding: 44px 80px; display: flex; align-items: center; justify-content: space-between; gap: 24px; background: rgba(6,10,13,0.5); }
+  .footer-left { display: flex; flex-direction: column; gap: 6px; flex: 1; }
+  .footer-cta { font-family: 'Manrope', sans-serif; font-size: 34px; font-weight: 600; color: #f1bd89; line-height: 1.3; }
+  .footer-sub { font-family: 'Inter', sans-serif; font-size: 22px; font-weight: 400; color: rgba(187,201,209,0.35); letter-spacing: 1px; }
+  .footer-btn { width: 80px; height: 80px; border-radius: 50%; background: rgba(241,189,137,0.08); border: 1.5px solid rgba(241,189,137,0.3); display: flex; align-items: center; justify-content: center; color: #f1bd89; font-size: 28px; flex-shrink: 0; }
 </style>
 </head>
 <body>
-<div class="watermark"><span class="watermark-bm" data-editable="watermark" data-label="Marca D'água" data-type="text">BM</span></div>
-<div class="deco-lines"><div class="deco-line"></div><div class="deco-line"></div><div class="deco-line"></div></div>
+<div class="bg"></div>
+<div class="top-accent"></div>
+<div class="watermark"><span class="watermark-text" data-editable="watermark" data-label="Marca D'\u00e1gua" data-type="text">BM</span></div>
 <div class="card">
   <div class="header">
-    <div style="display:flex;align-items:center">
-      <span class="logo-bm" data-editable="logo" data-label="Sigla do Logo" data-type="text">BM</span>
-      <span class="logo-separator"></span>
+    <div class="logo-mark">
+      <div class="logo-icon"><span class="logo-letters" data-editable="logo" data-label="Sigla do Logo" data-type="text">BM</span></div>
+      <div class="logo-divider"></div>
+      <span class="logo-name" data-editable="escritorio" data-label="Nome do Escrit\u00f3rio" data-type="text">BM Juris</span>
     </div>
   </div>
-  <div class="badge-area">
-    <span class="badge-light" data-editable="badge-label" data-label="Badge — Parte Clara" data-type="text">INFORMATIVO</span>
-    <span class="badge-dark" data-editable="badge-tipo" data-label="Badge — Parte Escura" data-type="text">JURÍDICO</span>
+  <div class="badge-row">
+    <span class="badge-filled" data-editable="badge-label" data-label="Badge \u2014 Parte Clara" data-type="text">INFORMATIVO</span>
+    <span class="badge-outline" data-editable="badge-tipo" data-label="Badge \u2014 Parte Escura" data-type="text">JUR\u00cdDICO</span>
   </div>
   <div class="content">
-    <h1 class="titulo" data-editable="titulo" data-label="Título Principal" data-type="textarea">Presos no semiaberto podem cumprir pena fora do presídio?</h1>
-    <p class="subtitulo" data-editable="subtitulo" data-label="Subtítulo / Descrição" data-type="textarea">Entenda quando a Justiça permite o chamado 'semiaberto harmonizado' e quem pode ser beneficiado.</p>
+    <div class="pre-line"></div>
+    <h1 class="titulo" data-editable="titulo" data-label="T\u00edtulo Principal" data-type="textarea">Presos no semiaberto podem cumprir pena fora do pres\u00eddio?</h1>
+    <p class="subtitulo" data-editable="subtitulo" data-label="Subt\u00edtulo / Descri\u00e7\u00e3o" data-type="textarea">Entenda quando a Justi\u00e7a permite o chamado 'semiaberto harmonizado' e quem pode ser beneficiado.</p>
   </div>
+  <div class="card-divider"></div>
   <div class="footer">
-    <span class="footer-cta" data-editable="cta" data-label="Texto do Rodapé (CTA)" data-type="text">Veja a matéria completa no site</span>
-    <div class="footer-arrow">↗</div>
+    <div class="footer-left">
+      <span class="footer-cta" data-editable="cta" data-label="Texto do CTA" data-type="text">Veja a mat\u00e9ria completa no site</span>
+      <span class="footer-sub" data-editable="site" data-label="Site / @" data-type="text">bmjuris.com.br</span>
+    </div>
+    <div class="footer-btn">\u2197</div>
   </div>
 </div>
 </body>
@@ -509,6 +424,7 @@ function buildInformativoTemplate(): string {
 }
 
 // ─── Helper: Read folder files ────────────────────────────────────────────────
+
 
 async function readFileAsText(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
