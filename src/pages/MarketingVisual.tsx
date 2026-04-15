@@ -1,5 +1,4 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import html2canvas from 'html2canvas';
 import {
   Upload,
   Image,
@@ -432,7 +431,7 @@ function buildInformativoTemplate(format: Format, logoDataUrl: string = ''): str
   <div class="corner corner-tl"></div><div class="corner corner-tr"></div>
   <div class="corner corner-bl"></div><div class="corner corner-br"></div>
   <div class="header">
-    <div class="logo-img" title="BM Juris Advocacia"></div>
+    <div class="logo-img" title="BM Juris Advocacia">${logoDataUrl ? `<img src="${logoDataUrl}" style="width:100%;height:100%;object-fit:contain;object-position:left center;display:block;" alt="BM Juris">` : '<span style="font-family:\'Playfair Display\',serif;font-size:' + Math.round(logoH * 0.55) + 'px;font-weight:700;color:#f1bd89;letter-spacing:2px;">BM Juris</span>'}</div>
     <span class="header-tag" data-editable="header-tag" data-label="Tag do Header" data-type="text">OAB/SP</span>
   </div>
   <div class="header-hr"></div>
@@ -458,12 +457,46 @@ function buildInformativoTemplate(format: Format, logoDataUrl: string = ''): str
 </html>`;
 }
 
+// ─── Helper: Fetch Google Fonts CSS + resolve @font-face woff2 as base64 ──────
+
+async function fetchFontsAsBase64(): Promise<string> {
+  const googleFontsUrl =
+    'https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Inter:wght@300;400;500;600&display=swap';
+  try {
+    // Fetch CSS with a Chrome UA so Google returns woff2
+    const cssResp = await fetch(googleFontsUrl, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36' },
+    });
+    const css = await cssResp.text();
+
+    // Extract all woff2 URLs from the CSS
+    const urlMatches = [...css.matchAll(/url\(([^)]+)\)/g)].map(m => m[1].replace(/['",]/g, ''));
+    const woff2Urls = urlMatches.filter(u => u.includes('.woff2') || u.includes('fonts.gstatic'));
+
+    // Fetch each font file and encode as base64
+    let patchedCss = css;
+    await Promise.all(
+      woff2Urls.map(async (url) => {
+        try {
+          const fontResp = await fetch(url);
+          const buf = await fontResp.arrayBuffer();
+          const bytes = new Uint8Array(buf);
+          let binary = '';
+          bytes.forEach(b => { binary += String.fromCharCode(b); });
+          const b64 = btoa(binary);
+          const dataUri = `data:font/woff2;base64,${b64}`;
+          patchedCss = patchedCss.split(url).join(dataUri);
+        } catch (_) {}
+      })
+    );
+    return `<style>${patchedCss}</style>`;
+  } catch (_) {
+    // Fallback: use Google Fonts via @import (may not work in canvas but at least loads in preview)
+    return `<link rel="stylesheet" href="${googleFontsUrl}">`;
+  }
+}
+
 // ─── Helper: Read folder files ────────────────────────────────────────────────
-
-
-// ─── Helper: Read folder files ────────────────────────────────────────────────
-
-
 
 async function readFileAsText(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -760,17 +793,70 @@ export function MarketingVisual() {
     if (!htmlContent) return;
     setIsExporting(true);
     try {
-      // 1. Cria um iframe off-screen em tamanho REAL (sem zoom) para captura fiel
+      // 1. Monta HTML fiel: aplica valores editados via DOM parser e serializa de volta
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(htmlContent, 'text/html');
+
+      // Reaplica valores editados no documento parseado
+      fields.forEach((field) => {
+        const val = fieldValues[field.key];
+        if (val === undefined) return;
+        const el = doc.querySelector(field.selector) as HTMLElement | null;
+        if (!el) return;
+        if (field.type === 'color') {
+          el.style.backgroundColor = val;
+        } else if (field.type === 'image') {
+          (el as HTMLImageElement).src = val;
+          (el as HTMLImageElement).style.display = 'block';
+          const ph = doc.querySelector('.photo-frame-placeholder') as HTMLElement | null;
+          if (ph) ph.style.display = 'none';
+        } else {
+          el.textContent = val;
+        }
+      });
+
+      // 2. Busca fontes como base64 para garantir rendering idêntico ao preview
+      const fontsStyleTag = await fetchFontsAsBase64();
+
+      // 3. Injeta fontes no <head> do documento e remove links de fontes externas
+      const head = doc.querySelector('head')!;
+      // Remove links de carregamento de fontes externas (serão substituídos pelo base64)
+      head.querySelectorAll('link[href*="fonts.googleapis"], link[href*="fonts.gstatic"]').forEach(l => l.remove());
+      head.querySelectorAll('style').forEach(s => {
+        s.textContent = (s.textContent || '').replace(/@import url\(['"]?https:\/\/fonts\.googleapis[^)]+\)['"]?;?/gi, '');
+      });
+      // Injeta as fontes base64 no início do head
+      const fontEl = doc.createElement('div');
+      fontEl.innerHTML = fontsStyleTag;
+      const fontStyleEl = fontEl.firstElementChild;
+      if (fontStyleEl) head.insertBefore(fontStyleEl, head.firstChild);
+
+      // 4. Injeta logo como <img> com data URL se disponível
+      const logoContainer = doc.querySelector('.logo-img') as HTMLElement | null;
+      if (logoContainer && logoDataUrl) {
+        logoContainer.innerHTML = '';
+        const logoImg = doc.createElement('img');
+        logoImg.src = logoDataUrl;
+        logoImg.style.cssText = 'width:100%;height:100%;object-fit:contain;object-position:left center;display:block;';
+        logoContainer.appendChild(logoImg);
+      }
+
+      // 5. Serializa o HTML completo e corrigido
+      const serialized = new XMLSerializer().serializeToString(doc);
+      const fullHtml = `<!DOCTYPE html>${serialized}`;
+
+      // 6. Cria iframe off-screen para render real
       const wrapper = document.createElement('div');
       Object.assign(wrapper.style, {
         position: 'fixed',
-        top: `-${selectedFormat.height * 2 + 200}px`,
+        top: `-${selectedFormat.height * 3}px`,
         left: '0',
         width: `${selectedFormat.width}px`,
         height: `${selectedFormat.height}px`,
         overflow: 'hidden',
         zIndex: '-9999',
         pointerEvents: 'none',
+        opacity: '0',
       });
       document.body.appendChild(wrapper);
 
@@ -781,48 +867,41 @@ export function MarketingVisual() {
         border: 'none',
         display: 'block',
       });
-      exportFrame.srcdoc = htmlContent;
+      exportFrame.srcdoc = fullHtml;
       wrapper.appendChild(exportFrame);
 
-      // 2. Aguarda iframe carregar + fontes ficarem prontas
+      // 7. Aguarda iframe carregar e fontes renderizarem
       await new Promise<void>((resolve) => {
         const onLoad = async () => {
           try {
-            // Aguarda document.fonts.ready (garante que as fontes foram obtidas)
             if (exportFrame.contentDocument?.fonts) {
               await exportFrame.contentDocument.fonts.ready;
             }
           } catch (_) {}
-          // Buffer adicional para render completo
-          setTimeout(resolve, 1500);
+          // Buffer para garantir render completo de gradientes e sombras
+          setTimeout(resolve, 2000);
         };
         exportFrame.addEventListener('load', onLoad, { once: true });
-        // Fallback caso o evento load não dispare
-        setTimeout(resolve, 5000);
+        setTimeout(resolve, 8000); // fallback máximo
       });
 
-      // 3. Reaplica os valores editados no iframe de exportação
-      const doc = exportFrame.contentDocument;
-      if (doc) {
-        fields.forEach((field) => {
-          const val = fieldValues[field.key];
-          if (val !== undefined) applyFieldToIframe(exportFrame as HTMLIFrameElement, field, val);
-        });
-        // Pequena pausa para reflow
-        await new Promise(r => setTimeout(r, 200));
-
-        // 4. Captura com html2canvas em scale 2x (alta resolução)
-        const canvas = await html2canvas(doc.body, {
+      // 8. Captura via html2canvas no documento REAL do iframe
+      // Importamos dinamicamente para não quebrar o build caso seja removido
+      const html2canvas = (await import('html2canvas')).default;
+      const iframeDoc = exportFrame.contentDocument;
+      if (iframeDoc) {
+        const canvas = await html2canvas(iframeDoc.documentElement, {
           width: selectedFormat.width,
           height: selectedFormat.height,
           windowWidth: selectedFormat.width,
           windowHeight: selectedFormat.height,
           scale: 2,
           useCORS: true,
-          allowTaint: true,
+          allowTaint: false,
           backgroundColor: '#08151b',
           logging: false,
-          imageTimeout: 15000,
+          imageTimeout: 20000,
+          foreignObjectRendering: true,
         });
 
         const link = document.createElement('a');
@@ -831,10 +910,11 @@ export function MarketingVisual() {
         link.click();
       }
 
-      // 5. Limpeza
+      // 9. Limpeza
       document.body.removeChild(wrapper);
     } catch (err) {
       console.error('Erro ao exportar:', err);
+      alert('Erro ao exportar. Tente novamente.');
     } finally {
       setIsExporting(false);
     }
