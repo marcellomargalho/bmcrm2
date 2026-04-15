@@ -107,9 +107,9 @@ function buildBuiltinTemplate(format: Format, logoDataUrl: string = ''): string 
   const footerFS = isStories ? '20px' : '14px';
   const siteBtnSz = isStories ? 56 : isSquare ? 40 : 46;
 
-  // Cores Premium
-  const bgDark = '#060a0d';
-  const bgLight = '#0d151a';
+  // Cores Premium - Nativas do Projeto
+  const bgDark = '#08151b';
+  const bgLight = '#132026';
   const gold = '#f1bd89';
   const goldMuted = 'rgba(241, 189, 137, 0.6)';
 
