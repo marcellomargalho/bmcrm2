@@ -90,227 +90,74 @@ const FORMATS: Format[] = [
 
 // ─── Built-in BM Juris Template ──────────────────────────────────────────────
 
-function buildBuiltinTemplate(format: Format): string {
+function buildBuiltinTemplate(format: Format, logoDataUrl: string = ''): string {
   const isStories = format.key === 'stories';
   const isSquare = format.key === 'post';
+  const W = format.width;
+  const H = format.height;
+
+  const logoW    = isStories ? 200 : isSquare ? 140 : 170;
+  const logoH    = isStories ? 56  : isSquare ? 38  : 46;
+  const pad      = isStories ? 80  : 60;
+  const titleFS  = isStories ? '88px' : isSquare ? '72px' : '64px';
+  const subFS    = isStories ? '32px' : '24px';
+  const tagFS    = isStories ? '22px' : '16px';
+  const ctaFS    = isStories ? '26px' : '18px';
+  const footerFS = isStories ? '24px' : '16px';
+  const siteFS   = isStories ? '22px' : '14px';
+  const siteBtnSz = isStories ? 70 : isSquare ? 50 : 58;
 
   return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=Inter:wght@300;400;500;600&display=swap');
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body {
-    width: ${format.width}px;
-    height: ${format.height}px;
-    overflow: hidden;
-    font-family: 'Inter', sans-serif;
-    background: #08151b;
-  }
-  .bg {
-    position: absolute; inset: 0;
-    background: linear-gradient(135deg, #08151b 0%, #132026 50%, #1a2f38 100%);
-  }
-  .grain {
-    position: absolute; inset: 0;
-    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
-    opacity: .15;
-  }
-  .accent-line {
-    position: absolute;
-    left: ${isStories ? '80px' : '60px'};
-    top: ${isStories ? '180px' : '120px'};
-    width: 4px;
-    height: ${isStories ? '80px' : '60px'};
-    background: #f1bd89;
-    border-radius: 4px;
-  }
-  .accent-circle {
-    position: absolute;
-    right: -120px;
-    top: -120px;
-    width: 500px;
-    height: 500px;
-    border-radius: 50%;
-    border: 1px solid rgba(241, 189, 137, 0.08);
-    background: transparent;
-  }
-  .accent-circle2 {
-    position: absolute;
-    right: -180px;
-    top: -180px;
-    width: 700px;
-    height: 700px;
-    border-radius: 50%;
-    border: 1px solid rgba(241, 189, 137, 0.04);
-    background: transparent;
-  }
-  .container {
-    position: relative;
-    z-index: 10;
-    padding: ${isStories ? '80px' : '60px'};
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    justify-content: ${isStories ? 'space-between' : 'center'};
-  }
-  .logo-area {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: ${isStories ? '0' : '40px'};
-  }
-  .logo-dot {
-    width: 8px; height: 8px;
-    border-radius: 50%;
-    background: #f1bd89;
-  }
-  .logo-text {
-    font-family: 'Playfair Display', serif;
-    font-size: ${isStories ? '28px' : '22px'};
-    font-weight: 700;
-    color: #f1bd89;
-    letter-spacing: 2px;
-    text-transform: uppercase;
-  }
-  .main-content {
-    flex: ${isStories ? '1' : 'unset'};
-    display: flex;
-    flex-direction: column;
-    justify-content: ${isStories ? 'center' : 'flex-start'};
-    padding: ${isStories ? '60px 0' : '0'};
-  }
-  .tag {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    font-size: ${isStories ? '22px' : '16px'};
-    font-weight: 500;
-    color: #f1bd89;
-    letter-spacing: 3px;
-    text-transform: uppercase;
-    margin-bottom: ${isStories ? '32px' : '20px'};
-  }
-  .tag::before {
-    content: '';
-    display: block;
-    width: ${isStories ? '40px' : '30px'};
-    height: 1px;
-    background: #f1bd89;
-  }
-  .titulo {
-    font-family: 'Playfair Display', serif;
-    font-size: ${isStories ? '88px' : isSquare ? '72px' : '64px'};
-    font-weight: 900;
-    line-height: 1.05;
-    color: #d7e5ed;
-    margin-bottom: ${isStories ? '40px' : '24px'};
-    word-break: break-word;
-  }
+  body { width: ${W}px; height: ${H}px; overflow: hidden; font-family: 'Inter', sans-serif; background: #08151b; position: relative; }
+  .bg { position: absolute; inset: 0; background: linear-gradient(135deg, #08151b 0%, #132026 50%, #1a2f38 100%); }
+  .grain { position: absolute; inset: 0; background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E"); opacity: .15; }
+  .top-accent { position: absolute; top: 0; left: 0; right: 0; height: 3px; z-index: 20; background: linear-gradient(to right, transparent 5%, #f1bd89 35%, rgba(241,189,137,0.3) 72%, transparent); }
+  .accent-line { position: absolute; left: ${pad}px; top: ${isStories ? '220px' : '140px'}; width: 4px; height: ${isStories ? '80px' : '60px'}; background: #f1bd89; border-radius: 4px; }
+  .accent-circle { position: absolute; right: -120px; top: -120px; width: 500px; height: 500px; border-radius: 50%; border: 1px solid rgba(241,189,137,0.08); background: transparent; }
+  .accent-circle2 { position: absolute; right: -180px; top: -180px; width: 700px; height: 700px; border-radius: 50%; border: 1px solid rgba(241,189,137,0.04); background: transparent; }
+  .container { position: relative; z-index: 10; padding: ${pad}px; height: 100%; display: flex; flex-direction: column; justify-content: ${isStories ? 'space-between' : 'center'}; }
+  .logo-area { display: flex; align-items: center; margin-bottom: ${isStories ? '0' : '40px'}; }
+  .logo-img { width: ${logoW}px; height: ${logoH}px; display: block; object-fit: contain; object-position: left center; flex-shrink: 0; }
+  .logo-fallback { font-family: 'Playfair Display', serif; font-size: ${isStories ? '28px' : '22px'}; font-weight: 700; color: #f1bd89; letter-spacing: 2px; text-transform: uppercase; }
+  .main-content { flex: ${isStories ? '1' : 'unset'}; display: flex; flex-direction: column; justify-content: ${isStories ? 'center' : 'flex-start'}; padding: ${isStories ? '60px 0' : '0'}; }
+  .tag { display: inline-flex; align-items: center; gap: 8px; font-size: ${tagFS}; font-weight: 500; color: #f1bd89; letter-spacing: 3px; text-transform: uppercase; margin-bottom: ${isStories ? '32px' : '20px'}; }
+  .tag::before { content: ''; display: block; width: ${isStories ? '40px' : '30px'}; height: 1px; background: #f1bd89; }
+  .titulo { font-family: 'Playfair Display', serif; font-size: ${titleFS}; font-weight: 900; line-height: 1.05; color: #d7e5ed; margin-bottom: ${isStories ? '40px' : '24px'}; word-break: break-word; }
   .titulo span { color: #f1bd89; }
-  .subtitulo {
-    font-size: ${isStories ? '32px' : '24px'};
-    font-weight: 300;
-    color: rgba(215, 229, 237, 0.7);
-    line-height: 1.6;
-    max-width: ${isStories ? '100%' : '85%'};
-    margin-bottom: ${isStories ? '48px' : '32px'};
-  }
-  .divider {
-    width: ${isStories ? '60px' : '40px'};
-    height: 2px;
-    background: linear-gradient(to right, #f1bd89, transparent);
-    margin-bottom: ${isStories ? '48px' : '32px'};
-    border-radius: 2px;
-  }
-  .cta {
-    display: inline-flex;
-    align-items: center;
-    gap: ${isStories ? '20px' : '14px'};
-    background: rgba(241, 189, 137, 0.1);
-    border: 1px solid rgba(241, 189, 137, 0.3);
-    border-radius: 999px;
-    padding: ${isStories ? '24px 48px' : '16px 32px'};
-    color: #f1bd89;
-    font-size: ${isStories ? '26px' : '18px'};
-    font-weight: 500;
-    letter-spacing: 1px;
-    align-self: flex-start;
-  }
-  .cta-arrow {
-    font-size: ${isStories ? '22px' : '16px'};
-  }
-  .footer {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding-top: ${isStories ? '60px' : '40px'};
-    border-top: 1px solid rgba(255,255,255,0.06);
-    margin-top: auto;
-  }
-  .footer-info {
-    font-size: ${isStories ? '24px' : '16px'};
-    color: rgba(215, 229, 237, 0.4);
-    letter-spacing: 1px;
-  }
-  .footer-badge {
-    font-size: ${isStories ? '20px' : '13px'};
-    color: rgba(241, 189, 137, 0.6);
-    border: 1px solid rgba(241, 189, 137, 0.2);
-    border-radius: 999px;
-    padding: ${isStories ? '10px 24px' : '6px 16px'};
-    letter-spacing: 2px;
-    text-transform: uppercase;
-  }
-  .photo-frame {
-    position: absolute;
-    right: ${isStories ? '60px' : '50px'};
-    bottom: ${isStories ? '220px' : '120px'};
-    width: ${isStories ? '340px' : '220px'};
-    height: ${isStories ? '400px' : '260px'};
-    border-radius: ${isStories ? '24px' : '16px'};
-    overflow: hidden;
-    border: 2px solid rgba(241, 189, 137, 0.2);
-    box-shadow: 0 40px 80px rgba(0,0,0,0.5);
-  }
-  .photo-frame img {
-    width: 100%; height: 100%;
-    object-fit: cover;
-  }
-  .photo-frame-placeholder {
-    width: 100%; height: 100%;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    background: rgba(19, 32, 38, 0.8);
-    gap: 16px;
-  }
-  .photo-frame-placeholder span:first-child {
-    font-size: 60px;
-    opacity: 0.3;
-  }
-  .photo-frame-placeholder span:last-child {
-    font-size: 18px;
-    color: rgba(215, 229, 237, 0.3);
-    text-align: center;
-    padding: 0 20px;
-  }
+  .subtitulo { font-size: ${subFS}; font-weight: 300; color: rgba(215,229,237,0.7); line-height: 1.6; max-width: ${isStories ? '100%' : '85%'}; margin-bottom: ${isStories ? '48px' : '32px'}; }
+  .divider { width: ${isStories ? '60px' : '40px'}; height: 2px; background: linear-gradient(to right, #f1bd89, transparent); margin-bottom: ${isStories ? '48px' : '32px'}; border-radius: 2px; }
+  .cta { display: inline-flex; align-items: center; gap: ${isStories ? '20px' : '14px'}; background: rgba(241,189,137,0.1); border: 1px solid rgba(241,189,137,0.3); border-radius: 999px; padding: ${isStories ? '24px 48px' : '16px 32px'}; color: #f1bd89; font-size: ${ctaFS}; font-weight: 500; letter-spacing: 1px; align-self: flex-start; }
+  .cta-arrow { font-size: ${isStories ? '22px' : '16px'}; }
+  .footer { display: flex; align-items: center; justify-content: space-between; padding-top: ${isStories ? '60px' : '40px'}; border-top: 1px solid rgba(255,255,255,0.06); margin-top: auto; gap: 20px; }
+  .footer-left { display: flex; flex-direction: column; gap: ${isStories ? '6px' : '4px'}; flex: 1; min-width: 0; }
+  .footer-info { font-size: ${footerFS}; color: rgba(215,229,237,0.5); letter-spacing: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .footer-site { font-size: ${siteFS}; color: rgba(241,189,137,0.5); letter-spacing: 1px; }
+  .site-btn { flex-shrink: 0; width: ${siteBtnSz}px; height: ${siteBtnSz}px; border-radius: 50%; background: rgba(241,189,137,0.07); border: 1.5px solid rgba(241,189,137,0.26); display: flex; align-items: center; justify-content: center; color: #f1bd89; font-size: ${Math.round(siteBtnSz * 0.34)}px; }
 </style>
 </head>
 <body>
 <div class="bg"></div>
 <div class="grain"></div>
+<div class="top-accent"></div>
 <div class="accent-circle"></div>
 <div class="accent-circle2"></div>
 <div class="accent-line"></div>
 
 <div class="container">
   <div class="logo-area">
-    <div class="logo-dot"></div>
-    <div class="logo-text" data-editable="logo" data-label="Nome do Escritório" data-type="text">BM Juris</div>
+    ${logoDataUrl
+      ? `<img class="logo-img" src="${logoDataUrl}" alt="BM Juris">`
+      : `<span class="logo-fallback">BM Juris</span>`
+    }
   </div>
 
   <div class="main-content">
@@ -325,23 +172,17 @@ function buildBuiltinTemplate(format: Format): string {
   </div>
 
   <div class="footer">
-    <span class="footer-info" data-editable="contato" data-label="Contato / Site" data-type="text">@bmjuris • bmjuris.com.br</span>
-    <span class="footer-badge" data-editable="badge" data-label="Badge / OAB" data-type="text">OAB/SP</span>
-  </div>
-</div>
-
-<div class="photo-frame">
-  <img id="foto-cliente" data-editable="foto" data-label="Foto (opcional)" data-type="image" src="" onerror="this.style.display='none'; document.querySelector('.photo-frame-placeholder') && (document.querySelector('.photo-frame-placeholder').style.display='flex')" style="display:none">
-  <div class="photo-frame-placeholder">
-    <span>📷</span>
-    <span>Adicione uma foto no painel lateral</span>
+    <div class="footer-left">
+      <span class="footer-info" data-editable="contato" data-label="Contato / Redes" data-type="text">@bmjuris</span>
+      <span class="footer-site" data-editable="site" data-label="Site" data-type="text">bmjuris.com.br</span>
+    </div>
+    <div class="site-btn">&#x2197;</div>
   </div>
 </div>
 </body>
 </html>`;
 }
 
-// ─── Built-in: Informativo Jurídico Template ─────────────────────────────────
 
 function buildInformativoTemplate(format: Format, logoDataUrl: string = ''): string {
   const isStories = format.key === 'stories';
@@ -685,7 +526,7 @@ export function MarketingVisual() {
 
   const getBuiltinHtml = useCallback((builtinKey: BuiltinKey, fmt: Format): string => {
     if (builtinKey === 'informativo') return buildInformativoTemplate(fmt, logoDataUrl);
-    return buildBuiltinTemplate(fmt);
+    return buildBuiltinTemplate(fmt, logoDataUrl);
   }, [logoDataUrl]);
 
   useEffect(() => {
