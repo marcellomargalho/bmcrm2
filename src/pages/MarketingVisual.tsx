@@ -26,6 +26,7 @@ import { cn } from '@/lib/utils';
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 type FormatKey = 'stories' | 'post' | 'landscape';
+type BuiltinKey = 'classico' | 'informativo';
 
 interface Format {
   key: FormatKey;
@@ -341,6 +342,172 @@ function buildBuiltinTemplate(format: Format): string {
 </html>`;
 }
 
+// ─── Built-in: Informativo Jurídico Template ─────────────────────────────────
+
+function buildInformativoTemplate(): string {
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Informativo Jurídico — BM Juris</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    width: 1080px;
+    height: 1920px;
+    overflow: hidden;
+    font-family: 'Montserrat', 'Arial Black', sans-serif;
+    background-color: #0d2825;
+    position: relative;
+  }
+  .watermark {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    overflow: hidden;
+    z-index: 0;
+  }
+  .watermark-bm {
+    font-family: 'Montserrat', sans-serif;
+    font-weight: 900;
+    font-size: 700px;
+    letter-spacing: -40px;
+    color: rgba(185, 148, 82, 0.06);
+    line-height: 1;
+    user-select: none;
+    white-space: nowrap;
+    transform: translateY(100px);
+  }
+  .deco-lines { position: absolute; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
+  .deco-line { position: absolute; width: 2px; height: 600px; background: linear-gradient(to bottom, transparent, rgba(185, 148, 82, 0.06), transparent); transform-origin: top center; }
+  .deco-line:nth-child(1) { left: 15%; top: 30%; transform: rotate(15deg); }
+  .deco-line:nth-child(2) { left: 60%; top: 10%; transform: rotate(-10deg); height: 800px; }
+  .deco-line:nth-child(3) { right: 5%;  top: 40%; transform: rotate(20deg); }
+  .card {
+    position: absolute;
+    inset: 70px;
+    background: linear-gradient(160deg, #0f2e2b 0%, #0a2220 60%, #081e1c 100%);
+    border-radius: 48px;
+    border: 1.5px solid rgba(185, 148, 82, 0.15);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    z-index: 10;
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.3), 0 60px 120px rgba(0,0,0,0.4);
+  }
+  .header { padding: 80px 90px 0; display: flex; align-items: center; justify-content: space-between; }
+  .logo-bm {
+    font-family: 'Montserrat', sans-serif;
+    font-weight: 900;
+    font-size: 72px;
+    color: #b99452;
+    letter-spacing: -4px;
+    line-height: 1;
+  }
+  .logo-separator { display: block; width: 90px; height: 2px; background: rgba(185, 148, 82, 0.25); margin-left: 40px; align-self: center; }
+  .badge-area { padding: 90px 90px 0; display: flex; align-items: center; }
+  .badge-light {
+    background: rgba(185, 148, 82, 0.9);
+    color: #0a1a18;
+    font-size: 26px;
+    font-weight: 800;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    padding: 16px 32px;
+    border-radius: 8px 0 0 8px;
+  }
+  .badge-dark {
+    background: transparent;
+    color: #b99452;
+    font-size: 26px;
+    font-weight: 800;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    padding: 14px 32px;
+    border: 2px solid rgba(185, 148, 82, 0.5);
+    border-left: none;
+    border-radius: 0 8px 8px 0;
+  }
+  .content { flex: 1; padding: 80px 90px 60px; display: flex; flex-direction: column; justify-content: flex-start; }
+  .titulo {
+    font-size: 112px;
+    font-weight: 900;
+    line-height: 1.06;
+    color: #ffffff;
+    letter-spacing: -2px;
+    margin-bottom: 70px;
+    word-break: break-word;
+    hyphens: auto;
+  }
+  .subtitulo {
+    font-size: 42px;
+    font-weight: 400;
+    line-height: 1.55;
+    color: rgba(255, 255, 255, 0.75);
+    max-width: 95%;
+  }
+  .footer {
+    background: #061714;
+    border-top: 1.5px solid rgba(185, 148, 82, 0.15);
+    padding: 52px 90px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+  }
+  .footer-cta {
+    font-size: 38px;
+    font-weight: 600;
+    color: #b99452;
+    line-height: 1.3;
+    flex: 1;
+  }
+  .footer-arrow {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    border: 2px solid rgba(185, 148, 82, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #b99452;
+    font-size: 30px;
+    flex-shrink: 0;
+  }
+</style>
+</head>
+<body>
+<div class="watermark"><span class="watermark-bm" data-editable="watermark" data-label="Marca D'água" data-type="text">BM</span></div>
+<div class="deco-lines"><div class="deco-line"></div><div class="deco-line"></div><div class="deco-line"></div></div>
+<div class="card">
+  <div class="header">
+    <div style="display:flex;align-items:center">
+      <span class="logo-bm" data-editable="logo" data-label="Sigla do Logo" data-type="text">BM</span>
+      <span class="logo-separator"></span>
+    </div>
+  </div>
+  <div class="badge-area">
+    <span class="badge-light" data-editable="badge-label" data-label="Badge — Parte Clara" data-type="text">INFORMATIVO</span>
+    <span class="badge-dark" data-editable="badge-tipo" data-label="Badge — Parte Escura" data-type="text">JURÍDICO</span>
+  </div>
+  <div class="content">
+    <h1 class="titulo" data-editable="titulo" data-label="Título Principal" data-type="textarea">Presos no semiaberto podem cumprir pena fora do presídio?</h1>
+    <p class="subtitulo" data-editable="subtitulo" data-label="Subtítulo / Descrição" data-type="textarea">Entenda quando a Justiça permite o chamado 'semiaberto harmonizado' e quem pode ser beneficiado.</p>
+  </div>
+  <div class="footer">
+    <span class="footer-cta" data-editable="cta" data-label="Texto do Rodapé (CTA)" data-type="text">Veja a matéria completa no site</span>
+    <div class="footer-arrow">↗</div>
+  </div>
+</div>
+</body>
+</html>`;
+}
+
 // ─── Helper: Read folder files ────────────────────────────────────────────────
 
 async function readFileAsText(file: File): Promise<string> {
@@ -424,8 +591,14 @@ function applyFieldToIframe(
 
 // ─── Main Component ──────────────────────────────────────────────────────────
 
+const BUILTIN_TEMPLATES: { key: BuiltinKey; label: string; sublabel: string; emoji: string }[] = [
+  { key: 'classico', label: 'BM Juris Clássico', sublabel: 'Estilo minimalista premium', emoji: '✨' },
+  { key: 'informativo', label: 'Informativo Jurídico', sublabel: 'Cards de notícias e artigos', emoji: '📰' },
+];
+
 export function MarketingVisual() {
   const [selectedFormat, setSelectedFormat] = useState<Format>(FORMATS[0]);
+  const [selectedBuiltin, setSelectedBuiltin] = useState<BuiltinKey>('classico');
   const [htmlContent, setHtmlContent] = useState<string>('');
   const [useBuiltin, setUseBuiltin] = useState(true);
   const [fields, setFields] = useState<EditableField[]>([]);
@@ -507,12 +680,17 @@ export function MarketingVisual() {
 
   // ── Switch format ──────────────────────────────────────────────────────────
 
+  const getBuiltinHtml = useCallback((builtinKey: BuiltinKey, fmt: Format): string => {
+    if (builtinKey === 'informativo') return buildInformativoTemplate();
+    return buildBuiltinTemplate(fmt);
+  }, []);
+
   useEffect(() => {
     if (useBuiltin) {
-      const html = buildBuiltinTemplate(selectedFormat);
+      const html = getBuiltinHtml(selectedBuiltin, selectedFormat);
       loadTemplate(html);
     }
-  }, [selectedFormat, useBuiltin, loadTemplate]);
+  }, [selectedFormat, selectedBuiltin, useBuiltin, loadTemplate, getBuiltinHtml]);
 
   // ── Handle folder upload ───────────────────────────────────────────────────
 
@@ -591,7 +769,18 @@ export function MarketingVisual() {
     setUploadMessage('');
     setFileMap({});
     if (fileInputRef.current) fileInputRef.current.value = '';
-    const html = buildBuiltinTemplate(selectedFormat);
+    const html = getBuiltinHtml(selectedBuiltin, selectedFormat);
+    loadTemplate(html);
+  };
+
+  const selectBuiltin = (key: BuiltinKey) => {
+    setSelectedBuiltin(key);
+    setUseBuiltin(true);
+    setUploadStatus('idle');
+    setUploadMessage('');
+    setFileMap({});
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    const html = getBuiltinHtml(key, selectedFormat);
     loadTemplate(html);
   };
 
@@ -731,18 +920,39 @@ export function MarketingVisual() {
               <FolderOpen className="w-3 h-3" /> Template HTML
             </p>
 
-            {/* Builtin indicator */}
-            <div className={cn(
-              'mb-3 flex items-center gap-2 px-3 py-2 rounded-lg text-xs',
-              useBuiltin
-                ? 'bg-secondary/10 border border-secondary/20 text-secondary'
-                : 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400'
-            )}>
-              <Wand2 className="w-3.5 h-3.5 shrink-0" />
-              <span className="font-medium leading-tight">
-                {useBuiltin ? 'Template BM Juris (padrão)' : 'Template personalizado ativo'}
-              </span>
+            {/* Built-in template selector */}
+            <p className="text-[10px] text-outline mb-2">Templates prontos:</p>
+            <div className="space-y-1.5 mb-4">
+              {BUILTIN_TEMPLATES.map((tpl) => (
+                <button
+                  key={tpl.key}
+                  onClick={() => selectBuiltin(tpl.key)}
+                  className={cn(
+                    'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border transition-all text-left',
+                    useBuiltin && selectedBuiltin === tpl.key
+                      ? 'bg-secondary/10 border-secondary/30 text-secondary'
+                      : 'border-outline-variant/10 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
+                  )}
+                >
+                  <span className="text-base">{tpl.emoji}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold leading-none">{tpl.label}</p>
+                    <p className="text-[10px] opacity-60 mt-0.5">{tpl.sublabel}</p>
+                  </div>
+                  {useBuiltin && selectedBuiltin === tpl.key && (
+                    <CheckCircle className="w-3.5 h-3.5 text-secondary shrink-0" />
+                  )}
+                </button>
+              ))}
             </div>
+
+            {/* Custom upload status */}
+            {!useBuiltin && (
+              <div className="mb-3 flex items-center gap-2 px-3 py-2 rounded-lg text-xs bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+                <Wand2 className="w-3.5 h-3.5 shrink-0" />
+                <span className="font-medium leading-tight">Template personalizado ativo</span>
+              </div>
+            )}
 
             {/* Upload area */}
             <label
