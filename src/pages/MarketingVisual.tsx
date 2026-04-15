@@ -411,8 +411,6 @@ function applyFieldToIframe(
     const img = el as HTMLImageElement;
     img.style.display = 'block';
     img.src = value;
-    const placeholder = iframe.contentDocument.querySelector('.photo-frame-placeholder') as HTMLElement | null;
-    if (placeholder) placeholder.style.display = 'none';
   } else {
     el.textContent = value;
   }
@@ -649,8 +647,6 @@ export function MarketingVisual() {
         } else if (field.type === 'image') {
           (el as HTMLImageElement).src = val;
           (el as HTMLImageElement).style.display = 'block';
-          const ph = doc.querySelector('.photo-frame-placeholder') as HTMLElement | null;
-          if (ph) ph.style.display = 'none';
         } else {
           el.textContent = val;
         }
