@@ -18,6 +18,7 @@ import { Intimacoes } from '@/pages/Intimacoes';
 import { BlogManagement } from '@/pages/BlogManagement';
 import { Analytics } from '@/pages/Analytics';
 import { Atendimento } from '@/pages/Atendimento';
+import { MarketingVisual } from '@/pages/MarketingVisual';
 import { supabase } from '@/lib/supabase';
 
 function ProtectedRoute({ 
@@ -198,6 +199,7 @@ export default function App() {
         <Route path="blog" element={<BlogManagement />} />
         <Route path="atendimento" element={<Atendimento />} />
         <Route path="analytics" element={<Analytics />} />
+        <Route path="marketing" element={<MarketingVisual />} />
         <Route path="configuracoes" element={<Settings />} />
       </Route>
 
