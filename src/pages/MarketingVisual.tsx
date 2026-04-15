@@ -344,7 +344,37 @@ function buildBuiltinTemplate(format: Format): string {
 
 // ─── Built-in: Informativo Jurídico Template ─────────────────────────────────
 
-function buildInformativoTemplate(): string {
+function buildInformativoTemplate(format: Format): string {
+  const isStories  = format.key === 'stories';
+  const isSquare   = format.key === 'post';
+  const W = format.width;
+  const H = format.height;
+
+  // Responsive scale factors
+  const titleSize    = isStories ? 100 : isSquare ? 68  : 84;
+  const subSize      = isStories ? 38  : isSquare ? 26  : 32;
+  const badgeSize    = isStories ? 22  : isSquare ? 16  : 19;
+  const badgePad     = isStories ? '14px 28px' : isSquare ? '10px 20px' : '12px 24px';
+  const logoW        = isStories ? 200 : isSquare ? 148 : 174;
+  const logoH        = isStories ? 56  : isSquare ? 40  : 50;
+  const logoNameSize = isStories ? 26  : isSquare ? 18  : 22;
+  const headerPad    = isStories ? 72  : isSquare ? 50  : 62;
+  const cardInset    = isStories ? 60  : isSquare ? 40  : 50;
+  const badgeRowPad  = isStories ? 64  : isSquare ? 44  : 54;
+  const contentPad   = isStories ? 72  : isSquare ? 50  : 62;
+  const contentPadB  = isStories ? 56  : isSquare ? 40  : 48;
+  const titleMB      = isStories ? 60  : isSquare ? 36  : 48;
+  const preLineMB    = isStories ? 40  : isSquare ? 24  : 32;
+  const footerPad    = isStories ? '44px 80px' : isSquare ? '32px 56px' : '38px 68px';
+  const footerBtnSz  = isStories ? 80  : isSquare ? 60  : 70;
+  const footerCtaSz  = isStories ? 34  : isSquare ? 24  : 29;
+  const footerSubSz  = isStories ? 22  : isSquare ? 16  : 19;
+  const dividerMX    = isStories ? 80  : isSquare ? 56  : 68;
+  const preLineW     = isStories ? 48  : isSquare ? 34  : 42;
+  const borderRadius = isStories ? 44  : isSquare ? 32  : 38;
+  const wmLogoW      = isStories ? 900 : isSquare ? 700 : 800;
+  const wmLogoH      = isStories ? 260 : isSquare ? 200 : 230;
+
   return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -354,63 +384,210 @@ function buildInformativoTemplate(): string {
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800\u0026family=Inter:wght@300;400;500;600;700\u0026display=swap');
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { width: 1080px; height: 1920px; overflow: hidden; font-family: 'Manrope', sans-serif; background: #08151b; position: relative; }
+  body { width: ${W}px; height: ${H}px; overflow: hidden; font-family: 'Manrope', sans-serif; background: #08151b; position: relative; }
+
+  /* ── Fundo ── */
   .bg {
     position: absolute; inset: 0;
     background:
-      radial-gradient(ellipse 120% 60% at 80% -10%, rgba(241,189,137,0.06) 0%, transparent 60%),
-      radial-gradient(ellipse 100% 80% at -10% 80%, rgba(19,32,38,0.9) 0%, transparent 70%),
-      linear-gradient(160deg, #0d1f27 0%, #08151b 40%, #06111a 100%);
+      radial-gradient(ellipse 120% 55% at 85% -5%, rgba(241,189,137,0.07) 0%, transparent 55%),
+      radial-gradient(ellipse 80% 60% at 5% 95%, rgba(19,32,38,0.8) 0%, transparent 60%),
+      linear-gradient(160deg, #0d1f27 0%, #08151b 45%, #061018 100%);
   }
-  .watermark { position: absolute; right: -60px; bottom: 80px; pointer-events: none; z-index: 1; overflow: hidden; }
-  .watermark-text { font-family: 'Manrope', sans-serif; font-weight: 800; font-size: 520px; color: transparent; -webkit-text-stroke: 1.5px rgba(241,189,137,0.05); line-height: 1; user-select: none; letter-spacing: -20px; }
-  .top-accent { position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(to right, transparent, rgba(241,189,137,0.6), rgba(241,189,137,0.2), transparent); z-index: 20; }
-  .card { position: absolute; inset: 60px; background: linear-gradient(165deg, #132026 0%, #0d1c23 50%, #08151b 100%); border-radius: 44px; border: 1px solid rgba(241,189,137,0.12); display: flex; flex-direction: column; overflow: hidden; z-index: 10; box-shadow: inset 0 1px 0 rgba(241,189,137,0.08), 0 80px 160px rgba(0,0,0,0.6), 0 0 0 1px rgba(0,0,0,0.4); }
-  .header { padding: 72px 80px 0; display: flex; align-items: center; }
-  .logo-mark { display: flex; align-items: center; gap: 16px; }
-  .logo-icon { width: 64px; height: 64px; position: relative; }
-  .logo-icon::before { content: ''; position: absolute; inset: 0; border: 3px solid #f1bd89; border-radius: 6px; }
-  .logo-icon::after { content: ''; position: absolute; top: 10px; left: 10px; right: -10px; bottom: -10px; border: 1.5px solid rgba(241,189,137,0.3); border-radius: 6px; }
-  .logo-letters { font-family: 'Manrope', sans-serif; font-weight: 800; font-size: 28px; color: #f1bd89; letter-spacing: -1px; line-height: 1; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
-  .logo-divider { width: 1px; height: 48px; background: rgba(241,189,137,0.15); margin: 0 24px; }
-  .logo-name { font-family: 'Manrope', sans-serif; font-weight: 600; font-size: 26px; color: rgba(241,189,137,0.7); letter-spacing: 3px; text-transform: uppercase; }
-  .badge-row { padding: 64px 80px 0; display: flex; align-items: stretch; align-self: flex-start; }
-  .badge-filled { background: #f1bd89; color: #08151b; font-family: 'Manrope', sans-serif; font-size: 22px; font-weight: 800; letter-spacing: 4px; text-transform: uppercase; padding: 14px 28px; border-radius: 8px 0 0 8px; display: flex; align-items: center; }
-  .badge-outline { color: #f1bd89; font-family: 'Manrope', sans-serif; font-size: 22px; font-weight: 700; letter-spacing: 4px; text-transform: uppercase; padding: 12px 28px; border: 1.5px solid rgba(241,189,137,0.45); border-left: none; border-radius: 0 8px 8px 0; display: flex; align-items: center; background: rgba(241,189,137,0.05); }
-  .content { flex: 1; padding: 72px 80px 56px; display: flex; flex-direction: column; justify-content: flex-start; }
-  .pre-line { width: 48px; height: 3px; background: linear-gradient(to right, #f1bd89, rgba(241,189,137,0.2)); border-radius: 2px; margin-bottom: 40px; }
-  .titulo { font-family: 'Manrope', sans-serif; font-size: 100px; font-weight: 800; line-height: 1.08; color: #d7e5ed; letter-spacing: -3px; margin-bottom: 60px; word-break: break-word; hyphens: auto; }
-  .subtitulo { font-family: 'Inter', sans-serif; font-size: 38px; font-weight: 400; line-height: 1.6; color: rgba(187,201,209,0.65); max-width: 92%; }
-  .card-divider { margin: 0 80px; height: 1px; background: linear-gradient(to right, rgba(241,189,137,0.15), transparent); }
-  .footer { padding: 44px 80px; display: flex; align-items: center; justify-content: space-between; gap: 24px; background: rgba(6,10,13,0.5); }
-  .footer-left { display: flex; flex-direction: column; gap: 6px; flex: 1; }
-  .footer-cta { font-family: 'Manrope', sans-serif; font-size: 34px; font-weight: 600; color: #f1bd89; line-height: 1.3; }
-  .footer-sub { font-family: 'Inter', sans-serif; font-size: 22px; font-weight: 400; color: rgba(187,201,209,0.35); letter-spacing: 1px; }
-  .footer-btn { width: 80px; height: 80px; border-radius: 50%; background: rgba(241,189,137,0.08); border: 1.5px solid rgba(241,189,137,0.3); display: flex; align-items: center; justify-content: center; color: #f1bd89; font-size: 28px; flex-shrink: 0; }
+
+  /* Grade sutil no fundo */
+  .bg-grid {
+    position: absolute; inset: 0; z-index: 1; pointer-events: none;
+    background-image:
+      linear-gradient(rgba(241,189,137,0.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(241,189,137,0.025) 1px, transparent 1px);
+    background-size: ${isStories ? '80px 80px' : isSquare ? '60px 60px' : '70px 70px'};
+  }
+
+  /* Acento dourado no topo */
+  .top-accent { position: absolute; top: 0; left: 0; right: 0; height: 3px; z-index: 20;
+    background: linear-gradient(to right, transparent 5%, #f1bd89 40%, rgba(241,189,137,0.35) 75%, transparent);
+  }
+
+  /* Watermark: logo BM de baixa opacidade */
+  .wm-logo {
+    position: absolute;
+    right: -${Math.round(wmLogoW * 0.25)}px;
+    bottom: ${isStories ? '120px' : isSquare ? '60px' : '90px'};
+    width: ${wmLogoW}px;
+    height: ${wmLogoH}px;
+    background-color: #f1bd89;
+    -webkit-mask-image: url('/logo.png');
+    mask-image: url('/logo.png');
+    -webkit-mask-size: contain;
+    mask-size: contain;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-position: right center;
+    mask-position: right center;
+    opacity: 0.045;
+    pointer-events: none;
+    z-index: 2;
+  }
+
+  /* ── Card ── */
+  .card {
+    position: absolute;
+    top: ${cardInset}px; left: ${cardInset}px; right: ${cardInset}px; bottom: ${cardInset}px;
+    background: linear-gradient(165deg, #132026 0%, #0d1c23 55%, #08151b 100%);
+    border-radius: ${borderRadius}px;
+    border: 1px solid rgba(241,189,137,0.11);
+    display: flex; flex-direction: column; overflow: hidden; z-index: 10;
+    box-shadow: inset 0 1px 0 rgba(241,189,137,0.07), 0 60px 140px rgba(0,0,0,0.65), 0 0 0 1px rgba(0,0,0,0.4);
+  }
+
+  /* Cantos decorativos do card */
+  .corner { position: absolute; width: ${isStories ? 28 : 20}px; height: ${isStories ? 28 : 20}px; pointer-events: none; z-index: 30; }
+  .corner-tl { top: 0; left: 0; border-top: 2px solid rgba(241,189,137,0.4); border-left: 2px solid rgba(241,189,137,0.4); border-radius: ${borderRadius}px 0 0 0; }
+  .corner-tr { top: 0; right: 0; border-top: 2px solid rgba(241,189,137,0.2); border-right: 2px solid rgba(241,189,137,0.2); border-radius: 0 ${borderRadius}px 0 0; }
+  .corner-bl { bottom: 0; left: 0; border-bottom: 2px solid rgba(241,189,137,0.2); border-left: 2px solid rgba(241,189,137,0.2); border-radius: 0 0 0 ${borderRadius}px; }
+  .corner-br { bottom: 0; right: 0; border-bottom: 2px solid rgba(241,189,137,0.1); border-right: 2px solid rgba(241,189,137,0.1); border-radius: 0 0 ${borderRadius}px 0; }
+
+  /* ── Header ── */
+  .header {
+    padding: ${headerPad}px ${isStories ? 80 : isSquare ? 56 : 68}px 0;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+
+  /* Logo real (máscara CSS sobre logo.png) */
+  .logo-img {
+    width: ${logoW}px; height: ${logoH}px;
+    background-color: #f1bd89;
+    -webkit-mask-image: url('/logo.png');
+    mask-image: url('/logo.png');
+    -webkit-mask-size: contain; mask-size: contain;
+    -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+    -webkit-mask-position: left center; mask-position: left center;
+    flex-shrink: 0;
+  }
+
+  /* Número da edição / tag da direita */
+  .header-tag {
+    font-family: 'Inter', sans-serif;
+    font-size: ${isStories ? 20 : isSquare ? 14 : 17}px;
+    font-weight: 400;
+    color: rgba(241,189,137,0.35);
+    letter-spacing: ${isStories ? 3 : 2}px;
+    text-transform: uppercase;
+  }
+
+  /* Linha horizontal sob o header */
+  .header-hr {
+    margin: ${isStories ? 48 : isSquare ? 32 : 40}px ${isStories ? 80 : isSquare ? 56 : 68}px 0;
+    height: 1px;
+    background: linear-gradient(to right, rgba(241,189,137,0.18), rgba(241,189,137,0.05), transparent);
+  }
+
+  /* ── Badge ── */
+  .badge-row {
+    padding: ${badgeRowPad}px ${isStories ? 80 : isSquare ? 56 : 68}px 0;
+    display: flex; align-items: stretch; align-self: flex-start;
+  }
+  .badge-filled {
+    background: #f1bd89; color: #08151b;
+    font-family: 'Manrope', sans-serif; font-size: ${badgeSize}px; font-weight: 800;
+    letter-spacing: ${isStories ? 4 : 3}px; text-transform: uppercase;
+    padding: ${badgePad}; border-radius: 6px 0 0 6px;
+    display: flex; align-items: center;
+  }
+  .badge-outline {
+    color: #f1bd89;
+    font-family: 'Manrope', sans-serif; font-size: ${badgeSize}px; font-weight: 700;
+    letter-spacing: ${isStories ? 4 : 3}px; text-transform: uppercase;
+    padding: ${badgePad}; border: 1.5px solid rgba(241,189,137,0.4); border-left: none;
+    border-radius: 0 6px 6px 0; display: flex; align-items: center;
+    background: rgba(241,189,137,0.04);
+  }
+
+  /* ── Conteúdo ── */
+  .content {
+    flex: 1;
+    padding: ${contentPad}px ${isStories ? 80 : isSquare ? 56 : 68}px ${contentPadB}px;
+    display: flex; flex-direction: column; justify-content: flex-start;
+  }
+  .pre-line {
+    width: ${preLineW}px; height: 3px;
+    background: linear-gradient(to right, #f1bd89, rgba(241,189,137,0.15));
+    border-radius: 2px; margin-bottom: ${preLineMB}px;
+  }
+  .titulo {
+    font-family: 'Manrope', sans-serif;
+    font-size: ${titleSize}px; font-weight: 800;
+    line-height: 1.07; color: #d7e5ed;
+    letter-spacing: ${isStories ? -3 : isSquare ? -2 : -2.5}px;
+    margin-bottom: ${titleMB}px;
+    word-break: break-word; hyphens: auto;
+  }
+  .subtitulo {
+    font-family: 'Inter', sans-serif;
+    font-size: ${subSize}px; font-weight: 400;
+    line-height: 1.6; color: rgba(187,201,209,0.6);
+    max-width: 95%;
+  }
+
+  /* ── Divider e Footer ── */
+  .card-divider { margin: 0 ${dividerMX}px; height: 1px; background: linear-gradient(to right, rgba(241,189,137,0.14), transparent); }
+  .footer {
+    padding: ${footerPad}; display: flex; align-items: center;
+    justify-content: space-between; gap: 20px; background: rgba(4,8,11,0.55);
+  }
+  .footer-left { display: flex; flex-direction: column; gap: ${isStories ? 6 : 4}px; flex: 1; }
+  .footer-cta { font-family: 'Manrope', sans-serif; font-size: ${footerCtaSz}px; font-weight: 600; color: #f1bd89; line-height: 1.25; }
+  .footer-sub { font-family: 'Inter', sans-serif; font-size: ${footerSubSz}px; font-weight: 400; color: rgba(187,201,209,0.3); letter-spacing: 1px; }
+  .footer-btn {
+    width: ${footerBtnSz}px; height: ${footerBtnSz}px; border-radius: 50%;
+    background: rgba(241,189,137,0.07); border: 1.5px solid rgba(241,189,137,0.28);
+    display: flex; align-items: center; justify-content: center;
+    color: #f1bd89; font-size: ${Math.round(footerBtnSz * 0.36)}px; flex-shrink: 0;
+  }
 </style>
 </head>
 <body>
 <div class="bg"></div>
+<div class="bg-grid"></div>
 <div class="top-accent"></div>
-<div class="watermark"><span class="watermark-text" data-editable="watermark" data-label="Marca D'\u00e1gua" data-type="text">BM</span></div>
+
+<!-- Watermark: logo BM de fundo -->
+<div class="wm-logo"></div>
+
 <div class="card">
+  <!-- Cantos decorativos -->
+  <div class="corner corner-tl"></div>
+  <div class="corner corner-tr"></div>
+  <div class="corner corner-bl"></div>
+  <div class="corner corner-br"></div>
+
+  <!-- Header com logo real -->
   <div class="header">
-    <div class="logo-mark">
-      <div class="logo-icon"><span class="logo-letters" data-editable="logo" data-label="Sigla do Logo" data-type="text">BM</span></div>
-      <div class="logo-divider"></div>
-      <span class="logo-name" data-editable="escritorio" data-label="Nome do Escrit\u00f3rio" data-type="text">BM Juris</span>
-    </div>
+    <div class="logo-img" title="BM Juris Advocacia"></div>
+    <span class="header-tag" data-editable="header-tag" data-label="Tag do Header (ex: Edição, OAB)" data-type="text">OAB/SP</span>
   </div>
+
+  <!-- Linha divisória sous o header -->
+  <div class="header-hr"></div>
+
+  <!-- Badge de categoria -->
   <div class="badge-row">
     <span class="badge-filled" data-editable="badge-label" data-label="Badge \u2014 Parte Clara" data-type="text">INFORMATIVO</span>
     <span class="badge-outline" data-editable="badge-tipo" data-label="Badge \u2014 Parte Escura" data-type="text">JUR\u00cdDICO</span>
   </div>
+
+  <!-- Conteúdo -->
   <div class="content">
     <div class="pre-line"></div>
     <h1 class="titulo" data-editable="titulo" data-label="T\u00edtulo Principal" data-type="textarea">Presos no semiaberto podem cumprir pena fora do pres\u00eddio?</h1>
-    <p class="subtitulo" data-editable="subtitulo" data-label="Subt\u00edtulo / Descri\u00e7\u00e3o" data-type="textarea">Entenda quando a Justi\u00e7a permite o chamado 'semiaberto harmonizado' e quem pode ser beneficiado.</p>
+    <p class="subtitulo" data-editable="subtitulo" data-label="Subt\u00edtulo / Descri\u00e7\u00e3o" data-type="textarea">Entenda quando a Justi\u00e7a permite o chamado '\u2018semiaberto harmonizado\u2019 e quem pode ser beneficiado.</p>
   </div>
+
+  <!-- Divider -->
   <div class="card-divider"></div>
+
+  <!-- Footer -->
   <div class="footer">
     <div class="footer-left">
       <span class="footer-cta" data-editable="cta" data-label="Texto do CTA" data-type="text">Veja a mat\u00e9ria completa no site</span>
@@ -424,6 +601,10 @@ function buildInformativoTemplate(): string {
 }
 
 // ─── Helper: Read folder files ────────────────────────────────────────────────
+
+
+// ─── Helper: Read folder files ────────────────────────────────────────────────
+
 
 
 async function readFileAsText(file: File): Promise<string> {
@@ -597,7 +778,7 @@ export function MarketingVisual() {
   // ── Switch format ──────────────────────────────────────────────────────────
 
   const getBuiltinHtml = useCallback((builtinKey: BuiltinKey, fmt: Format): string => {
-    if (builtinKey === 'informativo') return buildInformativoTemplate();
+    if (builtinKey === 'informativo') return buildInformativoTemplate(fmt);
     return buildBuiltinTemplate(fmt);
   }, []);
 
