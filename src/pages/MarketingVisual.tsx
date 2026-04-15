@@ -180,23 +180,14 @@ function buildBuiltinTemplate(format: Format, logoDataUrl: string = ''): string 
     justify-content: space-between; 
   }
 
-  /* Logo: Usando Mask para colorir de Dourado/Bege automaticamente */
+  /* Logo: Tratado via Javascript para vir Dourado via canvas */
   .logo-area { 
     display: flex; align-items: center; 
     margin-bottom: ${isStories ? '0' : '40px'}; 
   }
   .logo-img { 
     width: ${logoW}px; height: ${logoH}px; 
-    background-color: ${gold};
-    -webkit-mask-image: url("${logoDataUrl || ''}");
-    -webkit-mask-size: contain;
-    -webkit-mask-position: left center;
-    -webkit-mask-repeat: no-repeat;
-    mask-image: url("${logoDataUrl || ''}");
-    mask-size: contain;
-    mask-position: left center;
-    mask-repeat: no-repeat;
-    flex-shrink: 0; 
+    display: block; object-fit: contain; object-position: left center; flex-shrink: 0;
   }
   .logo-fallback { 
     font-family: 'Playfair Display', serif; font-size: ${isStories ? '32px' : '26px'}; 
@@ -290,7 +281,7 @@ function buildBuiltinTemplate(format: Format, logoDataUrl: string = ''): string 
 <div class="container">
   <div class="logo-area">
     ${logoDataUrl
-      ? `<div class="logo-img"></div>`
+      ? `<img class="logo-img" src="${logoDataUrl}" alt="BM Juris">`
       : `<span class="logo-fallback">BM Juris</span>`
     }
   </div>
@@ -359,8 +350,8 @@ function buildInformativoTemplate(format: Format, logoDataUrl: string = ''): str
   const wmH        = isStories ? 242 : isSquare ? 180 : 212;
   const wmBottom   = isStories ? 110 : isSquare ? 50  : 80;
   const gridSz     = isStories ? 80  : isSquare ? 56  : 68;
-  // Distribuicao vertical: todos centralizados para facilitar leitura
-  const cJust      = 'center';
+  // Distribuicao vertical: Alinhado mais acima conforme pedido
+  const cJust      = 'flex-start';
 
   return `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -389,16 +380,7 @@ function buildInformativoTemplate(format: Format, logoDataUrl: string = ''): str
   .header { padding: ${hVPad}px ${hPad}px 0; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
   .logo-area { display: flex; align-items: center; }
   .logo-img { 
-    width: ${logoW}px; height: ${logoH}px; flex-shrink: 0; display: block; 
-    background-color: #f1bd89;
-    -webkit-mask-image: url("${logoDataUrl || ''}");
-    -webkit-mask-size: contain;
-    -webkit-mask-position: left center;
-    -webkit-mask-repeat: no-repeat;
-    mask-image: url("${logoDataUrl || ''}");
-    mask-size: contain;
-    mask-position: left center;
-    mask-repeat: no-repeat;
+    width: ${logoW}px; height: ${logoH}px; flex-shrink: 0; display: block; object-fit: contain; object-position: left center;
   }
   .header-tag { font-family: 'Inter', sans-serif; font-size: ${tagSize}px; font-weight: 400; color: rgba(241,189,137,0.32); letter-spacing: ${isStories ? 3 : 2}px; text-transform: uppercase; }
   .header-hr { margin: ${hrMT}px ${hPad}px 0; height: 1px; flex-shrink: 0; background: linear-gradient(to right, rgba(241,189,137,0.16), rgba(241,189,137,0.04), transparent); }
@@ -426,7 +408,7 @@ function buildInformativoTemplate(format: Format, logoDataUrl: string = ''): str
   <div class="header">
     <div class="logo-area">
       ${logoDataUrl
-        ? `<div class="logo-img"></div>`
+        ? `<img class="logo-img" src="${logoDataUrl}" alt="BM Juris">`
         : `<span style="font-family:'Playfair Display',serif;font-size:${Math.round(logoH * 0.55)}px;font-weight:700;color:#f1bd89;letter-spacing:2px;">BM Juris</span>`
       }
     </div>
@@ -573,6 +555,30 @@ function applyFieldToIframe(
   }
 }
 
+// ─── Helper: Colorize Image via Canvas ───────────────────────────────────────
+
+function colorizeImage(dataUrl: string, hexColor: string): Promise<string> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return resolve(dataUrl);
+      
+      ctx.drawImage(img, 0, 0);
+      ctx.globalCompositeOperation = 'source-in';
+      ctx.fillStyle = hexColor;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      resolve(canvas.toDataURL('image/png'));
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+}
+
 // ─── Main Component ──────────────────────────────────────────────────────────
 
 const BUILTIN_TEMPLATES: { key: BuiltinKey; label: string; sublabel: string; emoji: string }[] = [
@@ -593,8 +599,10 @@ export function MarketingVisual() {
   const [zoom, setZoom] = useState(0.3);
   const [isExporting, setIsExporting] = useState(false);
   const [fileMap, setFileMap] = useState<Record<string, string>>({});
-  // Logo carregada como data URL para evitar problemas de CORS no html2canvas
+  
+  // Logo carregada iterativamente
   const [logoDataUrl, setLogoDataUrl] = useState<string>('');
+  const [goldenLogoDataUrl, setGoldenLogoDataUrl] = useState<string>('');
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -608,7 +616,11 @@ export function MarketingVisual() {
         reader.onload = e => resolve(e.target?.result as string);
         reader.readAsDataURL(blob);
       }))
-      .then(setLogoDataUrl)
+      .then(async (dataUrl) => {
+        setLogoDataUrl(dataUrl);
+        const goldenUrl = await colorizeImage(dataUrl, '#f1bd89');
+        setGoldenLogoDataUrl(goldenUrl);
+      })
       .catch(() => {});
   }, []);
 
@@ -680,9 +692,10 @@ export function MarketingVisual() {
   // ── Switch format ──────────────────────────────────────────────────────────
 
   const getBuiltinHtml = useCallback((builtinKey: BuiltinKey, fmt: Format): string => {
-    if (builtinKey === 'informativo') return buildInformativoTemplate(fmt, logoDataUrl);
-    return buildBuiltinTemplate(fmt, logoDataUrl);
-  }, [logoDataUrl]);
+    const finalLogo = goldenLogoDataUrl || logoDataUrl;
+    if (builtinKey === 'informativo') return buildInformativoTemplate(fmt, finalLogo);
+    return buildBuiltinTemplate(fmt, finalLogo);
+  }, [logoDataUrl, goldenLogoDataUrl]);
 
   useEffect(() => {
     if (useBuiltin) {
