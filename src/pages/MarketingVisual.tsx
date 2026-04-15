@@ -345,255 +345,109 @@ function buildBuiltinTemplate(format: Format): string {
 // ─── Built-in: Informativo Jurídico Template ─────────────────────────────────
 
 function buildInformativoTemplate(format: Format): string {
-  const isStories  = format.key === 'stories';
-  const isSquare   = format.key === 'post';
+  const isStories = format.key === 'stories';
+  const isSquare  = format.key === 'post';
   const W = format.width;
   const H = format.height;
 
-  // Responsive scale factors
-  const titleSize    = isStories ? 100 : isSquare ? 68  : 84;
-  const subSize      = isStories ? 38  : isSquare ? 26  : 32;
-  const badgeSize    = isStories ? 22  : isSquare ? 16  : 19;
-  const badgePad     = isStories ? '14px 28px' : isSquare ? '10px 20px' : '12px 24px';
-  const logoW        = isStories ? 200 : isSquare ? 148 : 174;
-  const logoH        = isStories ? 56  : isSquare ? 40  : 50;
-  const logoNameSize = isStories ? 26  : isSquare ? 18  : 22;
-  const headerPad    = isStories ? 72  : isSquare ? 50  : 62;
-  const cardInset    = isStories ? 60  : isSquare ? 40  : 50;
-  const badgeRowPad  = isStories ? 64  : isSquare ? 44  : 54;
-  const contentPad   = isStories ? 72  : isSquare ? 50  : 62;
-  const contentPadB  = isStories ? 56  : isSquare ? 40  : 48;
-  const titleMB      = isStories ? 60  : isSquare ? 36  : 48;
-  const preLineMB    = isStories ? 40  : isSquare ? 24  : 32;
-  const footerPad    = isStories ? '44px 80px' : isSquare ? '32px 56px' : '38px 68px';
-  const footerBtnSz  = isStories ? 80  : isSquare ? 60  : 70;
-  const footerCtaSz  = isStories ? 34  : isSquare ? 24  : 29;
-  const footerSubSz  = isStories ? 22  : isSquare ? 16  : 19;
-  const dividerMX    = isStories ? 80  : isSquare ? 56  : 68;
-  const preLineW     = isStories ? 48  : isSquare ? 34  : 42;
-  const borderRadius = isStories ? 44  : isSquare ? 32  : 38;
-  const wmLogoW      = isStories ? 900 : isSquare ? 700 : 800;
-  const wmLogoH      = isStories ? 260 : isSquare ? 200 : 230;
+  const titleSize  = isStories ? 88  : isSquare ? 56  : 72;
+  const subSize    = isStories ? 34  : isSquare ? 22  : 28;
+  const badgeSize  = isStories ? 20  : isSquare ? 14  : 17;
+  const tagSize    = isStories ? 18  : isSquare ? 12  : 15;
+  const ctaSize    = isStories ? 30  : isSquare ? 20  : 25;
+  const subCtaSize = isStories ? 20  : isSquare ? 14  : 17;
+  const titleLS    = isStories ? -2.5 : isSquare ? -1.5 : -2;
+  const hPad       = isStories ? 80 : isSquare ? 52 : 66;
+  const cardInset  = isStories ? 58 : isSquare ? 38 : 48;
+  const hVPad      = isStories ? 68 : isSquare ? 46 : 56;
+  const hrMT       = isStories ? 44 : isSquare ? 28 : 36;
+  const badgePadT  = isStories ? 52 : isSquare ? 34 : 44;
+  const bPadI      = isStories ? '12px 26px' : isSquare ? '8px 16px' : '10px 20px';
+  const cPadT      = isStories ? 56 : isSquare ? 40 : 48;
+  const cPadB      = isStories ? 60 : isSquare ? 40 : 50;
+  const titleMB    = isStories ? 44 : isSquare ? 24 : 34;
+  const preMB      = isStories ? 44 : isSquare ? 24 : 34;
+  const preW       = isStories ? 44 : isSquare ? 28 : 36;
+  const btnSz      = isStories ? 74 : isSquare ? 52 : 62;
+  const fPadV      = isStories ? 38 : isSquare ? 24 : 30;
+  const divMX      = isStories ? 80 : isSquare ? 52 : 66;
+  const bRadius    = isStories ? 44 : isSquare ? 30 : 38;
+  const logoW      = isStories ? 188 : isSquare ? 132 : 160;
+  const logoH      = isStories ? 52  : isSquare ? 36  : 44;
+  const cornerSz   = isStories ? 28  : isSquare ? 18  : 22;
+  const wmW        = isStories ? 860 : isSquare ? 640 : 750;
+  const wmH        = isStories ? 242 : isSquare ? 180 : 212;
+  const wmBottom   = isStories ? 110 : isSquare ? 50  : 80;
+  const gridSz     = isStories ? 80  : isSquare ? 56  : 68;
+  // Distribuicao vertical: Stories = texto no fundo (editorial), Feed = centralizado, Square = do topo
+  const cJust      = isStories ? 'flex-end' : isSquare ? 'flex-start' : 'center';
 
   return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Informativo Jur\u00eddico \u2014 BM Juris</title>
+<title>Informativo Juridico — BM Juris</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800\u0026family=Inter:wght@300;400;500;600;700\u0026display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Inter:wght@300;400;500;600&display=swap');
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { width: ${W}px; height: ${H}px; overflow: hidden; font-family: 'Manrope', sans-serif; background: #08151b; position: relative; }
-
-  /* ── Fundo ── */
-  .bg {
-    position: absolute; inset: 0;
-    background:
-      radial-gradient(ellipse 120% 55% at 85% -5%, rgba(241,189,137,0.07) 0%, transparent 55%),
-      radial-gradient(ellipse 80% 60% at 5% 95%, rgba(19,32,38,0.8) 0%, transparent 60%),
-      linear-gradient(160deg, #0d1f27 0%, #08151b 45%, #061018 100%);
-  }
-
-  /* Grade sutil no fundo */
-  .bg-grid {
-    position: absolute; inset: 0; z-index: 1; pointer-events: none;
-    background-image:
-      linear-gradient(rgba(241,189,137,0.025) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(241,189,137,0.025) 1px, transparent 1px);
-    background-size: ${isStories ? '80px 80px' : isSquare ? '60px 60px' : '70px 70px'};
-  }
-
-  /* Acento dourado no topo */
-  .top-accent { position: absolute; top: 0; left: 0; right: 0; height: 3px; z-index: 20;
-    background: linear-gradient(to right, transparent 5%, #f1bd89 40%, rgba(241,189,137,0.35) 75%, transparent);
-  }
-
-  /* Watermark: logo BM de baixa opacidade */
-  .wm-logo {
-    position: absolute;
-    right: -${Math.round(wmLogoW * 0.25)}px;
-    bottom: ${isStories ? '120px' : isSquare ? '60px' : '90px'};
-    width: ${wmLogoW}px;
-    height: ${wmLogoH}px;
-    background-color: #f1bd89;
-    -webkit-mask-image: url('/logo.png');
-    mask-image: url('/logo.png');
-    -webkit-mask-size: contain;
-    mask-size: contain;
-    -webkit-mask-repeat: no-repeat;
-    mask-repeat: no-repeat;
-    -webkit-mask-position: right center;
-    mask-position: right center;
-    opacity: 0.045;
-    pointer-events: none;
-    z-index: 2;
-  }
-
-  /* ── Card ── */
-  .card {
-    position: absolute;
-    top: ${cardInset}px; left: ${cardInset}px; right: ${cardInset}px; bottom: ${cardInset}px;
-    background: linear-gradient(165deg, #132026 0%, #0d1c23 55%, #08151b 100%);
-    border-radius: ${borderRadius}px;
-    border: 1px solid rgba(241,189,137,0.11);
-    display: flex; flex-direction: column; overflow: hidden; z-index: 10;
-    box-shadow: inset 0 1px 0 rgba(241,189,137,0.07), 0 60px 140px rgba(0,0,0,0.65), 0 0 0 1px rgba(0,0,0,0.4);
-  }
-
-  /* Cantos decorativos do card */
-  .corner { position: absolute; width: ${isStories ? 28 : 20}px; height: ${isStories ? 28 : 20}px; pointer-events: none; z-index: 30; }
-  .corner-tl { top: 0; left: 0; border-top: 2px solid rgba(241,189,137,0.4); border-left: 2px solid rgba(241,189,137,0.4); border-radius: ${borderRadius}px 0 0 0; }
-  .corner-tr { top: 0; right: 0; border-top: 2px solid rgba(241,189,137,0.2); border-right: 2px solid rgba(241,189,137,0.2); border-radius: 0 ${borderRadius}px 0 0; }
-  .corner-bl { bottom: 0; left: 0; border-bottom: 2px solid rgba(241,189,137,0.2); border-left: 2px solid rgba(241,189,137,0.2); border-radius: 0 0 0 ${borderRadius}px; }
-  .corner-br { bottom: 0; right: 0; border-bottom: 2px solid rgba(241,189,137,0.1); border-right: 2px solid rgba(241,189,137,0.1); border-radius: 0 0 ${borderRadius}px 0; }
-
-  /* ── Header ── */
-  .header {
-    padding: ${headerPad}px ${isStories ? 80 : isSquare ? 56 : 68}px 0;
-    display: flex; align-items: center; justify-content: space-between;
-  }
-
-  /* Logo real (máscara CSS sobre logo.png) */
-  .logo-img {
-    width: ${logoW}px; height: ${logoH}px;
-    background-color: #f1bd89;
-    -webkit-mask-image: url('/logo.png');
-    mask-image: url('/logo.png');
-    -webkit-mask-size: contain; mask-size: contain;
-    -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
-    -webkit-mask-position: left center; mask-position: left center;
-    flex-shrink: 0;
-  }
-
-  /* Número da edição / tag da direita */
-  .header-tag {
-    font-family: 'Inter', sans-serif;
-    font-size: ${isStories ? 20 : isSquare ? 14 : 17}px;
-    font-weight: 400;
-    color: rgba(241,189,137,0.35);
-    letter-spacing: ${isStories ? 3 : 2}px;
-    text-transform: uppercase;
-  }
-
-  /* Linha horizontal sob o header */
-  .header-hr {
-    margin: ${isStories ? 48 : isSquare ? 32 : 40}px ${isStories ? 80 : isSquare ? 56 : 68}px 0;
-    height: 1px;
-    background: linear-gradient(to right, rgba(241,189,137,0.18), rgba(241,189,137,0.05), transparent);
-  }
-
-  /* ── Badge ── */
-  .badge-row {
-    padding: ${badgeRowPad}px ${isStories ? 80 : isSquare ? 56 : 68}px 0;
-    display: flex; align-items: stretch; align-self: flex-start;
-  }
-  .badge-filled {
-    background: #f1bd89; color: #08151b;
-    font-family: 'Manrope', sans-serif; font-size: ${badgeSize}px; font-weight: 800;
-    letter-spacing: ${isStories ? 4 : 3}px; text-transform: uppercase;
-    padding: ${badgePad}; border-radius: 6px 0 0 6px;
-    display: flex; align-items: center;
-  }
-  .badge-outline {
-    color: #f1bd89;
-    font-family: 'Manrope', sans-serif; font-size: ${badgeSize}px; font-weight: 700;
-    letter-spacing: ${isStories ? 4 : 3}px; text-transform: uppercase;
-    padding: ${badgePad}; border: 1.5px solid rgba(241,189,137,0.4); border-left: none;
-    border-radius: 0 6px 6px 0; display: flex; align-items: center;
-    background: rgba(241,189,137,0.04);
-  }
-
-  /* ── Conteúdo ── */
-  .content {
-    flex: 1;
-    padding: ${contentPad}px ${isStories ? 80 : isSquare ? 56 : 68}px ${contentPadB}px;
-    display: flex; flex-direction: column; justify-content: flex-start;
-  }
-  .pre-line {
-    width: ${preLineW}px; height: 3px;
-    background: linear-gradient(to right, #f1bd89, rgba(241,189,137,0.15));
-    border-radius: 2px; margin-bottom: ${preLineMB}px;
-  }
-  .titulo {
-    font-family: 'Manrope', sans-serif;
-    font-size: ${titleSize}px; font-weight: 800;
-    line-height: 1.07; color: #d7e5ed;
-    letter-spacing: ${isStories ? -3 : isSquare ? -2 : -2.5}px;
-    margin-bottom: ${titleMB}px;
-    word-break: break-word; hyphens: auto;
-  }
-  .subtitulo {
-    font-family: 'Inter', sans-serif;
-    font-size: ${subSize}px; font-weight: 400;
-    line-height: 1.6; color: rgba(187,201,209,0.6);
-    max-width: 95%;
-  }
-
-  /* ── Divider e Footer ── */
-  .card-divider { margin: 0 ${dividerMX}px; height: 1px; background: linear-gradient(to right, rgba(241,189,137,0.14), transparent); }
-  .footer {
-    padding: ${footerPad}; display: flex; align-items: center;
-    justify-content: space-between; gap: 20px; background: rgba(4,8,11,0.55);
-  }
-  .footer-left { display: flex; flex-direction: column; gap: ${isStories ? 6 : 4}px; flex: 1; }
-  .footer-cta { font-family: 'Manrope', sans-serif; font-size: ${footerCtaSz}px; font-weight: 600; color: #f1bd89; line-height: 1.25; }
-  .footer-sub { font-family: 'Inter', sans-serif; font-size: ${footerSubSz}px; font-weight: 400; color: rgba(187,201,209,0.3); letter-spacing: 1px; }
-  .footer-btn {
-    width: ${footerBtnSz}px; height: ${footerBtnSz}px; border-radius: 50%;
-    background: rgba(241,189,137,0.07); border: 1.5px solid rgba(241,189,137,0.28);
-    display: flex; align-items: center; justify-content: center;
-    color: #f1bd89; font-size: ${Math.round(footerBtnSz * 0.36)}px; flex-shrink: 0;
-  }
+  .bg { position: absolute; inset: 0; background: radial-gradient(ellipse 110% 50% at 85% -5%, rgba(241,189,137,0.065) 0%, transparent 52%), radial-gradient(ellipse 70% 55% at 5% 95%, rgba(19,32,38,0.75) 0%, transparent 58%), linear-gradient(155deg, #0d1f27 0%, #08151b 42%, #061018 100%); }
+  .bg-grid { position: absolute; inset: 0; z-index: 1; pointer-events: none; background-image: linear-gradient(rgba(241,189,137,0.022) 1px, transparent 1px), linear-gradient(90deg, rgba(241,189,137,0.022) 1px, transparent 1px); background-size: ${gridSz}px ${gridSz}px; }
+  .top-accent { position: absolute; top: 0; left: 0; right: 0; height: 3px; z-index: 20; background: linear-gradient(to right, transparent 5%, #f1bd89 35%, rgba(241,189,137,0.3) 72%, transparent); }
+  .wm-logo { position: absolute; right: -${Math.round(wmW * 0.22)}px; bottom: ${wmBottom}px; width: ${wmW}px; height: ${wmH}px; background-color: #f1bd89; -webkit-mask-image: url('/logo.png'); mask-image: url('/logo.png'); -webkit-mask-size: contain; mask-size: contain; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; -webkit-mask-position: right center; mask-position: right center; opacity: 0.042; pointer-events: none; z-index: 2; }
+  .card { position: absolute; top: ${cardInset}px; left: ${cardInset}px; right: ${cardInset}px; bottom: ${cardInset}px; background: linear-gradient(165deg, #132026 0%, #0d1c23 52%, #08151b 100%); border-radius: ${bRadius}px; border: 1px solid rgba(241,189,137,0.10); display: flex; flex-direction: column; overflow: hidden; z-index: 10; box-shadow: inset 0 1px 0 rgba(241,189,137,0.06), 0 50px 120px rgba(0,0,0,0.6), 0 0 0 1px rgba(0,0,0,0.4); }
+  .corner { position: absolute; width: ${cornerSz}px; height: ${cornerSz}px; pointer-events: none; z-index: 30; }
+  .corner-tl { top: 0; left: 0; border-top: 2px solid rgba(241,189,137,0.38); border-left: 2px solid rgba(241,189,137,0.38); border-radius: ${bRadius}px 0 0 0; }
+  .corner-tr { top: 0; right: 0; border-top: 2px solid rgba(241,189,137,0.18); border-right: 2px solid rgba(241,189,137,0.18); border-radius: 0 ${bRadius}px 0 0; }
+  .corner-bl { bottom: 0; left: 0; border-bottom: 2px solid rgba(241,189,137,0.18); border-left: 2px solid rgba(241,189,137,0.18); border-radius: 0 0 0 ${bRadius}px; }
+  .corner-br { bottom: 0; right: 0; border-bottom: 2px solid rgba(241,189,137,0.10); border-right: 2px solid rgba(241,189,137,0.10); border-radius: 0 0 ${bRadius}px 0; }
+  .header { padding: ${hVPad}px ${hPad}px 0; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+  .logo-img { width: ${logoW}px; height: ${logoH}px; flex-shrink: 0; background-color: #f1bd89; -webkit-mask-image: url('/logo.png'); mask-image: url('/logo.png'); -webkit-mask-size: contain; mask-size: contain; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; -webkit-mask-position: left center; mask-position: left center; }
+  .header-tag { font-family: 'Inter', sans-serif; font-size: ${tagSize}px; font-weight: 400; color: rgba(241,189,137,0.32); letter-spacing: ${isStories ? 3 : 2}px; text-transform: uppercase; }
+  .header-hr { margin: ${hrMT}px ${hPad}px 0; height: 1px; flex-shrink: 0; background: linear-gradient(to right, rgba(241,189,137,0.16), rgba(241,189,137,0.04), transparent); }
+  .badge-row { padding: ${badgePadT}px ${hPad}px 0; display: flex; align-items: stretch; align-self: flex-start; flex-shrink: 0; }
+  .badge-filled { background: #f1bd89; color: #08151b; font-family: 'Manrope', sans-serif; font-size: ${badgeSize}px; font-weight: 800; letter-spacing: ${isStories ? 3.5 : 2.5}px; text-transform: uppercase; padding: ${bPadI}; border-radius: 5px 0 0 5px; display: flex; align-items: center; }
+  .badge-outline { color: #f1bd89; font-family: 'Manrope', sans-serif; font-size: ${badgeSize}px; font-weight: 700; letter-spacing: ${isStories ? 3.5 : 2.5}px; text-transform: uppercase; padding: ${bPadI}; border: 1.5px solid rgba(241,189,137,0.38); border-left: none; border-radius: 0 5px 5px 0; display: flex; align-items: center; background: rgba(241,189,137,0.04); }
+  .content { flex: 1; overflow: hidden; padding: ${cPadT}px ${hPad}px ${cPadB}px; display: flex; flex-direction: column; justify-content: ${cJust}; }
+  .pre-line { width: ${preW}px; height: 3px; flex-shrink: 0; background: linear-gradient(to right, #f1bd89, rgba(241,189,137,0.12)); border-radius: 2px; margin-bottom: ${preMB}px; }
+  .titulo { font-family: 'Manrope', sans-serif; font-size: ${titleSize}px; font-weight: 800; line-height: 1.06; color: #d7e5ed; letter-spacing: ${titleLS}px; margin-bottom: ${titleMB}px; word-break: break-word; hyphens: auto; flex-shrink: 0; }
+  .subtitulo { font-family: 'Inter', sans-serif; font-size: ${subSize}px; font-weight: 400; line-height: 1.65; color: rgba(187,201,209,0.58); max-width: 94%; flex-shrink: 0; }
+  .card-divider { flex-shrink: 0; margin: 0 ${divMX}px; height: 1px; background: linear-gradient(to right, rgba(241,189,137,0.13), transparent); }
+  .footer { flex-shrink: 0; padding: ${fPadV}px ${hPad}px; display: flex; align-items: center; justify-content: space-between; gap: 20px; background: rgba(4,8,11,0.52); }
+  .footer-left { display: flex; flex-direction: column; gap: ${isStories ? 5 : 3}px; flex: 1; min-width: 0; }
+  .footer-cta { font-family: 'Manrope', sans-serif; font-size: ${ctaSize}px; font-weight: 600; color: #f1bd89; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .footer-sub { font-family: 'Inter', sans-serif; font-size: ${subCtaSize}px; font-weight: 400; color: rgba(187,201,209,0.28); letter-spacing: 1px; }
+  .footer-btn { flex-shrink: 0; width: ${btnSz}px; height: ${btnSz}px; border-radius: 50%; background: rgba(241,189,137,0.07); border: 1.5px solid rgba(241,189,137,0.26); display: flex; align-items: center; justify-content: center; color: #f1bd89; font-size: ${Math.round(btnSz * 0.34)}px; }
 </style>
 </head>
 <body>
-<div class="bg"></div>
-<div class="bg-grid"></div>
-<div class="top-accent"></div>
-
-<!-- Watermark: logo BM de fundo -->
+<div class="bg"></div><div class="bg-grid"></div><div class="top-accent"></div>
 <div class="wm-logo"></div>
-
 <div class="card">
-  <!-- Cantos decorativos -->
-  <div class="corner corner-tl"></div>
-  <div class="corner corner-tr"></div>
-  <div class="corner corner-bl"></div>
-  <div class="corner corner-br"></div>
-
-  <!-- Header com logo real -->
+  <div class="corner corner-tl"></div><div class="corner corner-tr"></div>
+  <div class="corner corner-bl"></div><div class="corner corner-br"></div>
   <div class="header">
     <div class="logo-img" title="BM Juris Advocacia"></div>
-    <span class="header-tag" data-editable="header-tag" data-label="Tag do Header (ex: Edição, OAB)" data-type="text">OAB/SP</span>
+    <span class="header-tag" data-editable="header-tag" data-label="Tag do Header" data-type="text">OAB/SP</span>
   </div>
-
-  <!-- Linha divisória sous o header -->
   <div class="header-hr"></div>
-
-  <!-- Badge de categoria -->
   <div class="badge-row">
-    <span class="badge-filled" data-editable="badge-label" data-label="Badge \u2014 Parte Clara" data-type="text">INFORMATIVO</span>
-    <span class="badge-outline" data-editable="badge-tipo" data-label="Badge \u2014 Parte Escura" data-type="text">JUR\u00cdDICO</span>
+    <span class="badge-filled" data-editable="badge-label" data-label="Badge Parte Clara" data-type="text">INFORMATIVO</span>
+    <span class="badge-outline" data-editable="badge-tipo" data-label="Badge Parte Escura" data-type="text">JURIDICO</span>
   </div>
-
-  <!-- Conteúdo -->
   <div class="content">
     <div class="pre-line"></div>
-    <h1 class="titulo" data-editable="titulo" data-label="T\u00edtulo Principal" data-type="textarea">Presos no semiaberto podem cumprir pena fora do pres\u00eddio?</h1>
-    <p class="subtitulo" data-editable="subtitulo" data-label="Subt\u00edtulo / Descri\u00e7\u00e3o" data-type="textarea">Entenda quando a Justi\u00e7a permite o chamado '\u2018semiaberto harmonizado\u2019 e quem pode ser beneficiado.</p>
+    <h1 class="titulo" data-editable="titulo" data-label="Titulo Principal" data-type="textarea">Presos no semiaberto podem cumprir pena fora do presidio?</h1>
+    <p class="subtitulo" data-editable="subtitulo" data-label="Subtitulo" data-type="textarea">Entenda quando a Justica permite o chamado semiaberto harmonizado e quem pode ser beneficiado.</p>
   </div>
-
-  <!-- Divider -->
   <div class="card-divider"></div>
-
-  <!-- Footer -->
   <div class="footer">
     <div class="footer-left">
-      <span class="footer-cta" data-editable="cta" data-label="Texto do CTA" data-type="text">Veja a mat\u00e9ria completa no site</span>
-      <span class="footer-sub" data-editable="site" data-label="Site / @" data-type="text">bmjuris.com.br</span>
+      <span class="footer-cta" data-editable="cta" data-label="Texto do CTA" data-type="text">Veja a materia completa no site</span>
+      <span class="footer-sub" data-editable="site" data-label="Site" data-type="text">bmjuris.com.br</span>
     </div>
-    <div class="footer-btn">\u2197</div>
+    <div class="footer-btn">&#x2197;</div>
   </div>
 </div>
 </body>
