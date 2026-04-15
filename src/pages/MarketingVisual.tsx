@@ -180,14 +180,14 @@ function buildBuiltinTemplate(format: Format, logoDataUrl: string = ''): string 
     justify-content: space-between; 
   }
 
-  /* Logo: Tratado via Javascript para vir Dourado via canvas */
+  /* Logo: Tratado nativamente via SVG Mask para cor perfeita */
   .logo-area { 
     display: flex; align-items: center; 
     margin-bottom: ${isStories ? '0' : '40px'}; 
   }
   .logo-img { 
     width: ${logoW}px; height: ${logoH}px; 
-    display: block; object-fit: contain; object-position: left center; flex-shrink: 0;
+    display: block; flex-shrink: 0;
   }
   .logo-fallback { 
     font-family: 'Playfair Display', serif; font-size: ${isStories ? '32px' : '26px'}; 
@@ -200,17 +200,19 @@ function buildBuiltinTemplate(format: Format, logoDataUrl: string = ''): string 
     justify-content: center; 
   }
   .tag-wrapper {
-    display: flex; flex-direction: column; align-items: flex-start;
-    margin-bottom: ${isStories ? '40px' : '28px'};
+    display: flex; align-items: stretch; align-self: flex-start;
+    margin-bottom: ${isStories ? '36px' : '24px'};
   }
-  .tag { 
-    font-size: ${tagFS}; font-weight: 400; color: ${gold}; 
-    letter-spacing: 6px; text-transform: uppercase; 
+  .tag-filled { 
+    background: ${gold}; color: ${bgDark}; font-family: 'Inter', sans-serif;
+    font-size: ${tagFS}; font-weight: 800; letter-spacing: 2px; text-transform: uppercase; 
+    padding: 6px 14px; border-radius: 4px 0 0 4px; display: flex; align-items: center;
   }
-  .tag-line {
-    width: ${isStories ? '80px' : '50px'}; height: 1px; 
-    background: linear-gradient(90deg, ${gold}, transparent);
-    margin-top: 16px;
+  .tag-outline {
+    color: ${gold}; font-family: 'Inter', sans-serif;
+    font-size: ${tagFS}; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; 
+    padding: 6px 14px; border: 1px solid rgba(241,189,137,0.35); border-left: none; 
+    border-radius: 0 4px 4px 0; display: flex; align-items: center; background: rgba(241,189,137,0.05);
   }
 
   .titulo { 
@@ -281,15 +283,24 @@ function buildBuiltinTemplate(format: Format, logoDataUrl: string = ''): string 
 <div class="container">
   <div class="logo-area">
     ${logoDataUrl
-      ? `<img class="logo-img" src="${logoDataUrl}" alt="BM Juris">`
+      ? `<div class="logo-img">
+           <svg width="100%" height="100%" viewBox="0 0 ${logoW} ${logoH}" preserveAspectRatio="xMidYMid meet">
+             <defs>
+               <mask id="logoMask-classico">
+                 <image href="${logoDataUrl}" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" />
+               </mask>
+             </defs>
+             <rect width="100%" height="100%" fill="#f1bd89" mask="url(#logoMask-classico)" />
+           </svg>
+         </div>`
       : `<span class="logo-fallback">BM Juris</span>`
     }
   </div>
 
   <div class="main-content">
     <div class="tag-wrapper">
-      <div class="tag" data-editable="tag" data-label="Tag Temática" data-type="text">Direito Digital</div>
-      <div class="tag-line"></div>
+      <div class="tag-filled" data-editable="tag-filled" data-label="Tag Clara" data-type="text">INFORMATIVO</div>
+      <div class="tag-outline" data-editable="tag-outline" data-label="Tag Escura" data-type="text">JURÍDICO</div>
     </div>
     
     <h1 class="titulo" data-editable="titulo" data-label="Título Principal" data-type="text">Seu Direito,<br><span>Nossa Causa.</span></h1>
@@ -408,7 +419,16 @@ function buildInformativoTemplate(format: Format, logoDataUrl: string = ''): str
   <div class="header">
     <div class="logo-area">
       ${logoDataUrl
-        ? `<img class="logo-img" src="${logoDataUrl}" alt="BM Juris">`
+        ? `<div class="logo-img">
+             <svg width="100%" height="100%" viewBox="0 0 ${logoW} ${logoH}" preserveAspectRatio="xMidYMid meet">
+               <defs>
+                 <mask id="logoMask-info">
+                   <image href="${logoDataUrl}" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" />
+                 </mask>
+               </defs>
+               <rect width="100%" height="100%" fill="#f1bd89" mask="url(#logoMask-info)" />
+             </svg>
+           </div>`
         : `<span style="font-family:'Playfair Display',serif;font-size:${Math.round(logoH * 0.55)}px;font-weight:700;color:#f1bd89;letter-spacing:2px;">BM Juris</span>`
       }
     </div>
@@ -555,30 +575,6 @@ function applyFieldToIframe(
   }
 }
 
-// ─── Helper: Colorize Image via Canvas ───────────────────────────────────────
-
-function colorizeImage(dataUrl: string, hexColor: string): Promise<string> {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = img.width;
-      canvas.height = img.height;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return resolve(dataUrl);
-      
-      ctx.drawImage(img, 0, 0);
-      ctx.globalCompositeOperation = 'source-in';
-      ctx.fillStyle = hexColor;
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      
-      resolve(canvas.toDataURL('image/png'));
-    };
-    img.onerror = () => resolve(dataUrl);
-    img.src = dataUrl;
-  });
-}
-
 // ─── Main Component ──────────────────────────────────────────────────────────
 
 const BUILTIN_TEMPLATES: { key: BuiltinKey; label: string; sublabel: string; emoji: string }[] = [
@@ -602,7 +598,6 @@ export function MarketingVisual() {
   
   // Logo carregada iterativamente
   const [logoDataUrl, setLogoDataUrl] = useState<string>('');
-  const [goldenLogoDataUrl, setGoldenLogoDataUrl] = useState<string>('');
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -616,11 +611,7 @@ export function MarketingVisual() {
         reader.onload = e => resolve(e.target?.result as string);
         reader.readAsDataURL(blob);
       }))
-      .then(async (dataUrl) => {
-        setLogoDataUrl(dataUrl);
-        const goldenUrl = await colorizeImage(dataUrl, '#f1bd89');
-        setGoldenLogoDataUrl(goldenUrl);
-      })
+      .then(setLogoDataUrl)
       .catch(() => {});
   }, []);
 
@@ -692,10 +683,10 @@ export function MarketingVisual() {
   // ── Switch format ──────────────────────────────────────────────────────────
 
   const getBuiltinHtml = useCallback((builtinKey: BuiltinKey, fmt: Format): string => {
-    const finalLogo = goldenLogoDataUrl || logoDataUrl;
-    if (builtinKey === 'informativo') return buildInformativoTemplate(fmt, finalLogo);
-    return buildBuiltinTemplate(fmt, finalLogo);
-  }, [logoDataUrl, goldenLogoDataUrl]);
+    // Usamos diretamente logoDataUrl dentro de um poderoso SVG Mask Inline para colorização nativa e exportação
+    if (builtinKey === 'informativo') return buildInformativoTemplate(fmt, logoDataUrl);
+    return buildBuiltinTemplate(fmt, logoDataUrl);
+  }, [logoDataUrl]);
 
   useEffect(() => {
     if (useBuiltin) {
@@ -838,15 +829,8 @@ export function MarketingVisual() {
       const fontStyleEl = fontEl.firstElementChild;
       if (fontStyleEl) head.insertBefore(fontStyleEl, head.firstChild);
 
-      // 4. Injeta logo como <img> com data URL se disponível
-      const logoContainer = doc.querySelector('.logo-img') as HTMLElement | null;
-      if (logoContainer && logoDataUrl) {
-        logoContainer.innerHTML = '';
-        const logoImg = doc.createElement('img');
-        logoImg.src = logoDataUrl;
-        logoImg.style.cssText = 'width:100%;height:100%;object-fit:contain;object-position:left center;display:block;';
-        logoContainer.appendChild(logoImg);
-      }
+      // As logos agora já são SVG Masks inline no próprio HTML gerado, não precisamos mais
+      // da injeção forçada de tag <img> que quebrava as máscaras.
 
       // 5. Serializa o HTML completo e corrigido
       const serialized = new XMLSerializer().serializeToString(doc);
