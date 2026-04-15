@@ -344,7 +344,7 @@ function buildBuiltinTemplate(format: Format): string {
 
 // ─── Built-in: Informativo Jurídico Template ─────────────────────────────────
 
-function buildInformativoTemplate(format: Format): string {
+function buildInformativoTemplate(format: Format, logoDataUrl: string = ''): string {
   const isStories = format.key === 'stories';
   const isSquare  = format.key === 'post';
   const W = format.width;
@@ -388,14 +388,18 @@ function buildInformativoTemplate(format: Format): string {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Informativo Juridico — BM Juris</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Inter:wght@300;400;500;600&display=swap');
+  /* Fontes carregadas via <link> no head para melhor compatibilidade */
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { width: ${W}px; height: ${H}px; overflow: hidden; font-family: 'Manrope', sans-serif; background: #08151b; position: relative; }
   .bg { position: absolute; inset: 0; background: radial-gradient(ellipse 110% 50% at 85% -5%, rgba(241,189,137,0.065) 0%, transparent 52%), radial-gradient(ellipse 70% 55% at 5% 95%, rgba(19,32,38,0.75) 0%, transparent 58%), linear-gradient(155deg, #0d1f27 0%, #08151b 42%, #061018 100%); }
   .bg-grid { position: absolute; inset: 0; z-index: 1; pointer-events: none; background-image: linear-gradient(rgba(241,189,137,0.022) 1px, transparent 1px), linear-gradient(90deg, rgba(241,189,137,0.022) 1px, transparent 1px); background-size: ${gridSz}px ${gridSz}px; }
   .top-accent { position: absolute; top: 0; left: 0; right: 0; height: 3px; z-index: 20; background: linear-gradient(to right, transparent 5%, #f1bd89 35%, rgba(241,189,137,0.3) 72%, transparent); }
-  .wm-logo { position: absolute; right: -${Math.round(wmW * 0.22)}px; bottom: ${wmBottom}px; width: ${wmW}px; height: ${wmH}px; background-color: #f1bd89; -webkit-mask-image: url('/logo.png'); mask-image: url('/logo.png'); -webkit-mask-size: contain; mask-size: contain; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; -webkit-mask-position: right center; mask-position: right center; opacity: 0.042; pointer-events: none; z-index: 2; }
+  .wm-logo { position: absolute; right: -${Math.round(wmW * 0.22)}px; bottom: ${wmBottom}px; width: ${wmW}px; height: ${wmH}px; opacity: 0.042; pointer-events: none; z-index: 2; display: flex; align-items: center; justify-content: flex-end; }
+  .wm-logo img { width: 100%; height: 100%; object-fit: contain; object-position: right center; }
   .card { position: absolute; top: ${cardInset}px; left: ${cardInset}px; right: ${cardInset}px; bottom: ${cardInset}px; background: linear-gradient(165deg, #132026 0%, #0d1c23 52%, #08151b 100%); border-radius: ${bRadius}px; border: 1px solid rgba(241,189,137,0.10); display: flex; flex-direction: column; overflow: hidden; z-index: 10; box-shadow: inset 0 1px 0 rgba(241,189,137,0.06), 0 50px 120px rgba(0,0,0,0.6), 0 0 0 1px rgba(0,0,0,0.4); }
   .corner { position: absolute; width: ${cornerSz}px; height: ${cornerSz}px; pointer-events: none; z-index: 30; }
   .corner-tl { top: 0; left: 0; border-top: 2px solid rgba(241,189,137,0.38); border-left: 2px solid rgba(241,189,137,0.38); border-radius: ${bRadius}px 0 0 0; }
@@ -403,7 +407,7 @@ function buildInformativoTemplate(format: Format): string {
   .corner-bl { bottom: 0; left: 0; border-bottom: 2px solid rgba(241,189,137,0.18); border-left: 2px solid rgba(241,189,137,0.18); border-radius: 0 0 0 ${bRadius}px; }
   .corner-br { bottom: 0; right: 0; border-bottom: 2px solid rgba(241,189,137,0.10); border-right: 2px solid rgba(241,189,137,0.10); border-radius: 0 0 ${bRadius}px 0; }
   .header { padding: ${hVPad}px ${hPad}px 0; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
-  .logo-img { width: ${logoW}px; height: ${logoH}px; flex-shrink: 0; background-color: #f1bd89; -webkit-mask-image: url('/logo.png'); mask-image: url('/logo.png'); -webkit-mask-size: contain; mask-size: contain; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; -webkit-mask-position: left center; mask-position: left center; }
+  .logo-img { width: ${logoW}px; height: ${logoH}px; flex-shrink: 0; display: block; object-fit: contain; object-position: left center; }
   .header-tag { font-family: 'Inter', sans-serif; font-size: ${tagSize}px; font-weight: 400; color: rgba(241,189,137,0.32); letter-spacing: ${isStories ? 3 : 2}px; text-transform: uppercase; }
   .header-hr { margin: ${hrMT}px ${hPad}px 0; height: 1px; flex-shrink: 0; background: linear-gradient(to right, rgba(241,189,137,0.16), rgba(241,189,137,0.04), transparent); }
   .badge-row { padding: ${badgePadT}px ${hPad}px 0; display: flex; align-items: stretch; align-self: flex-start; flex-shrink: 0; }
@@ -560,9 +564,24 @@ export function MarketingVisual() {
   const [zoom, setZoom] = useState(0.3);
   const [isExporting, setIsExporting] = useState(false);
   const [fileMap, setFileMap] = useState<Record<string, string>>({});
+  // Logo carregada como data URL para evitar problemas de CORS no html2canvas
+  const [logoDataUrl, setLogoDataUrl] = useState<string>('');
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // ── Carrega logo.png como data URL ao montar ───────────────────────────────
+  useEffect(() => {
+    fetch('/logo.png')
+      .then(r => r.blob())
+      .then(blob => new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = e => resolve(e.target?.result as string);
+        reader.readAsDataURL(blob);
+      }))
+      .then(setLogoDataUrl)
+      .catch(() => {});
+  }, []);
 
   // ── Load template into iframe ──────────────────────────────────────────────
 
@@ -632,9 +651,9 @@ export function MarketingVisual() {
   // ── Switch format ──────────────────────────────────────────────────────────
 
   const getBuiltinHtml = useCallback((builtinKey: BuiltinKey, fmt: Format): string => {
-    if (builtinKey === 'informativo') return buildInformativoTemplate(fmt);
+    if (builtinKey === 'informativo') return buildInformativoTemplate(fmt, logoDataUrl);
     return buildBuiltinTemplate(fmt);
-  }, []);
+  }, [logoDataUrl]);
 
   useEffect(() => {
     if (useBuiltin) {
@@ -738,25 +757,82 @@ export function MarketingVisual() {
   // ── Export as PNG ──────────────────────────────────────────────────────────
 
   const exportAsPNG = async () => {
-    const iframe = iframeRef.current;
-    if (!iframe?.contentDocument?.body) return;
-
+    if (!htmlContent) return;
     setIsExporting(true);
     try {
-      const canvas = await html2canvas(iframe.contentDocument.body, {
-        width: selectedFormat.width,
-        height: selectedFormat.height,
-        scale: 1,
-        useCORS: true,
-        allowTaint: true,
-        backgroundColor: '#08151b',
-        logging: false,
+      // 1. Cria um iframe off-screen em tamanho REAL (sem zoom) para captura fiel
+      const wrapper = document.createElement('div');
+      Object.assign(wrapper.style, {
+        position: 'fixed',
+        top: `-${selectedFormat.height * 2 + 200}px`,
+        left: '0',
+        width: `${selectedFormat.width}px`,
+        height: `${selectedFormat.height}px`,
+        overflow: 'hidden',
+        zIndex: '-9999',
+        pointerEvents: 'none',
+      });
+      document.body.appendChild(wrapper);
+
+      const exportFrame = document.createElement('iframe');
+      Object.assign(exportFrame.style, {
+        width: `${selectedFormat.width}px`,
+        height: `${selectedFormat.height}px`,
+        border: 'none',
+        display: 'block',
+      });
+      exportFrame.srcdoc = htmlContent;
+      wrapper.appendChild(exportFrame);
+
+      // 2. Aguarda iframe carregar + fontes ficarem prontas
+      await new Promise<void>((resolve) => {
+        const onLoad = async () => {
+          try {
+            // Aguarda document.fonts.ready (garante que as fontes foram obtidas)
+            if (exportFrame.contentDocument?.fonts) {
+              await exportFrame.contentDocument.fonts.ready;
+            }
+          } catch (_) {}
+          // Buffer adicional para render completo
+          setTimeout(resolve, 1500);
+        };
+        exportFrame.addEventListener('load', onLoad, { once: true });
+        // Fallback caso o evento load não dispare
+        setTimeout(resolve, 5000);
       });
 
-      const link = document.createElement('a');
-      link.download = `bm-marketing-${selectedFormat.key}-${Date.now()}.png`;
-      link.href = canvas.toDataURL('image/png', 1.0);
-      link.click();
+      // 3. Reaplica os valores editados no iframe de exportação
+      const doc = exportFrame.contentDocument;
+      if (doc) {
+        fields.forEach((field) => {
+          const val = fieldValues[field.key];
+          if (val !== undefined) applyFieldToIframe(exportFrame as HTMLIFrameElement, field, val);
+        });
+        // Pequena pausa para reflow
+        await new Promise(r => setTimeout(r, 200));
+
+        // 4. Captura com html2canvas em scale 2x (alta resolução)
+        const canvas = await html2canvas(doc.body, {
+          width: selectedFormat.width,
+          height: selectedFormat.height,
+          windowWidth: selectedFormat.width,
+          windowHeight: selectedFormat.height,
+          scale: 2,
+          useCORS: true,
+          allowTaint: true,
+          backgroundColor: '#08151b',
+          logging: false,
+          imageTimeout: 15000,
+        });
+
+        const link = document.createElement('a');
+        link.download = `bm-marketing-${selectedFormat.key}-${Date.now()}.png`;
+        link.href = canvas.toDataURL('image/png', 1.0);
+        link.click();
+      }
+
+      // 5. Limpeza
+      document.body.removeChild(wrapper);
     } catch (err) {
       console.error('Erro ao exportar:', err);
     } finally {
