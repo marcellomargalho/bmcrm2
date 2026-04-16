@@ -214,13 +214,13 @@
 }
 
 .task-title-modern {
-  font-family: var(--font-headline);
-  font-weight: 700;
-  font-size: 15px;
-  letter-spacing: -0.2px;
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 14px;
+  letter-spacing: 0;
   color: var(--task-text-primary);
   margin-bottom: 12px;
-  text-transform: capitalize;
+  line-height: 1.55;
 }
 
 .task-bottom-modern {
