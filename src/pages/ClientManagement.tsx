@@ -453,7 +453,7 @@ function DeleteClientModal({ isOpen, onClose, onConfirm, clientName, deleting }:
           </div>
           <h3 className="font-headline font-bold text-xl text-on-surface mb-2">Excluir Cliente</h3>
           <p className="text-sm text-on-surface-variant leading-relaxed">
-            Tem certeza que deseja excluir o cadastro de <span className="font-bold text-on-surface">{clientName}</span>? Todos os processos vinculados também serão removidos. Essa ação não pode ser desfeita.
+            Tem certeza que deseja excluir o cadastro de <span className="font-bold text-on-surface">{clientName}</span>? Essa ação não pode ser desfeita.
           </p>
           <div className="flex gap-3 mt-6">
             <button
@@ -525,9 +525,7 @@ export function ClientManagement() {
     if (!selectedClient) return;
     setDeleting(true);
     try {
-      // Delete associated processes first
-      await supabase.from('processes').delete().eq('client_id', selectedClient.id);
-      // Delete the client
+      // Delete only the client record (processes are kept)
       await supabase.from('clients').delete().eq('id', selectedClient.id);
       setIsDeleteModalOpen(false);
       setSelectedClient(null);
