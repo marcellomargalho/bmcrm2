@@ -442,12 +442,50 @@ function EditClientModal({ isOpen, onClose, onSuccess, client }: { isOpen: boole
   );
 }
 
+function DeleteClientModal({ isOpen, onClose, onConfirm, clientName, deleting }: { isOpen: boolean; onClose: () => void; onConfirm: () => void; clientName: string; deleting: boolean }) {
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 bg-surface/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+      <div className="bg-surface-container w-full max-w-sm rounded-3xl shadow-2xl overflow-hidden border border-outline-variant/20 animate-in fade-in zoom-in-95 duration-200">
+        <div className="p-6">
+          <div className="w-12 h-12 rounded-2xl bg-error/10 flex items-center justify-center mb-4">
+            <Trash2 className="w-6 h-6 text-error" />
+          </div>
+          <h3 className="font-headline font-bold text-xl text-on-surface mb-2">Excluir Cliente</h3>
+          <p className="text-sm text-on-surface-variant leading-relaxed">
+            Tem certeza que deseja excluir o cadastro de <span className="font-bold text-on-surface">{clientName}</span>? Todos os processos vinculados também serão removidos. Essa ação não pode ser desfeita.
+          </p>
+          <div className="flex gap-3 mt-6">
+            <button
+              onClick={onClose}
+              disabled={deleting}
+              className="flex-1 px-4 py-3 font-bold text-on-surface-variant hover:bg-surface-container-highest rounded-xl transition-all"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={onConfirm}
+              disabled={deleting}
+              className="flex-1 px-4 py-3 bg-error text-white font-bold rounded-xl hover:opacity-90 transition-all flex items-center justify-center gap-2"
+            >
+              {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+              Excluir
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function ClientManagement() {
   const [clients, setClients] = useState<Client[]>([]);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   async function fetchClients() {
     setLoading(true);
@@ -483,6 +521,22 @@ export function ClientManagement() {
     fetchClients();
   }
 
+  async function handleDeleteClient() {
+    if (!selectedClient) return;
+    setDeleting(true);
+    try {
+      // Delete associated processes first
+      await supabase.from('processes').delete().eq('client_id', selectedClient.id);
+      // Delete the client
+      await supabase.from('clients').delete().eq('id', selectedClient.id);
+      setIsDeleteModalOpen(false);
+      setSelectedClient(null);
+      fetchClients();
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   return (
     <div className="space-y-8">
       <NewClientModal 
@@ -496,6 +550,15 @@ export function ClientManagement() {
           onClose={() => setIsEditModalOpen(false)}
           onSuccess={fetchClients}
           client={selectedClient}
+        />
+      )}
+      {selectedClient && (
+        <DeleteClientModal
+          isOpen={isDeleteModalOpen}
+          onClose={() => setIsDeleteModalOpen(false)}
+          onConfirm={handleDeleteClient}
+          clientName={selectedClient.name}
+          deleting={deleting}
         />
       )}
 
@@ -655,6 +718,13 @@ export function ClientManagement() {
                       title={selectedClient.status === 'Ativo' ? 'Encerrar Contrato' : 'Reativar Cliente'}
                     >
                       {selectedClient.status === 'Ativo' ? <UserX className="w-4 h-4" /> : <UserCheck className="w-4 h-4" />}
+                    </button>
+                    <button
+                      onClick={() => setIsDeleteModalOpen(true)}
+                      className="p-2 bg-error/10 rounded-lg text-error hover:bg-error hover:text-white transition-all"
+                      title="Excluir Cadastro"
+                    >
+                      <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
                 </div>
