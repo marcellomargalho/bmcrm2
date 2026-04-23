@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Filter, Plus, Edit2, Eye, ChevronLeft, ChevronRight, History, Upload, Mail, Calendar as CalendarIcon, Calculator, TrendingUp, Clock, X, Loader2, Search, Trash2 } from 'lucide-react';
+import { Plus, Edit2, Eye, History, Upload, Mail, Calendar as CalendarIcon, Calculator, TrendingUp, Clock, X, Loader2, Search, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Client } from '@/types';
+
 import { supabase } from '@/lib/supabase';
 import { NewProcessModal, ProcessRow } from '@/components/NewProcessModal';
 
@@ -14,7 +14,7 @@ export function ProcessList() {
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProcess, setEditingProcess] = useState<ProcessRow | null>(null);
-  const [showFilters, setShowFilters] = useState(false);
+
   const [filterText, setFilterText] = useState('');
   const [recentMovements, setRecentMovements] = useState<any[]>([]);
 
@@ -77,64 +77,50 @@ export function ProcessList() {
         editingProcess={editingProcess}
       />
 
-      <section className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-        <div>
-          <h2 className="text-3xl font-headline font-extrabold tracking-tight text-on-surface mb-2">Gestão de Processos</h2>
-          <p className="text-on-surface-variant max-w-md">Visualize e gerencie todos os processos ativos e arquivados.</p>
+      <section className="flex flex-col gap-4">
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+          <div>
+            <h2 className="text-3xl font-headline font-extrabold tracking-tight text-on-surface mb-2">Gestão de Processos</h2>
+            <p className="text-on-surface-variant max-w-md">Visualize e gerencie todos os processos ativos e arquivados.</p>
+          </div>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => setIsModalOpen(true)}
+              className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-secondary text-on-secondary font-headline font-bold hover:opacity-90 transition-all active:scale-95 shadow-lg shadow-secondary/10"
+            >
+              <Plus className="w-5 h-5" />
+              Novo Processo
+            </button>
+          </div>
         </div>
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => setShowFilters(!showFilters)}
-            className={cn(
-              "flex items-center gap-2 px-4 py-2.5 rounded-xl border transition-all",
-              showFilters
-                ? "bg-secondary/10 text-secondary border-secondary/20"
-                : "bg-surface-container-high text-on-surface border-outline-variant/10 hover:bg-surface-bright"
-            )}
-          >
-            <Filter className="w-4 h-4" />
-            <span className="text-sm font-medium">Filtros Avançados</span>
-          </button>
-          <button
-            onClick={() => setIsModalOpen(true)}
-            className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-secondary text-on-secondary font-headline font-bold hover:opacity-90 transition-all active:scale-95 shadow-lg shadow-secondary/10"
-          >
-            <Plus className="w-5 h-5" />
-            Novo Processo
-          </button>
+
+        {/* Barra de pesquisa sempre visível */}
+        <div className="relative">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-outline" />
+          <input
+            type="text"
+            value={filterText}
+            onChange={e => setFilterText(e.target.value)}
+            placeholder="Buscar por nome do cliente ou número do processo..."
+            className="w-full bg-surface-container-low border border-outline-variant/10 rounded-xl pl-11 pr-10 py-3 text-on-surface focus:ring-2 focus:ring-secondary focus:border-secondary placeholder:text-outline/50 transition-all font-medium text-sm"
+          />
+          {filterText && (
+            <button
+              onClick={() => setFilterText('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-surface-container-high rounded-full text-outline hover:text-on-surface transition-colors"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+          {filterText && (
+            <span className="absolute right-10 top-1/2 -translate-y-1/2 text-xs text-on-surface-variant whitespace-nowrap">
+              {filteredProcesses.length} resultado{filteredProcesses.length !== 1 ? 's' : ''}
+            </span>
+          )}
         </div>
       </section>
 
-      {showFilters && (
-        <section className="bg-surface-container-low rounded-2xl p-5 border border-outline-variant/10 animate-in fade-in slide-in-from-top-2 duration-200">
-          <div className="flex items-center gap-4">
-            <div className="flex-1 relative">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-outline" />
-              <input
-                type="text"
-                value={filterText}
-                onChange={e => setFilterText(e.target.value)}
-                placeholder="Buscar por nome do cliente ou número do processo..."
-                className="w-full bg-surface-container-highest border-none rounded-xl pl-11 pr-10 py-3 text-on-surface focus:ring-2 focus:ring-secondary placeholder:text-outline/50 transition-all font-medium text-sm"
-                autoFocus
-              />
-              {filterText && (
-                <button
-                  onClick={() => setFilterText('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-surface-container-high rounded-full text-outline hover:text-on-surface transition-colors"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </div>
-            {filterText && (
-              <span className="text-xs text-on-surface-variant whitespace-nowrap">
-                {filteredProcesses.length} resultado{filteredProcesses.length !== 1 ? 's' : ''}
-              </span>
-            )}
-          </div>
-        </section>
-      )}
+
 
       <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="col-span-1 md:col-span-2 bg-surface-container-low p-6 rounded-2xl border-l-4 border-secondary flex flex-col justify-between">

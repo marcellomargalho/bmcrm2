@@ -73,6 +73,7 @@ export function Dashboard() {
   const [localSubmitting, setLocalSubmitting] = useState<string | null>(null);
   const [userData, setUserData] = useState<{id: string, name: string, role: string} | null>(null);
   const [expandedTasks, setExpandedTasks] = useState<string[]>([]);
+  const [readTasks, setReadTasks] = useState<Set<string>>(new Set());
 
   // Calendar State
   const [currentMonth, setCurrentMonth] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
@@ -92,6 +93,8 @@ export function Dashboard() {
     setExpandedTasks(prev => 
       prev.includes(taskId) ? prev.filter(id => id !== taskId) : [...prev, taskId]
     );
+    // Mark as read when opened
+    setReadTasks(prev => new Set(prev).add(taskId));
   }
 
   const fetchStats = useCallback(async (u: {id: string, name: string, role: string}) => {
@@ -357,7 +360,13 @@ export function Dashboard() {
                         className={cn("task-card-modern", isExpanded && "active")}
                         onClick={() => toggleTaskExpand(task.id)}
                       >
-                        {/* ... card content ... */}
+                        {/* Read receipt badge */}
+                        {readTasks.has(task.id) && (
+                          <div className="absolute top-3 right-3 flex items-center gap-1 bg-emerald-500/15 border border-emerald-500/25 text-emerald-400 rounded-full px-2 py-0.5 z-10" title="Lida">
+                            <CheckCircle2 className="w-3 h-3" />
+                            <span className="text-[9px] font-bold uppercase tracking-wider">Lida</span>
+                          </div>
+                        )}
                         <div className="task-card-top">
                           <div className="task-tags">
                             <span className="tag-modern tag-category-modern">

@@ -20,7 +20,6 @@ import {
   FileText, 
   Settings, 
   HelpCircle,
-  Search,
   Bell,
   LogOut,
   CheckCheck,
@@ -407,16 +406,7 @@ export function TopBar({ userRole }: { userRole: string | null }) {
   const role = userRole || user?.user_metadata?.role || 'Advogado';
 
   return (
-    <header className="fixed top-0 right-0 w-[calc(100%-16rem)] h-16 bg-surface/80 backdrop-blur-xl flex justify-between items-center px-8 z-40 shadow-[0_20px_40px_rgba(4,16,21,0.4)]">
-      <div className="flex items-center bg-surface-container-lowest rounded-full px-4 py-1.5 w-96 border border-outline-variant/10">
-        <Search className="text-outline w-4 h-4 mr-2" />
-        <input 
-          type="text" 
-          placeholder="Pesquisar processos, clientes ou documentos..." 
-          className="bg-transparent border-none focus:ring-0 text-sm w-full text-on-surface placeholder:text-outline/50"
-        />
-      </div>
-
+    <header className="fixed top-0 right-0 w-[calc(100%-16rem)] h-16 bg-surface/80 backdrop-blur-xl flex justify-end items-center px-8 z-40 shadow-[0_20px_40px_rgba(4,16,21,0.4)]">
       <div className="flex items-center gap-6">
         {user?.id && (
           <NotificationDropdown userId={user.id} />
