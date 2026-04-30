@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowRight, Gavel, Loader2, AlertCircle, Mail, Lock } from 'lucide-react';
+import { ArrowRight, Loader2, AlertCircle, Mail, Lock } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase } from '@/lib/supabase';
 
@@ -67,13 +67,23 @@ export function Login({ initialError }: { initialError?: string | null }) {
           className="text-center mb-10"
         >
           <motion.div 
-            whileHover={{ scale: 1.05, rotate: 5 }}
+            whileHover={{ scale: 1.05 }}
             className="inline-flex items-center justify-center mb-6 group"
           >
-            <div className="w-20 h-20 rounded-2xl border border-secondary/30 flex items-center justify-center bg-surface-container-lowest/80 backdrop-blur-md shadow-2xl relative overflow-hidden group-hover:border-secondary transition-colors duration-500">
-              <div className="absolute inset-0 bg-gradient-to-br from-secondary/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-              <Gavel className="text-secondary w-10 h-10 relative z-10 drop-shadow-[0_0_8px_rgba(241,189,137,0.4)]" />
-            </div>
+            <div 
+              aria-label="Brenda Margalho - Advocacia Logo"
+              className="h-[50px] w-[220px] bg-secondary transition-all group-hover:bg-primary drop-shadow-[0_0_12px_rgba(241,189,137,0.3)]"
+              style={{
+                WebkitMaskImage: "url('/logo.png')",
+                WebkitMaskSize: "contain",
+                WebkitMaskRepeat: "no-repeat",
+                WebkitMaskPosition: "center",
+                maskImage: "url('/logo.png')",
+                maskSize: "contain",
+                maskRepeat: "no-repeat",
+                maskPosition: "center"
+              }}
+            />
           </motion.div>
           <h1 className="font-headline font-black text-4xl tracking-tight text-on-surface mb-2 bg-gradient-to-b from-white to-white/70 bg-clip-text text-transparent">
             Brenda Margalho
