@@ -13,7 +13,7 @@ import { DocumentManagement } from '@/pages/DocumentManagement';
 import { Settings } from '@/pages/Settings';
 import { UpdatePassword } from '@/pages/UpdatePassword';
 import { PendingApproval } from '@/pages/PendingApproval';
-import { AINotebook } from '@/pages/AINotebook';
+import { Financeiro } from '@/pages/Financeiro';
 import { Intimacoes } from '@/pages/Intimacoes';
 import { BlogManagement } from '@/pages/BlogManagement';
 import { Analytics } from '@/pages/Analytics';
@@ -194,7 +194,7 @@ export default function App() {
         <Route path="clientes" element={<ClientManagement />} />
         <Route path="agenda" element={<Agenda />} />
         <Route path="documentos" element={<DocumentManagement />} />
-        <Route path="ia-juridica" element={<AINotebook />} />
+        <Route path="financeiro" element={<Financeiro />} />
         <Route path="intimacoes" element={<Intimacoes />} />
         <Route path="blog" element={<BlogManagement />} />
         <Route path="atendimento" element={<Atendimento />} />

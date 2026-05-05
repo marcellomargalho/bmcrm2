@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/api/datajud/:path*",
+      "destination": "https://api-publica.datajud.cnj.jus.br/:path*"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

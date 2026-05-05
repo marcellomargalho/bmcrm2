@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { User, Bell, Shield, CreditCard, Globe, Moon, Sun, Save, Camera, Users, CheckCircle, XCircle, ChevronDown, Trophy, TrendingUp, Award, Target, Star, Loader2, Bookmark, AlertCircle } from 'lucide-react';
+import { User, Bell, Shield, CreditCard, Globe, Moon, Sun, Save, Camera, Users, CheckCircle, XCircle, ChevronDown, Trophy, TrendingUp, Award, Target, Star, Loader2, Bookmark, AlertCircle, Database, Key } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 
@@ -18,6 +18,11 @@ export function Settings() {
   const [djenOab, setDjenOab] = useState('');
   const [djenSaving, setDjenSaving] = useState(false);
   const [djenSaved, setDjenSaved] = useState(false);
+
+  // Datajud Configs
+  const [datajudApiKey, setDatajudApiKey] = useState('');
+  const [datajudSaving, setDatajudSaving] = useState(false);
+  const [datajudSaved, setDatajudSaved] = useState(false);
 
   useEffect(() => {
     async function getProfile() {
@@ -49,6 +54,17 @@ export function Settings() {
       }
     }
     loadDjenSettings();
+
+    // Load Datajud API Key
+    async function loadDatajudSettings() {
+      const { data } = await supabase
+        .from('system_settings')
+        .select('key, value')
+        .eq('key', 'datajud_api_key')
+        .maybeSingle();
+      if (data?.value) setDatajudApiKey(data.value);
+    }
+    loadDatajudSettings();
   }, []);
 
   const isAdmin = profile?.role === 'Administrador';
@@ -168,6 +184,7 @@ export function Settings() {
             { id: 'equipe', icon: Users, label: 'Gestão de Equipe', adminOnly: true },
             { id: 'productivity', icon: Trophy, label: 'Produtividade', adminOnly: true },
             { id: 'intimacoes_config', icon: Bookmark, label: 'Monitoramento DJEN', adminOnly: true },
+            { id: 'datajud_config', icon: Database, label: 'API Datajud (CNJ)', adminOnly: true },
             { id: 'notifications', icon: Bell, label: 'Notificações' },
             { id: 'security', icon: Shield, label: 'Segurança e Acesso' },
             { id: 'billing', icon: CreditCard, label: 'Assinatura e Planos' },
@@ -516,6 +533,73 @@ export function Settings() {
                   >
                     {djenSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                     {djenSaved ? 'Salvo!' : 'Salvar Configurações'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'datajud_config' && isAdmin && (
+            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div className="bg-surface-container-low p-8 rounded-3xl border border-outline-variant/5 space-y-8">
+                <div>
+                  <h4 className="text-xl font-headline font-bold text-on-surface tracking-tight flex items-center gap-3">
+                    <Database className="w-5 h-5 text-secondary" />
+                    API Datajud — CNJ
+                  </h4>
+                  <p className="text-sm text-on-surface-variant mt-1">
+                    Configure a chave pública da API do Datajud para consultar processos de todos os tribunais brasileiros.
+                  </p>
+                </div>
+
+                <div className="p-4 bg-secondary/5 border border-secondary/15 rounded-2xl flex items-start gap-3">
+                  <Key className="w-4 h-4 text-secondary shrink-0 mt-0.5" />
+                  <p className="text-xs text-on-surface-variant leading-relaxed">
+                    A chave pública é fornecida pelo DPJ/CNJ e pode ser obtida em{' '}
+                    <a href="https://datajud-wiki.cnj.jus.br/api-publica/acesso" target="_blank" rel="noopener noreferrer" className="text-secondary font-bold hover:underline">
+                      datajud-wiki.cnj.jus.br
+                    </a>. Ela pode ser alterada pelo CNJ a qualquer momento.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-outline uppercase tracking-widest">API Key (Chave Pública)</label>
+                  <input
+                    type="text"
+                    value={datajudApiKey}
+                    onChange={(e) => setDatajudApiKey(e.target.value)}
+                    placeholder="Cole aqui a chave pública do Datajud"
+                    className="w-full bg-surface-container-lowest border border-outline-variant/10 rounded-xl px-4 py-3 text-sm font-mono focus:ring-2 focus:ring-secondary/20 outline-none"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between pt-4 border-t border-outline-variant/10">
+                  <div>
+                    {datajudApiKey && (
+                      <p className="text-xs text-on-surface-variant">
+                        Chave configurada: <strong className="text-on-surface font-mono">{datajudApiKey.slice(0, 12)}...</strong>
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    disabled={datajudSaving}
+                    onClick={async () => {
+                      setDatajudSaving(true);
+                      const currentUser = (await supabase.auth.getUser()).data.user;
+                      await supabase.from('system_settings').upsert([{
+                        key: 'datajud_api_key',
+                        value: datajudApiKey,
+                        updated_by: currentUser?.id,
+                        updated_at: new Date().toISOString(),
+                      }]);
+                      setDatajudSaving(false);
+                      setDatajudSaved(true);
+                      setTimeout(() => setDatajudSaved(false), 3000);
+                    }}
+                    className="flex items-center gap-2 px-8 py-3 bg-secondary text-on-secondary font-headline font-bold rounded-xl hover:opacity-90 transition-all shadow-lg shadow-secondary/10 disabled:opacity-60"
+                  >
+                    {datajudSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                    {datajudSaved ? 'Salvo!' : 'Salvar API Key'}
                   </button>
                 </div>
               </div>
