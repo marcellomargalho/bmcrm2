@@ -29,7 +29,8 @@ import {
   Check,
   Trash2,
   CalendarClock,
-  Wallet
+  Wallet,
+  Database
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
@@ -282,6 +283,17 @@ function NewContractModal({ isOpen, onClose, onSuccess, initialData }: { isOpen:
                 </select>
               </div>
             </div>
+            
+            {formData.tipo_cobranca === 'parcelado' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in duration-300">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-outline uppercase tracking-wider">Quantidade de Parcelas</label>
+                  <input type="number" min="1" className="w-full bg-surface-container-highest border-none rounded-xl px-4 py-3 text-on-surface focus:ring-2 focus:ring-secondary" value={formData.total_parcelas || 1} onChange={e => setFormData({ ...formData, total_parcelas: parseInt(e.target.value) || 1 })} />
+                </div>
+                <NumericInput label="Valor da Parcela Mensal (R$)" value={formData.valor_parcela || 0} onChange={v => setFormData({ ...formData, valor_parcela: v })} />
+              </div>
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <NumericInput label="Valor Já Recebido (R$)" value={formData.valor_recebido || 0} onChange={v => setFormData({ ...formData, valor_recebido: v })} />
               <NumericInput label="Custos Processo (R$)" value={formData.custos_processo || 0} onChange={v => setFormData({ ...formData, custos_processo: v })} />
@@ -328,50 +340,83 @@ export function Financeiro() {
     setIsModalOpen(true);
   };
 
-  const handleSaveContract = (contract: Transacao) => {
-    if (contractToEdit) {
-      saveToStorage(transacoes.map(t => t.id === contract.id ? contract : t));
-    } else {
-      saveToStorage([contract, ...transacoes]);
-    }
-  };
-
-  useEffect(() => {
-    const saved = localStorage.getItem('@AgendaJuridica:financeiro_data');
-    if (saved) {
-      const data = JSON.parse(saved) as Transacao[];
+  const fetchTransacoes = async () => {
+    setLoading(true);
+    const { data, error } = await supabase.from('financeiro_contratos').select('*').order('created_at', { ascending: false });
+    if (!error && data) {
       const today = new Date();
+      // Auto-update atrasados on fetch just for UI display (we can save it too, but UI update is enough for now)
       const updatedData = data.map(t => {
         if (t.data_pagamento_acordada && t.status_financeiro !== 'quitado') {
           const agreed = new Date(t.data_pagamento_acordada);
-          if (today > agreed) {
-            return { 
-              ...t, 
-              status_financeiro: 'atrasado' as any, 
-              dias_atraso: Math.floor((today.getTime() - agreed.getTime()) / (1000 * 60 * 60 * 24))
-            };
+          if (today > agreed && t.status_financeiro !== 'atrasado') {
+            const dias_atraso = Math.floor((today.getTime() - agreed.getTime()) / (1000 * 60 * 60 * 24));
+            // We update it async in the background to not block render
+            supabase.from('financeiro_contratos').update({ status_financeiro: 'atrasado', dias_atraso }).eq('id', t.id).then();
+            return { ...t, status_financeiro: 'atrasado' as any, dias_atraso };
           }
         }
         return t;
       });
-      setTransacoes(updatedData);
+      setTransacoes(updatedData as Transacao[]);
     }
     setLoading(false);
-  }, []);
-
-  const saveToStorage = (data: Transacao[]) => {
-    localStorage.setItem('@AgendaJuridica:financeiro_data', JSON.stringify(data));
-    setTransacoes(data);
   };
 
-  const handleDeleteContract = (id: string) => {
-    if (window.confirm('Excluir dívida permanentemente?')) {
-      saveToStorage(transacoes.filter(t => t.id !== id));
-      setExpandedRow(null);
+  useEffect(() => {
+    fetchTransacoes();
+  }, []);
+
+  const handleSaveContract = async (contract: Transacao) => {
+    if (contractToEdit) {
+      const { error } = await supabase.from('financeiro_contratos').update(contract).eq('id', contract.id);
+      if (!error) {
+        setTransacoes(transacoes.map(t => t.id === contract.id ? contract : t));
+      } else {
+        alert("Erro ao salvar: " + error.message);
+      }
+    } else {
+      const { error } = await supabase.from('financeiro_contratos').insert([contract]);
+      if (!error) {
+        setTransacoes([contract, ...transacoes]);
+      } else {
+        alert("Erro ao salvar: " + error.message);
+      }
     }
   };
 
-  const handleRegistrarPagamento = (id: string) => {
+  const syncLocalToSupabase = async () => {
+    const saved = localStorage.getItem('@AgendaJuridica:financeiro_data');
+    if (saved) {
+      const data = JSON.parse(saved) as Transacao[];
+      if (data && data.length > 0) {
+        const { error } = await supabase.from('financeiro_contratos').upsert(data);
+        if (!error) {
+          alert('Dados migrados com sucesso para a Nuvem!');
+          localStorage.removeItem('@AgendaJuridica:financeiro_data');
+          fetchTransacoes();
+        } else {
+          alert('Erro na migração: ' + error.message);
+        }
+      } else {
+        alert('Nenhum dado local encontrado para migrar.');
+      }
+    } else {
+      alert('Nenhum dado local encontrado para migrar.');
+    }
+  };
+
+  const handleDeleteContract = async (id: string) => {
+    if (window.confirm('Excluir dívida permanentemente?')) {
+      const { error } = await supabase.from('financeiro_contratos').delete().eq('id', id);
+      if (!error) {
+        setTransacoes(transacoes.filter(t => t.id !== id));
+        setExpandedRow(null);
+      }
+    }
+  };
+
+  const handleRegistrarPagamento = async (id: string) => {
     const t = transacoes.find(x => x.id === id);
     if (!t) return;
     
@@ -400,19 +445,26 @@ export function Financeiro() {
       novoStatus = 'quitado';
     }
 
-    const updated = transacoes.map(x => 
-      x.id === id 
-        ? { 
-            ...x, 
-            parcelas_pagas: novasPagas, 
-            valor_recebido: novoRecebido,
-            data_pagamento_acordada: novaData,
-            status_financeiro: novoStatus,
-            dias_atraso: 0
-          } 
-        : x
-    );
-    saveToStorage(updated);
+    const updatedObj = { 
+      ...t, 
+      parcelas_pagas: novasPagas, 
+      valor_recebido: novoRecebido,
+      data_pagamento_acordada: novaData,
+      status_financeiro: novoStatus,
+      dias_atraso: 0
+    };
+
+    const { error } = await supabase.from('financeiro_contratos').update({
+      parcelas_pagas: novasPagas, 
+      valor_recebido: novoRecebido,
+      data_pagamento_acordada: novaData,
+      status_financeiro: novoStatus,
+      dias_atraso: 0
+    }).eq('id', id);
+
+    if (!error) {
+      setTransacoes(transacoes.map(x => x.id === id ? updatedObj as Transacao : x));
+    }
   };
 
   // Monthly Summary Calculation
@@ -482,9 +534,16 @@ export function Financeiro() {
           </h2>
           <p className="text-on-surface-variant text-sm max-w-2xl">Monitoramento mensal de recebimentos e inadimplência.</p>
         </div>
-        <button onClick={handleOpenNew} className="flex items-center gap-2 px-6 py-3 bg-secondary text-on-secondary font-headline font-bold text-sm rounded-xl hover:opacity-90 transition-all active:scale-95 shadow-lg shadow-secondary/20">
-          <Plus className="w-5 h-5" /> Novo Contrato
-        </button>
+        <div className="flex gap-4 items-center">
+          {localStorage.getItem('@AgendaJuridica:financeiro_data') && (
+            <button onClick={syncLocalToSupabase} className="px-6 py-3 bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all flex items-center gap-2">
+              <Database className="w-4 h-4" /> Migrar Dados para Nuvem
+            </button>
+          )}
+          <button onClick={handleOpenNew} className="px-6 py-3 bg-secondary text-on-secondary hover:bg-secondary/90 rounded-2xl shadow-lg shadow-secondary/20 font-black text-[10px] uppercase tracking-widest transition-all flex items-center gap-2">
+            <Plus className="w-4 h-4" /> Novo Contrato
+          </button>
+        </div>
       </section>
 
       {/* Resumo do Mês Presente (Requested) */}
