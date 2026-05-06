@@ -50,7 +50,7 @@ const navItems = [
   { icon: BarChart2, label: 'Analytics', path: '/analytics', adminOnly: true },
   { icon: Globe, label: 'Blog (Site)', path: '/blog', adminOnly: true },
   { icon: Settings, label: 'Configurações', path: '/configuracoes' },
-];
+] as Array<{ icon: any, label: string, path: string, adminOnly?: boolean, badge?: string }>;
 
 const taskTypeColors: Record<string, string> = {
   'Petição': 'bg-blue-500/15 text-blue-400 border-blue-500/20',
