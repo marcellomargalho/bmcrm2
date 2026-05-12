@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, Reorder } from 'motion/react';
 import { TrendingUp, Users, Calendar, Clock, FileText, ArrowRight, Plus, Loader2, CheckCircle2, Check, CalendarClock, AlertTriangle, RotateCcw, GripVertical, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -65,6 +66,7 @@ function DraggableWidget({
 
 // ─── Dashboard ────────────────────────────────────────────────────────
 export function Dashboard() {
+  const navigate = useNavigate();
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [tasks, setTasks] = useState<any[]>([]);
   const [loadingTasks, setLoadingTasks] = useState(true);
@@ -79,6 +81,10 @@ export function Dashboard() {
   const [currentMonth, setCurrentMonth] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const [selectedDate, setSelectedDate] = useState<string | null>(new Date().toISOString().split('T')[0]);
   const [taskFilter, setTaskFilter] = useState<'Todas' | 'Em progresso' | 'Concluídas'>('Todas');
+
+  // Deadline Tables State
+  const [deadlineSearch, setDeadlineSearch] = useState('');
+  const [deadlineFilter, setDeadlineFilter] = useState<'all' | 'atrasados' | 'hoje' | 'em_dia' | 'outras'>('all');
 
   const getDaysInMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
   const getFirstDayOfMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth(), 1).getDay();
@@ -254,9 +260,91 @@ export function Dashboard() {
   const completedTasks = allCompletedTasks.slice(0, 5);
   const totalCompletedCount = allCompletedTasks.length;
 
+  const categorizedTasks = {
+    atrasados: tasks.filter(t => t.fatal_date && t.status !== 'Concluída' && getDaysUntil(t.fatal_date) < 0),
+    hoje: tasks.filter(t => t.fatal_date && t.status !== 'Concluída' && getDaysUntil(t.fatal_date) === 0),
+    em_dia: tasks.filter(t => t.fatal_date && t.status !== 'Concluída' && getDaysUntil(t.fatal_date) > 0),
+    outras: tasks.filter(t => !t.fatal_date && t.status !== 'Concluída'),
+  };
+
+  const renderDeadlineTable = (tasksList: any[], title: string, color: string, icon: React.ReactNode) => (
+    <div className="bg-surface-container-low rounded-3xl border border-outline-variant/10 overflow-hidden mb-6">
+      <div className="px-6 py-4 border-b border-outline-variant/10 flex items-center justify-between bg-surface-container-high/30">
+        <div className="flex items-center gap-3">
+          <div className={cn("p-2 rounded-xl", color)}>
+            {icon}
+          </div>
+          <h3 className="font-headline font-bold text-sm text-on-surface">{title}</h3>
+          <span className="px-2 py-0.5 bg-surface-container-highest rounded-full text-[10px] font-black text-outline">
+            {tasksList.length}
+          </span>
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-left border-collapse">
+          <thead>
+            <tr className="text-[9px] uppercase tracking-widest text-outline font-black border-b border-outline-variant/5">
+              <th className="px-6 py-3">Prazo</th>
+              <th className="px-6 py-3">Descrição</th>
+              <th className="px-6 py-3">Cliente / Processo</th>
+              <th className="px-6 py-3 text-right">Ações</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-outline-variant/5">
+            {tasksList.length === 0 ? (
+              <tr>
+                <td colSpan={4} className="px-6 py-8 text-center text-outline text-xs italic">
+                  Nenhuma demanda nesta categoria.
+                </td>
+              </tr>
+            ) : (
+              tasksList.map((task) => {
+                const daysUntil = task.fatal_date ? getDaysUntil(task.fatal_date) : null;
+                return (
+                  <tr key={task.id} className="hover:bg-surface-container-high/50 transition-colors group">
+                    <td className="px-6 py-3">
+                      <div className="flex flex-col">
+                        <span className={cn(
+                          "text-xs font-bold",
+                          daysUntil !== null && daysUntil < 0 ? "text-error" : 
+                          daysUntil === 0 ? "text-secondary" : "text-on-surface"
+                        )}>
+                          {task.fatal_date ? new Date(task.fatal_date + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : 'S/D'}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-3">
+                      <p className="text-xs text-on-surface font-medium line-clamp-1">{task.description}</p>
+                    </td>
+                    <td className="px-6 py-3">
+                      <div className="flex flex-col">
+                        <span className="text-[10px] text-on-surface-variant font-medium truncate max-w-[120px]">{task.client_name || 'Sem cliente'}</span>
+                        <span className="text-[9px] text-outline font-mono">{task.process_number || 'S/N'}</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-3 text-right">
+                      <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button 
+                          onClick={() => toggleTaskComplete(task.id, task.status)}
+                          className="p-1.5 hover:bg-emerald-500/10 text-outline hover:text-emerald-500 rounded-lg transition-all"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+
   // Drag-and-drop
   const { order, draggedId, overId, handleDragStart, handleDragOver, handleDrop, handleDragEnd } =
-    useDragAndDrop(['stats', 'tasks', 'deadlines', 'activities']);
+    useDragAndDrop(['stats', 'deadlineTables', 'deadlines', 'activities']);
 
   // ─── Widget renderers ───────────────────────────────────────────────
   const widgets: Record<string, React.ReactNode> = {
@@ -295,178 +383,6 @@ export function Dashboard() {
       </DraggableWidget>
     ),
 
-    tasks: (
-      <DraggableWidget id="tasks" draggedId={draggedId} overId={overId} onDragStart={handleDragStart} onDragOver={handleDragOver} onDrop={handleDrop} onDragEnd={handleDragEnd}>
-        <div className="recent-tasks-modern">
-          <div className="tasks-wrapper">
-            <div className="tasks-header">
-              <div className="flex items-center gap-3">
-                <h2 className="tasks-title">Tarefas Recentes</h2>
-                <span className="tasks-count">{pendingTasks.length} tarefas pendentes</span>
-              </div>
-              <button onClick={() => setIsTaskModalOpen(true)} className="btn-nova-modern">
-                <Plus className="w-3.5 h-3.5" />
-                Nova
-              </button>
-            </div>
-
-            {loadingTasks ? (
-              <div className="flex justify-center py-12">
-                <Loader2 className="w-8 h-8 animate-spin text-secondary" />
-              </div>
-            ) : pendingTasks.length === 0 ? (
-              <div className="text-center py-12 bg-surface-container-low rounded-2xl border border-dashed border-outline-variant/10">
-                <CheckCircle2 className="w-10 h-10 mx-auto text-outline mb-3" />
-                <p className="text-on-surface-variant text-sm font-medium">Todas as tarefas foram concluídas!</p>
-              </div>
-            ) : (
-              <Reorder.Group 
-                axis="y" 
-                values={tasks} 
-                onReorder={setTasks}
-                className="space-y-4"
-              >
-                {pendingTasks.map((task) => {
-                  const isCompleted = task.status === 'Concluída';
-                  const isExpanded = expandedTasks.includes(task.id);
-                  const daysUntil = task.fatal_date ? getDaysUntil(task.fatal_date) : null;
-                  const isOverdue = daysUntil !== null && daysUntil < 0 && !isCompleted;
-                  const isUrgent = daysUntil !== null && daysUntil >= 0 && daysUntil <= 2 && !isCompleted;
-
-                  const priorityClassMap: Record<string, string> = {
-                    'Baixa': 'tag-priority-baixa-modern',
-                    'Média': 'tag-priority-media-modern',
-                    'Alta': 'tag-priority-alta-modern'
-                  };
-
-                  const taskTypeIcons: Record<string, any> = {
-                    'Petição': <FileText className="w-2.5 h-2.5" />,
-                    'Protocolo': <Calendar className="w-2.5 h-2.5" />,
-                    'Diligência': <TrendingUp className="w-2.5 h-2.5" />,
-                    'Análise de Processo': <GripVertical className="w-2.5 h-2.5 rotate-90" />,
-                  };
-
-                  return (
-                    <Reorder.Item 
-                      key={task.id} 
-                      value={task}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, scale: 0.95 }}
-                      whileDrag={{ scale: 1.02, boxShadow: "0 20px 40px rgba(0,0,0,0.4)" }}
-                      style={{ cursor: 'grab' }}
-                    >
-                      <div 
-                        className={cn("task-card-modern", isExpanded && "active")}
-                        onClick={() => toggleTaskExpand(task.id)}
-                      >
-                        {/* Read receipt badge */}
-                        {readTasks.has(task.id) && (
-                          <div className="absolute top-3 right-3 flex items-center gap-1 bg-emerald-500/15 border border-emerald-500/25 text-emerald-400 rounded-full px-2 py-0.5 z-10" title="Lida">
-                            <CheckCircle2 className="w-3 h-3" />
-                            <span className="text-[9px] font-bold uppercase tracking-wider">Lida</span>
-                          </div>
-                        )}
-                        <div className="task-card-top">
-                          <div className="task-tags">
-                            <span className="tag-modern tag-category-modern">
-                              {taskTypeIcons[task.task_type] || <CheckCircle2 className="w-2.5 h-2.5" />}
-                              {task.task_type || 'Geral'}
-                            </span>
-                            <span className={cn("tag-modern", priorityClassMap[task.priority] || 'tag-priority-baixa-modern')}>
-                              {task.priority || 'Baixa'}
-                            </span>
-                          </div>
-                          
-                          <div className="task-meta-right">
-                            {task.ideal_date && (
-                              <span className={cn(
-                                "meta-deadline-modern", 
-                                isOverdue && "overdue", 
-                                isUrgent && "warning"
-                              )}>
-                                <Clock className="w-3 h-3" />
-                                {new Date(task.ideal_date + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
-                              </span>
-                            )}
-                            {daysUntil !== null && (
-                              <span className="meta-fatal-modern">
-                                FATAL: {isOverdue ? 'ATRASADO' : `${daysUntil}D`}
-                              </span>
-                            )}
-                            <span className="chevron-modern">
-                              <ChevronLeft className="-rotate-90 w-3.5 h-3.5" />
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="task-title-modern">
-                          {task.description}
-                        </div>
-
-                        <div className="task-bottom-modern">
-                          <div className="meta-item-modern">
-                            <div className="avatar-modern">
-                              {task.responsible?.charAt(0).toUpperCase() || 'U'}
-                            </div>
-                            {task.responsible?.split(',')[0].trim() || 'Sem responsável'}
-                          </div>
-                          <div className="meta-item-modern">
-                            <Users className="w-3.5 h-3.5" />
-                            {task.client_name?.split(' ')[0] || 'Sem cliente'}
-                          </div>
-                          <div className="meta-item-modern">
-                            <FileText className="w-3.5 h-3.5" />
-                            <span className="doc-id-modern">{task.processes?.number || task.process_number || 'S/N'}</span>
-                          </div>
-                        </div>
-
-                        <div className={cn("detail-panel-modern", isExpanded && "open")}>
-                          <div className="detail-inner-modern">
-                            <div className="detail-content-modern" onClick={(e) => e.stopPropagation()}>
-                              <div className="detail-block-modern">
-                                <span className="detail-label-modern">Número do Processo</span>
-                                <span className="detail-value-modern mono">{task.processes?.number || 'Não informado'}</span>
-                              </div>
-                              <div className="detail-block-modern">
-                                <span className="detail-label-modern">Vara / Tribunal</span>
-                                <span className="detail-value-modern">{task.processes?.vara || task.processes?.court || 'Não informado'}</span>
-                              </div>
-                              <div className="detail-block-modern">
-                                <span className="detail-label-modern">Comarca</span>
-                                <span className="detail-value-modern">{task.processes?.comarca || 'Não informado'}</span>
-                              </div>
-                              <div className="detail-block-modern">
-                                <span className="detail-label-modern">Responsável</span>
-                                <span className="detail-value-modern">{task.responsible || 'Coordenador'}</span>
-                              </div>
-                              
-                              <div className="detail-block-modern full pt-4 border-t border-outline-variant/5 mt-2">
-                                <div className="flex items-center justify-between">
-                                  <button 
-                                    onClick={() => toggleTaskComplete(task.id, task.status)}
-                                    className="px-4 py-2 bg-secondary text-on-secondary rounded-lg text-[10px] font-black uppercase tracking-widest hover:scale-105 transition-transform"
-                                  >
-                                    Concluir Tarefa
-                                  </button>
-                                  <span className="text-[10px] text-outline font-bold uppercase tracking-widest">
-                                    Criada em {new Date(task.created_at).toLocaleDateString('pt-BR')}
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </Reorder.Item>
-                  );
-                })}
-              </Reorder.Group>
-            )}
-          </div>
-        </div>
-      </DraggableWidget>
-    ),
 
     deadlines: (
       <DraggableWidget id="deadlines" draggedId={draggedId} overId={overId} onDragStart={handleDragStart} onDragOver={handleDragOver} onDrop={handleDrop} onDragEnd={handleDragEnd}>
@@ -682,6 +598,105 @@ export function Dashboard() {
         </div>
       </DraggableWidget>
     ),
+
+    deadlineTables: (
+      <DraggableWidget id="deadlineTables" draggedId={draggedId} overId={overId} onDragStart={handleDragStart} onDragOver={handleDragOver} onDrop={handleDrop} onDragEnd={handleDragEnd}>
+        <div className="space-y-6">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-2">
+            <div className="flex items-center gap-3">
+              <h2 className="text-xl font-headline font-bold text-on-surface">Monitoramento de Prazos</h2>
+              <button onClick={() => setIsTaskModalOpen(true)} className="flex items-center gap-2 px-3 py-1 bg-secondary text-on-secondary rounded-lg text-[10px] font-black uppercase tracking-widest hover:scale-105 transition-transform">
+                <Plus className="w-3.5 h-3.5" />
+                Nova Tarefa
+              </button>
+            </div>
+            <div className="flex bg-surface-container-low p-1 rounded-xl border border-outline-variant/10">
+              <button 
+                onClick={() => setDeadlineFilter('all')}
+                className={cn(
+                  "px-3 py-1 rounded-lg text-[10px] font-bold transition-all",
+                  deadlineFilter === 'all' ? "bg-secondary text-on-secondary" : "text-outline hover:text-on-surface"
+                )}
+              >
+                Todos
+              </button>
+              <button 
+                onClick={() => setDeadlineFilter('atrasados')}
+                className={cn(
+                  "px-3 py-1 rounded-lg text-[10px] font-bold transition-all",
+                  deadlineFilter === 'atrasados' ? "bg-error text-white" : "text-outline hover:text-on-surface"
+                )}
+              >
+                Atrasados
+              </button>
+              <button 
+                onClick={() => setDeadlineFilter('outras')}
+                className={cn(
+                  "px-3 py-1 rounded-lg text-[10px] font-bold transition-all",
+                  deadlineFilter === 'outras' ? "bg-surface-container-highest text-on-surface" : "text-outline hover:text-on-surface"
+                )}
+              >
+                Sem Prazo
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+            <div className="bg-gradient-to-br from-error/10 to-surface-container-low p-4 rounded-2xl border border-error/10 flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[9px] font-black uppercase tracking-widest text-error/80">Atrasados</span>
+                <AlertTriangle className="w-4 h-4 text-error" />
+              </div>
+              <h3 className="text-2xl font-headline font-black text-error">{categorizedTasks.atrasados.length}</h3>
+            </div>
+            <div className="bg-gradient-to-br from-secondary/10 to-surface-container-low p-4 rounded-2xl border border-secondary/10 flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[9px] font-black uppercase tracking-widest text-secondary/80">Para Hoje</span>
+                <Clock className="w-4 h-4 text-secondary" />
+              </div>
+              <h3 className="text-2xl font-headline font-black text-secondary">{categorizedTasks.hoje.length}</h3>
+            </div>
+            <div className="bg-gradient-to-br from-emerald-500/10 to-surface-container-low p-4 rounded-2xl border border-emerald-500/10 flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[9px] font-black uppercase tracking-widest text-emerald-500/80">Em Dia</span>
+                <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+              </div>
+              <h3 className="text-2xl font-headline font-black text-on-surface">{categorizedTasks.em_dia.length}</h3>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 xl:grid-cols-1 gap-6">
+            {(deadlineFilter === 'all' || deadlineFilter === 'atrasados') && renderDeadlineTable(
+              categorizedTasks.atrasados, 
+              "Demandas em Atraso", 
+              "bg-error/10 text-error", 
+              <AlertTriangle className="w-4 h-4" />
+            )}
+            
+            {(deadlineFilter === 'all' || deadlineFilter === 'hoje') && renderDeadlineTable(
+              categorizedTasks.hoje, 
+              "Vencendo Hoje", 
+              "bg-secondary/10 text-secondary", 
+              <Clock className="w-4 h-4" />
+            )}
+
+            {(deadlineFilter === 'all' || deadlineFilter === 'em_dia') && renderDeadlineTable(
+              categorizedTasks.em_dia, 
+              "Prazos em Dia", 
+              "bg-emerald-500/10 text-emerald-500", 
+              <Calendar className="w-4 h-4" />
+            )}
+
+            {(deadlineFilter === 'all' || deadlineFilter === 'outras') && renderDeadlineTable(
+              categorizedTasks.outras, 
+              "Outras Demandas (Sem Prazo Fatal)", 
+              "bg-surface-container-highest text-outline", 
+              <FileText className="w-4 h-4" />
+            )}
+          </div>
+        </div>
+      </DraggableWidget>
+    ),
   };
 
   return (
@@ -703,7 +718,7 @@ export function Dashboard() {
         
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           <div className="lg:col-span-8 flex flex-col gap-8">
-            {widgets.tasks}
+            {widgets.deadlineTables}
             {widgets.activities}
           </div>
           <div className="lg:col-span-4 flex flex-col gap-8">
