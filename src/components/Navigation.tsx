@@ -2,7 +2,6 @@ import React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
-
 function useUser() {
   const [user, setUser] = useState<any>(null);
   useEffect(() => {
@@ -329,19 +328,10 @@ export function Sidebar({ onLogout, userRole }: { onLogout: () => void, userRole
     <aside className="fixed left-0 top-0 h-screen w-64 bg-surface-container border-r border-outline-variant/10 flex flex-col z-50">
       <div className="p-8 pt-10">
         <div className="flex items-center">
-          <div 
-            aria-label="Brenda Margalho - Advocacia Logo"
-            className="h-[35px] w-[160px] bg-secondary transition-all hover:bg-primary"
-            style={{
-              WebkitMaskImage: "url('/logo.png')",
-              WebkitMaskSize: "contain",
-              WebkitMaskRepeat: "no-repeat",
-              WebkitMaskPosition: "left center",
-              maskImage: "url('/logo.png')",
-              maskSize: "contain",
-              maskRepeat: "no-repeat",
-              maskPosition: "left center"
-            }}
+          <img 
+            src="/logo.png"
+            alt="Brenda Margalho - Advocacia Logo"
+            className="h-[28px] w-auto object-contain hover:opacity-80 transition-opacity"
           />
         </div>
       </div>

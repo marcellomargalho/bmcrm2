@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@200;300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@200;300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap');
 @import "tailwindcss";
 
 @theme {
@@ -13,7 +13,7 @@
   --color-surface-container-lowest: #041015;
 
   --color-primary: #bbc9d1;
-  --color-secondary: #f1bd89;
+  --color-secondary: #c4986b;
   --color-on-secondary: #08151b;
   --color-on-surface: #d7e5ed;
   --color-on-surface-variant: #c3c7ca;

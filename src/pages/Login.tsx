@@ -70,31 +70,12 @@ export function Login({ initialError }: { initialError?: string | null }) {
             whileHover={{ scale: 1.05 }}
             className="inline-flex items-center justify-center mb-6 group"
           >
-            <div 
-              aria-label="Brenda Margalho - Advocacia Logo"
-              className="h-[50px] w-[220px] bg-secondary transition-all group-hover:bg-primary drop-shadow-[0_0_12px_rgba(241,189,137,0.3)]"
-              style={{
-                WebkitMaskImage: "url('/logo.png')",
-                WebkitMaskSize: "contain",
-                WebkitMaskRepeat: "no-repeat",
-                WebkitMaskPosition: "center",
-                maskImage: "url('/logo.png')",
-                maskSize: "contain",
-                maskRepeat: "no-repeat",
-                maskPosition: "center"
-              }}
+            <img 
+              src="/logo.png"
+              alt="Brenda Margalho - Advocacia Logo"
+              className="h-[40px] w-auto object-contain drop-shadow-[0_0_12px_rgba(196,152,107,0.3)]"
             />
           </motion.div>
-          <h1 className="font-headline font-black text-4xl tracking-tight text-on-surface mb-2 bg-gradient-to-b from-white to-white/70 bg-clip-text text-transparent">
-            Brenda Margalho
-          </h1>
-          <div className="flex items-center justify-center gap-4">
-            <div className="h-[1px] w-8 bg-gradient-to-r from-transparent to-secondary/40"></div>
-            <p className="font-headline text-secondary/80 text-[10px] font-bold tracking-[0.4em] uppercase">
-              Advocacia
-            </p>
-            <div className="h-[1px] w-8 bg-gradient-to-l from-transparent to-secondary/40"></div>
-          </div>
         </motion.div>
 
         <motion.div 

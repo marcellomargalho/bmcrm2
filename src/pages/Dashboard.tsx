@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, Reorder } from 'motion/react';
-import { TrendingUp, Users, Calendar, Clock, FileText, ArrowRight, Plus, Loader2, CheckCircle2, Check, CalendarClock, AlertTriangle, RotateCcw, GripVertical, ChevronLeft, ChevronRight } from 'lucide-react';
+import { TrendingUp, Users, Calendar, Clock, FileText, ArrowRight, Plus, Loader2, CheckCircle2, Check, CalendarClock, AlertTriangle, RotateCcw, GripVertical, ChevronLeft, ChevronRight, X, Gavel, MapPin, User, Tag, Pencil, Save } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { NewTaskModal } from '@/components/NewTaskModal';
 import { supabase } from '@/lib/supabase';
@@ -76,6 +76,7 @@ export function Dashboard() {
   const [userData, setUserData] = useState<{id: string, name: string, role: string} | null>(null);
   const [expandedTasks, setExpandedTasks] = useState<string[]>([]);
   const [readTasks, setReadTasks] = useState<Set<string>>(new Set());
+  const [selectedTaskDetail, setSelectedTaskDetail] = useState<any | null>(null);
 
   // Calendar State
   const [currentMonth, setCurrentMonth] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
@@ -133,7 +134,7 @@ export function Dashboard() {
 
     const { data } = await supabase
       .from('tasks')
-      .select('*, processes(number, vara, comarca, court)')
+      .select('*, processes(id, number, vara, comarca, court, area, status, responsible, autor, reu, clients(name, cpf_cnpj))')
       .or(orQuery)
       .order('created_at', { ascending: false });
       
@@ -286,22 +287,30 @@ export function Dashboard() {
             <tr className="text-[9px] uppercase tracking-widest text-outline font-black border-b border-outline-variant/5">
               <th className="px-6 py-3">Prazo</th>
               <th className="px-6 py-3">Descrição</th>
-              <th className="px-6 py-3">Cliente / Processo</th>
+              <th className="px-6 py-3">Cliente</th>
+              <th className="px-6 py-3">Processo / Origem</th>
+              <th className="px-6 py-3">Tipo</th>
+              <th className="px-6 py-3">Responsável</th>
               <th className="px-6 py-3 text-right">Ações</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-outline-variant/5">
             {tasksList.length === 0 ? (
               <tr>
-                <td colSpan={4} className="px-6 py-8 text-center text-outline text-xs italic">
+                <td colSpan={7} className="px-6 py-8 text-center text-outline text-xs italic">
                   Nenhuma demanda nesta categoria.
                 </td>
               </tr>
             ) : (
               tasksList.map((task) => {
                 const daysUntil = task.fatal_date ? getDaysUntil(task.fatal_date) : null;
+                const proc = task.processes;
                 return (
-                  <tr key={task.id} className="hover:bg-surface-container-high/50 transition-colors group">
+                  <tr 
+                    key={task.id} 
+                    onClick={() => setSelectedTaskDetail(task)}
+                    className="hover:bg-surface-container-high/50 transition-colors group cursor-pointer"
+                  >
                     <td className="px-6 py-3">
                       <div className="flex flex-col">
                         <span className={cn(
@@ -311,22 +320,52 @@ export function Dashboard() {
                         )}>
                           {task.fatal_date ? new Date(task.fatal_date + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : 'S/D'}
                         </span>
+                        {daysUntil !== null && daysUntil < 0 && (
+                          <span className="text-[9px] text-error font-bold">{Math.abs(daysUntil)}d atrás</span>
+                        )}
+                        {daysUntil !== null && daysUntil > 0 && (
+                          <span className="text-[9px] text-outline">em {daysUntil}d</span>
+                        )}
                       </div>
                     </td>
+                    <td className="px-6 py-3 max-w-[200px]">
+                      <p className="text-xs text-on-surface font-medium line-clamp-2">{task.description}</p>
+                    </td>
                     <td className="px-6 py-3">
-                      <p className="text-xs text-on-surface font-medium line-clamp-1">{task.description}</p>
+                      <span className="text-xs text-on-surface-variant font-medium truncate block max-w-[140px]">
+                        {task.client_name || proc?.clients?.name || '—'}
+                      </span>
                     </td>
                     <td className="px-6 py-3">
                       <div className="flex flex-col">
-                        <span className="text-[10px] text-on-surface-variant font-medium truncate max-w-[120px]">{task.client_name || 'Sem cliente'}</span>
-                        <span className="text-[9px] text-outline font-mono">{task.process_number || 'S/N'}</span>
+                        <span className="text-[10px] text-on-surface font-mono font-medium truncate max-w-[150px]">
+                          {task.process_number || proc?.number || '—'}
+                        </span>
+                        {(proc?.vara || proc?.comarca) && (
+                          <span className="text-[9px] text-outline truncate max-w-[150px]">
+                            {[proc?.vara, proc?.comarca].filter(Boolean).join(' · ')}
+                          </span>
+                        )}
                       </div>
+                    </td>
+                    <td className="px-6 py-3">
+                      {task.task_type && (
+                        <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-secondary/10 text-secondary border border-secondary/15">
+                          {task.task_type}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-6 py-3">
+                      <span className="text-[10px] text-on-surface-variant font-medium truncate block max-w-[100px]">
+                        {task.responsible?.split(',')[0]?.trim() || '—'}
+                      </span>
                     </td>
                     <td className="px-6 py-3 text-right">
                       <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button 
-                          onClick={() => toggleTaskComplete(task.id, task.status)}
+                          onClick={(e) => { e.stopPropagation(); toggleTaskComplete(task.id, task.status); }}
                           className="p-1.5 hover:bg-emerald-500/10 text-outline hover:text-emerald-500 rounded-lg transition-all"
+                          title="Concluir tarefa"
                         >
                           <CheckCircle2 className="w-3.5 h-3.5" />
                         </button>
@@ -699,6 +738,287 @@ export function Dashboard() {
     ),
   };
 
+  // ─── Task Detail Modal ───────────────────────────────────────────────
+  const TaskDetailModal = ({ task, onClose }: { task: any; onClose: () => void }) => {
+    const proc = task.processes;
+    const [editingDates, setEditingDates] = useState(false);
+    const [fatalDate, setFatalDate] = useState(task.fatal_date || '');
+    const [idealDate, setIdealDate] = useState(task.ideal_date || '');
+    const [savingDates, setSavingDates] = useState(false);
+    const [dateSaved, setDateSaved] = useState(false);
+
+    const currentDaysUntil = fatalDate ? getDaysUntil(fatalDate) : null;
+
+    async function handleSaveDates() {
+      setSavingDates(true);
+      const { error } = await supabase
+        .from('tasks')
+        .update({ 
+          fatal_date: fatalDate || null, 
+          ideal_date: idealDate || null,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', task.id);
+      
+      if (!error) {
+        // Update local tasks state
+        setTasks(prev => prev.map(t => 
+          t.id === task.id ? { ...t, fatal_date: fatalDate || null, ideal_date: idealDate || null } : t
+        ));
+        setSelectedTaskDetail({ ...task, fatal_date: fatalDate || null, ideal_date: idealDate || null });
+        setDateSaved(true);
+        setEditingDates(false);
+        setTimeout(() => setDateSaved(false), 2000);
+      }
+      setSavingDates(false);
+    }
+
+    return (
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-6" onClick={onClose}>
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.95, y: 20 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.95, y: 20 }}
+          transition={{ duration: 0.2 }}
+          className="bg-surface-container-low w-full max-w-[600px] rounded-3xl border border-outline-variant/10 shadow-2xl overflow-hidden"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Header */}
+          <div className="px-8 py-6 border-b border-outline-variant/10 bg-surface-container-high/30 flex items-start justify-between">
+            <div className="flex items-center gap-4">
+              <div className={cn(
+                "w-12 h-12 rounded-2xl flex items-center justify-center shrink-0",
+                currentDaysUntil !== null && currentDaysUntil < 0 ? "bg-error/10 text-error" :
+                currentDaysUntil === 0 ? "bg-secondary/10 text-secondary" :
+                "bg-emerald-500/10 text-emerald-500"
+              )}>
+                <Gavel className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="font-headline font-bold text-on-surface text-lg leading-tight">Detalhes da Demanda</h3>
+                {task.task_type && (
+                  <span className="inline-block mt-1 text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-secondary/10 text-secondary border border-secondary/15">
+                    {task.task_type}
+                  </span>
+                )}
+              </div>
+            </div>
+            <button onClick={onClose} className="p-2 hover:bg-surface-container-highest rounded-xl text-outline hover:text-on-surface transition-colors">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Body */}
+          <div className="px-8 py-6 space-y-6 max-h-[65vh] overflow-y-auto custom-scrollbar">
+            {/* Description */}
+            <div>
+              <label className="text-[9px] uppercase tracking-widest text-outline font-black block mb-1.5">Descrição</label>
+              <p className="text-sm text-on-surface font-medium leading-relaxed bg-surface-container-highest/50 p-4 rounded-2xl border border-outline-variant/5">
+                {task.description || '—'}
+              </p>
+            </div>
+
+            {/* Dates Grid - Editable */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[9px] uppercase tracking-widest text-outline font-black">Prazos</span>
+                <div className="flex items-center gap-2">
+                  {dateSaved && (
+                    <span className="text-[10px] text-emerald-500 font-bold flex items-center gap-1 animate-in fade-in">
+                      <Check className="w-3 h-3" /> Salvo
+                    </span>
+                  )}
+                  {editingDates ? (
+                    <div className="flex items-center gap-1">
+                      <button 
+                        onClick={handleSaveDates}
+                        disabled={savingDates}
+                        className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 text-[10px] font-bold transition-all"
+                      >
+                        {savingDates ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                        Salvar
+                      </button>
+                      <button 
+                        onClick={() => { setEditingDates(false); setFatalDate(task.fatal_date || ''); setIdealDate(task.ideal_date || ''); }}
+                        className="px-2.5 py-1 rounded-lg bg-surface-container-highest text-outline hover:text-on-surface text-[10px] font-bold transition-all"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  ) : (
+                    <button 
+                      onClick={() => setEditingDates(true)}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-secondary/10 text-secondary hover:bg-secondary/20 text-[10px] font-bold transition-all"
+                    >
+                      <Pencil className="w-3 h-3" /> Alterar Prazos
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className={cn("p-4 rounded-2xl border transition-all", editingDates ? "bg-surface-container-highest border-secondary/20" : "bg-surface-container-highest/50 border-outline-variant/5")}>
+                  <label className="text-[9px] uppercase tracking-widest text-outline font-black flex items-center gap-1.5 mb-1.5">
+                    <AlertTriangle className="w-3 h-3" /> Prazo Fatal
+                  </label>
+                  {editingDates ? (
+                    <input 
+                      type="date" 
+                      value={fatalDate} 
+                      onChange={(e) => setFatalDate(e.target.value)}
+                      className="w-full bg-surface-container-low border border-outline-variant/20 rounded-xl px-3 py-2 text-sm text-on-surface font-bold focus:border-secondary/40 focus:ring-2 focus:ring-secondary/10 outline-none transition-all"
+                    />
+                  ) : (
+                    <>
+                      <p className={cn("text-sm font-bold", currentDaysUntil !== null && currentDaysUntil < 0 ? "text-error" : currentDaysUntil === 0 ? "text-secondary" : "text-on-surface")}>
+                        {fatalDate ? new Date(fatalDate + 'T00:00:00').toLocaleDateString('pt-BR') : '—'}
+                      </p>
+                      {currentDaysUntil !== null && (
+                        <span className={cn("text-[10px] font-bold", currentDaysUntil < 0 ? "text-error" : currentDaysUntil === 0 ? "text-secondary" : "text-emerald-500")}>
+                          {currentDaysUntil < 0 ? `${Math.abs(currentDaysUntil)} dia(s) em atraso` : currentDaysUntil === 0 ? 'Vence hoje' : `Faltam ${currentDaysUntil} dia(s)`}
+                        </span>
+                      )}
+                    </>
+                  )}
+                </div>
+                <div className={cn("p-4 rounded-2xl border transition-all", editingDates ? "bg-surface-container-highest border-secondary/20" : "bg-surface-container-highest/50 border-outline-variant/5")}>
+                  <label className="text-[9px] uppercase tracking-widest text-outline font-black flex items-center gap-1.5 mb-1.5">
+                    <CalendarClock className="w-3 h-3" /> Meta Ideal
+                  </label>
+                  {editingDates ? (
+                    <input 
+                      type="date" 
+                      value={idealDate} 
+                      onChange={(e) => setIdealDate(e.target.value)}
+                      className="w-full bg-surface-container-low border border-outline-variant/20 rounded-xl px-3 py-2 text-sm text-on-surface font-bold focus:border-secondary/40 focus:ring-2 focus:ring-secondary/10 outline-none transition-all"
+                    />
+                  ) : (
+                    <p className="text-sm font-bold text-on-surface">
+                      {idealDate ? new Date(idealDate + 'T00:00:00').toLocaleDateString('pt-BR') : '—'}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Client & Responsible */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-surface-container-highest/50 p-4 rounded-2xl border border-outline-variant/5">
+                <label className="text-[9px] uppercase tracking-widest text-outline font-black flex items-center gap-1.5 mb-1.5">
+                  <User className="w-3 h-3" /> Cliente
+                </label>
+                <p className="text-sm font-bold text-on-surface">{task.client_name || proc?.clients?.name || '—'}</p>
+              </div>
+              <div className="bg-surface-container-highest/50 p-4 rounded-2xl border border-outline-variant/5">
+                <label className="text-[9px] uppercase tracking-widest text-outline font-black flex items-center gap-1.5 mb-1.5">
+                  <Users className="w-3 h-3" /> Responsável
+                </label>
+                <p className="text-sm font-bold text-on-surface">{task.responsible || '—'}</p>
+              </div>
+            </div>
+
+            {/* Priority */}
+            {task.priority && (
+              <div className="bg-surface-container-highest/50 p-4 rounded-2xl border border-outline-variant/5">
+                <label className="text-[9px] uppercase tracking-widest text-outline font-black flex items-center gap-1.5 mb-1.5">
+                  <Tag className="w-3 h-3" /> Prioridade
+                </label>
+                <span className={cn(
+                  "inline-block text-xs font-bold px-3 py-1 rounded-lg",
+                  priorityColors[task.priority] || 'bg-surface-container-highest text-outline'
+                )}>
+                  {task.priority}
+                </span>
+              </div>
+            )}
+
+            {/* Process Info */}
+            {proc && (
+              <div className="bg-surface-container-highest/50 p-5 rounded-2xl border border-outline-variant/5 space-y-3">
+                <label className="text-[9px] uppercase tracking-widest text-outline font-black flex items-center gap-1.5">
+                  <Gavel className="w-3 h-3" /> Informações do Processo
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <span className="text-[9px] text-outline uppercase tracking-widest font-bold">Número</span>
+                    <p className="text-xs font-mono font-bold text-on-surface mt-0.5">{proc.number || '—'}</p>
+                  </div>
+                  <div>
+                    <span className="text-[9px] text-outline uppercase tracking-widest font-bold">Tribunal</span>
+                    <p className="text-xs font-bold text-on-surface mt-0.5">{proc.court || '—'}</p>
+                  </div>
+                  <div>
+                    <span className="text-[9px] text-outline uppercase tracking-widest font-bold">Vara</span>
+                    <p className="text-xs font-bold text-on-surface mt-0.5">{proc.vara || '—'}</p>
+                  </div>
+                  <div>
+                    <span className="text-[9px] text-outline uppercase tracking-widest font-bold">Comarca</span>
+                    <p className="text-xs font-bold text-on-surface mt-0.5">{proc.comarca || '—'}</p>
+                  </div>
+                  {proc.area && (
+                    <div>
+                      <span className="text-[9px] text-outline uppercase tracking-widest font-bold">Área</span>
+                      <p className="text-xs font-bold text-on-surface mt-0.5">{proc.area}</p>
+                    </div>
+                  )}
+                  {proc.status && (
+                    <div>
+                      <span className="text-[9px] text-outline uppercase tracking-widest font-bold">Status do Processo</span>
+                      <p className="text-xs font-bold text-on-surface mt-0.5">{proc.status}</p>
+                    </div>
+                  )}
+                  {proc.autor && (
+                    <div>
+                      <span className="text-[9px] text-outline uppercase tracking-widest font-bold">Autor</span>
+                      <p className="text-xs font-bold text-on-surface mt-0.5">{proc.autor}</p>
+                    </div>
+                  )}
+                  {proc.reu && (
+                    <div>
+                      <span className="text-[9px] text-outline uppercase tracking-widest font-bold">Réu</span>
+                      <p className="text-xs font-bold text-on-surface mt-0.5">{proc.reu}</p>
+                    </div>
+                  )}
+                </div>
+                {proc.id && (
+                  <button 
+                    onClick={() => { onClose(); navigate(`/processos/${proc.id}`); }}
+                    className="mt-2 flex items-center gap-2 text-secondary hover:text-secondary/80 text-[10px] font-black uppercase tracking-widest transition-colors"
+                  >
+                    <ArrowRight className="w-3.5 h-3.5" /> Ver Processo Completo
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Footer */}
+          <div className="px-8 py-4 border-t border-outline-variant/10 bg-surface-container-high/20 flex items-center justify-between">
+            <span className="text-[9px] text-outline uppercase tracking-widest font-bold">
+              Criada em {new Date(task.created_at).toLocaleDateString('pt-BR')}
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => { toggleTaskComplete(task.id, task.status); onClose(); }}
+                className={cn(
+                  "flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all",
+                  task.status === 'Concluída' 
+                    ? "bg-secondary/10 text-secondary hover:bg-secondary/20" 
+                    : "bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20"
+                )}
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                {task.status === 'Concluída' ? 'Reabrir' : 'Concluir'}
+              </button>
+              <button onClick={onClose} className="px-4 py-2 bg-surface-container-highest text-on-surface-variant text-xs font-bold rounded-xl hover:bg-surface-container-high transition-colors">
+                Fechar
+              </button>
+            </div>
+          </div>
+        </motion.div>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-8">
       <NewTaskModal
@@ -706,6 +1026,10 @@ export function Dashboard() {
         onClose={() => setIsTaskModalOpen(false)}
         onSuccess={fetchTasks}
       />
+
+      {selectedTaskDetail && (
+        <TaskDetailModal task={selectedTaskDetail} onClose={() => setSelectedTaskDetail(null)} />
+      )}
 
       <section className="mb-10">
         <h2 className="text-3xl font-headline font-extrabold tracking-tight text-on-surface mb-2">Visão Geral</h2>
