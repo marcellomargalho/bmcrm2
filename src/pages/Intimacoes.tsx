@@ -35,7 +35,6 @@ export function Intimacoes() {
   const [lidasIds, setLidasIds] = useState<Set<number>>(new Set());
   const [markingId, setMarkingId] = useState<number | null>(null);
 
-  // State for creating tasks from intimations
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [selectedIntimacao, setSelectedIntimacao] = useState<DjenIntimacao | null>(null);
 
@@ -48,6 +47,12 @@ export function Intimacoes() {
       return html;
     }
   };
+
+  const extrairNumeroProcesso = (texto: string) => {
+    const match = texto.match(/\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}/);
+    return match ? match[0] : null;
+  };
+
 
   const performSearch = useCallback(async (nome: string, oab: string, silent = false) => {
     if (!silent) setLoading(true);
@@ -270,13 +275,19 @@ export function Intimacoes() {
             {intimacoes.map((item, idx) => {
               const isExpanded = expandedItems.has(item.id);
               const tribunalColor = getTribunalColor(item.siglaTribunal);
+              const isNewAndUnread = item.data_disponibilizacao?.startsWith(today) && !lidasIds.has(item.id);
               return (
                 <motion.div
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: idx * 0.04 }}
                   key={item.id}
-                  className="bg-surface-container-lowest print:bg-transparent print:border-b rounded-3xl print:rounded-none border border-outline-variant/10 print:border-outline-variant/30 overflow-hidden hover:border-secondary/20 transition-all shadow-[0_4px_20px_rgb(0,0,0,0.04)] print:shadow-none print:break-inside-avoid"
+                  className={cn(
+                    "rounded-3xl print:rounded-none border overflow-hidden transition-all shadow-[0_4px_20px_rgb(0,0,0,0.04)] print:shadow-none print:break-inside-avoid print:bg-transparent print:border-b",
+                    isNewAndUnread 
+                      ? "bg-secondary/5 border-secondary/30 ring-1 ring-secondary/10" 
+                      : "bg-surface-container-lowest border-outline-variant/10 hover:border-secondary/20"
+                  )}
                 >
                   {/* Card header */}
                   <div className="p-5 flex flex-col md:flex-row md:items-center gap-4">
@@ -385,7 +396,7 @@ export function Intimacoes() {
             onSuccess={() => { setIsTaskModalOpen(false); setSelectedIntimacao(null); }}
             initialTaskType="Análise de Processo"
             initialDescription={selectedIntimacao
-              ? `[INTIMAÇÃO - ${selectedIntimacao.siglaTribunal}]\nProcesso: ${selectedIntimacao.numeros_processos?.[0] || 'N/A'}\n\n${decodeHtmlEntities(selectedIntimacao.texto)}`
+              ? `[INTIMAÇÃO - ${selectedIntimacao.siglaTribunal}]\nProcesso: ${selectedIntimacao.numeros_processos?.[0] || selectedIntimacao.numero_processo || extrairNumeroProcesso(selectedIntimacao.texto || '') || 'N/A'}\n\n${decodeHtmlEntities(selectedIntimacao.texto)}`
               : ''}
           />
         )}

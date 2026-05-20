@@ -85,7 +85,7 @@ export function Dashboard() {
 
   // Deadline Tables State
   const [deadlineSearch, setDeadlineSearch] = useState('');
-  const [deadlineFilter, setDeadlineFilter] = useState<'all' | 'atrasados' | 'hoje' | 'em_dia' | 'outras'>('all');
+  const [deadlineFilter, setDeadlineFilter] = useState<'all' | 'atrasados' | 'hoje' | 'em_dia' | 'revisoes'>('all');
 
   const getDaysInMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
   const getFirstDayOfMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth(), 1).getDay();
@@ -262,9 +262,10 @@ export function Dashboard() {
   const totalCompletedCount = allCompletedTasks.length;
 
   const categorizedTasks = {
-    atrasados: tasks.filter(t => t.fatal_date && t.status !== 'Concluída' && getDaysUntil(t.fatal_date) < 0),
-    hoje: tasks.filter(t => t.fatal_date && t.status !== 'Concluída' && getDaysUntil(t.fatal_date) === 0),
-    em_dia: tasks.filter(t => t.fatal_date && t.status !== 'Concluída' && getDaysUntil(t.fatal_date) > 0),
+    atrasados: tasks.filter(t => t.fatal_date && t.status !== 'Concluída' && getDaysUntil(t.fatal_date) < 0 && t.task_type !== 'Acompanhamento de Processo'),
+    hoje: tasks.filter(t => t.fatal_date && t.status !== 'Concluída' && getDaysUntil(t.fatal_date) === 0 && t.task_type !== 'Acompanhamento de Processo'),
+    em_dia: tasks.filter(t => t.fatal_date && t.status !== 'Concluída' && getDaysUntil(t.fatal_date) > 0 && t.task_type !== 'Acompanhamento de Processo'),
+    revisoes_pendentes: tasks.filter(t => t.task_type === 'Acompanhamento de Processo' && t.status !== 'Concluída'),
     outras: tasks.filter(t => !t.fatal_date && t.status !== 'Concluída'),
   };
 
@@ -669,13 +670,13 @@ export function Dashboard() {
                 Atrasados
               </button>
               <button 
-                onClick={() => setDeadlineFilter('outras')}
+                onClick={() => setDeadlineFilter('revisoes')}
                 className={cn(
                   "px-3 py-1 rounded-lg text-[10px] font-bold transition-all",
-                  deadlineFilter === 'outras' ? "bg-surface-container-highest text-on-surface" : "text-outline hover:text-on-surface"
+                  deadlineFilter === 'revisoes' ? "bg-amber-500 text-white" : "text-outline hover:text-on-surface"
                 )}
               >
-                Sem Prazo
+                Revisões
               </button>
             </div>
           </div>
@@ -711,6 +712,13 @@ export function Dashboard() {
               "bg-error/10 text-error", 
               <AlertTriangle className="w-4 h-4" />
             )}
+
+            {(deadlineFilter === 'all' || deadlineFilter === 'revisoes') && categorizedTasks.revisoes_pendentes.length > 0 && renderDeadlineTable(
+              categorizedTasks.revisoes_pendentes, 
+              "Revisões Pendentes", 
+              "bg-amber-500/10 text-amber-500", 
+              <RotateCcw className="w-4 h-4" />
+            )}
             
             {(deadlineFilter === 'all' || deadlineFilter === 'hoje') && renderDeadlineTable(
               categorizedTasks.hoje, 
@@ -724,13 +732,6 @@ export function Dashboard() {
               "Prazos em Dia", 
               "bg-emerald-500/10 text-emerald-500", 
               <Calendar className="w-4 h-4" />
-            )}
-
-            {(deadlineFilter === 'all' || deadlineFilter === 'outras') && renderDeadlineTable(
-              categorizedTasks.outras, 
-              "Outras Demandas (Sem Prazo Fatal)", 
-              "bg-surface-container-highest text-outline", 
-              <FileText className="w-4 h-4" />
             )}
           </div>
         </div>
@@ -747,7 +748,37 @@ export function Dashboard() {
     const [savingDates, setSavingDates] = useState(false);
     const [dateSaved, setDateSaved] = useState(false);
 
+    // Acompanhamento State
+    const [acompanhamentoRelato, setAcompanhamentoRelato] = useState('');
+    const [savingAcompanhamento, setSavingAcompanhamento] = useState(false);
+
     const currentDaysUntil = fatalDate ? getDaysUntil(fatalDate) : null;
+
+    async function handleRegistrarAcompanhamento() {
+      if (!acompanhamentoRelato.trim()) {
+        alert("Preencha o relato do acompanhamento.");
+        return;
+      }
+      setSavingAcompanhamento(true);
+      
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      // 1. Log the movement if process is linked
+      if (proc?.id) {
+        await supabase.from('process_movements').insert([{
+           process_id: proc.id,
+           type: 'Andamento',
+           description: `[ACOMPANHAMENTO]: ${acompanhamentoRelato}`,
+           date: new Date().toISOString(),
+           responsible: task.responsible || 'Sistema',
+           user_id: user?.id
+        }]);
+      }
+      
+      setAcompanhamentoRelato('');
+      alert("Acompanhamento registrado com sucesso!");
+      setSavingAcompanhamento(false);
+    }
 
     async function handleSaveDates() {
       setSavingDates(true);
@@ -928,6 +959,34 @@ export function Dashboard() {
                 )}>
                   {task.priority}
                 </span>
+              </div>
+            )}
+
+            {/* Acompanhamento Block */}
+            {task.task_type === 'Acompanhamento de Processo' && (
+              <div className="bg-surface-container-highest/50 p-5 rounded-2xl border border-amber-500/30 ring-1 ring-amber-500/10">
+                <h4 className="text-[10px] uppercase tracking-widest text-amber-500 font-black mb-3 flex items-center gap-1.5">
+                  <RotateCcw className="w-3.5 h-3.5" /> Registrar Acompanhamento
+                </h4>
+                
+                <textarea 
+                  value={acompanhamentoRelato}
+                  onChange={(e) => setAcompanhamentoRelato(e.target.value)}
+                  placeholder="Relate o que foi verificado neste acompanhamento..."
+                  className="w-full bg-surface-container-low border border-outline-variant/20 rounded-xl p-3 text-sm mb-3 focus:border-amber-500/40 focus:ring-2 focus:ring-amber-500/10 outline-none transition-all"
+                  rows={3}
+                />
+                
+                <div className="flex justify-end">
+                  <button 
+                    onClick={handleRegistrarAcompanhamento}
+                    disabled={savingAcompanhamento}
+                    className="bg-amber-500 text-white px-5 py-2.5 rounded-xl font-bold text-xs hover:bg-amber-600 transition-all flex items-center gap-2"
+                  >
+                    {savingAcompanhamento ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                    Salvar Relato
+                  </button>
+                </div>
               </div>
             )}
 
