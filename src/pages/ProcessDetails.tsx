@@ -17,6 +17,7 @@ export function ProcessDetails() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('Movimentações');
   const [isEditingOpen, setIsEditingOpen] = useState(false);
+  const [userRole, setUserRole] = useState<string | null>(null);
 
   const fetchProcess = useCallback(async () => {
     if (!id) return;
@@ -34,7 +35,28 @@ export function ProcessDetails() {
     fetchProcess();
   }, [fetchProcess]);
 
+  useEffect(() => {
+    async function fetchUserRole() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
+          .single();
+        if (profileData) {
+          setUserRole(profileData.role);
+        }
+      }
+    }
+    fetchUserRole();
+  }, []);
+
   async function handleDelete() {
+    if (userRole !== 'Administrador') {
+      alert('Apenas administradores podem excluir processos.');
+      return;
+    }
     if (window.confirm('Tem certeza que deseja excluir este processo? Essa ação não pode ser desfeita e todas as movimentações, tarefas e documentos associados podem ser perdidos.')) {
       await supabase.from('processes').delete().eq('id', id);
       navigate('/processos');
@@ -108,12 +130,14 @@ export function ProcessDetails() {
                 >
                   Editar Processo
                 </button>
-                <button 
-                  onClick={handleDelete}
-                  className="px-4 py-2 bg-error/10 text-error hover:bg-error hover:text-white text-xs font-bold rounded-xl transition-all h-fit flex items-center gap-2"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                {userRole === 'Administrador' && (
+                  <button 
+                    onClick={handleDelete}
+                    className="px-4 py-2 bg-error/10 text-error hover:bg-error hover:text-white text-xs font-bold rounded-xl transition-all h-fit flex items-center gap-2"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
               </div>
             </div>
 

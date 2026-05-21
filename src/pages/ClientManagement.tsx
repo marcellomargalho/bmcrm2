@@ -200,9 +200,10 @@ function NewClientModal({ isOpen, onClose, onSuccess }: { isOpen: boolean; onClo
   );
 }
 
-function ClientProcesses({ clientId }: { clientId: string }) {
+function ClientProcesses({ clientId, userRole }: { clientId: string; userRole: string | null }) {
   const [processes, setProcesses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const isAdmin = userRole === 'Administrador';
 
   async function fetchProcesses() {
     setLoading(true);
@@ -220,6 +221,10 @@ function ClientProcesses({ clientId }: { clientId: string }) {
   }, [clientId]);
 
   async function handleDeleteProcess(id: string) {
+    if (userRole !== 'Administrador') {
+      alert('Apenas administradores podem excluir processos.');
+      return;
+    }
     if (window.confirm('Tem certeza que deseja excluir este processo? Essa ação não pode ser desfeita.')) {
       await supabase.from('processes').delete().eq('id', id);
       fetchProcesses();
@@ -267,13 +272,15 @@ function ClientProcesses({ clientId }: { clientId: string }) {
                   <span className="px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded-full bg-secondary/10 text-secondary whitespace-nowrap">
                     {proc.status}
                   </span>
-                  <button 
-                    onClick={() => handleDeleteProcess(proc.id)}
-                    className="p-1.5 text-outline hover:text-error hover:bg-error/10 rounded-md transition-all"
-                    title="Excluir Processo"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                  {isAdmin && (
+                    <button 
+                      onClick={() => handleDeleteProcess(proc.id)}
+                      className="p-1.5 text-outline hover:text-error hover:bg-error/10 rounded-md transition-all"
+                      title="Excluir Processo"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -486,6 +493,7 @@ export function ClientManagement() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [userRole, setUserRole] = useState<string | null>(null);
 
   async function fetchClients() {
     setLoading(true);
@@ -510,6 +518,20 @@ export function ClientManagement() {
 
   useEffect(() => {
     fetchClients();
+    async function fetchUserRole() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
+          .single();
+        if (profileData) {
+          setUserRole(profileData.role);
+        }
+      }
+    }
+    fetchUserRole();
   }, []);
 
   const activeClients = clients.filter(c => c.status === 'Ativo').length;
@@ -523,6 +545,10 @@ export function ClientManagement() {
 
   async function handleDeleteClient() {
     if (!selectedClient) return;
+    if (userRole !== 'Administrador') {
+      alert('Apenas administradores podem excluir clientes.');
+      return;
+    }
     setDeleting(true);
     try {
       // Delete only the client record (processes are kept)
@@ -717,13 +743,15 @@ export function ClientManagement() {
                     >
                       {selectedClient.status === 'Ativo' ? <UserX className="w-4 h-4" /> : <UserCheck className="w-4 h-4" />}
                     </button>
-                    <button
-                      onClick={() => setIsDeleteModalOpen(true)}
-                      className="p-2 bg-error/10 rounded-lg text-error hover:bg-error hover:text-white transition-all"
-                      title="Excluir Cadastro"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    {userRole === 'Administrador' && (
+                      <button
+                        onClick={() => setIsDeleteModalOpen(true)}
+                        className="p-2 bg-error/10 rounded-lg text-error hover:bg-error hover:text-white transition-all"
+                        title="Excluir Cadastro"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -751,7 +779,7 @@ export function ClientManagement() {
                     </div>
                   </div>
 
-                  <ClientProcesses clientId={selectedClient.id} />
+                  <ClientProcesses clientId={selectedClient.id} userRole={userRole} />
                 </div>
 
                 <button

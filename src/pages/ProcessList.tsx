@@ -17,6 +17,7 @@ export function ProcessList() {
 
   const [filterText, setFilterText] = useState('');
   const [recentMovements, setRecentMovements] = useState<any[]>([]);
+  const [userRole, setUserRole] = useState<string | null>(null);
 
   async function fetchMovements() {
     const { data } = await supabase
@@ -42,9 +43,27 @@ export function ProcessList() {
   useEffect(() => {
     fetchProcesses();
     fetchMovements();
+    async function fetchUserRole() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
+          .single();
+        if (profileData) {
+          setUserRole(profileData.role);
+        }
+      }
+    }
+    fetchUserRole();
   }, []);
 
   async function handleDeleteProcess(id: string) {
+    if (userRole !== 'Administrador') {
+      alert('Apenas administradores podem excluir processos.');
+      return;
+    }
     if (window.confirm('Tem certeza que deseja excluir este processo? Essa ação não pode ser desfeita.')) {
       await supabase.from('processes').delete().eq('id', id);
       fetchProcesses();
@@ -249,13 +268,15 @@ export function ProcessList() {
                         >
                           <Eye className="w-4 h-4" />
                         </button>
-                        <button
-                          onClick={() => handleDeleteProcess(proc.id)}
-                          className="w-8 h-8 rounded-lg flex items-center justify-center text-outline hover:text-error hover:bg-error/10 transition-all"
-                          title="Excluir Processo"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        {userRole === 'Administrador' && (
+                          <button
+                            onClick={() => handleDeleteProcess(proc.id)}
+                            className="w-8 h-8 rounded-lg flex items-center justify-center text-outline hover:text-error hover:bg-error/10 transition-all"
+                            title="Excluir Processo"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
