@@ -1,18 +1,101 @@
 import React, { useState, useEffect } from 'react';
-import { Users, UserPlus, Filter, SortAsc, Mail, Phone, Scale, ChevronRight, Edit2, Share2, TrendingUp, X, Loader2, UserX, UserCheck, Trash2, MapPin, User } from 'lucide-react';
+import { Users, UserPlus, Filter, SortAsc, Mail, Phone, Scale, ChevronRight, Edit2, Share2, TrendingUp, X, Loader2, UserX, UserCheck, Trash2, MapPin, User, PlusCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Client } from '@/types';
 import { supabase } from '@/lib/supabase';
 
+type ProcessEntry = { number: string; court: string; responsible: string; type: string };
+const emptyProcess = (): ProcessEntry => ({ number: '', court: '', responsible: '', type: '' });
+
+function ProcessForm({ proc, index, onChange, onRemove, showRemove }: {
+  proc: ProcessEntry; index: number;
+  onChange: (index: number, field: keyof ProcessEntry, value: string) => void;
+  onRemove: (index: number) => void;
+  showRemove: boolean;
+}) {
+  return (
+    <div className="p-4 bg-surface-container-highest/20 rounded-2xl border border-outline-variant/10 space-y-3 relative">
+      {showRemove && (
+        <button
+          type="button"
+          onClick={() => onRemove(index)}
+          className="absolute top-3 right-3 p-1 text-outline hover:text-error hover:bg-error/10 rounded-lg transition-all"
+          title="Remover processo"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      )}
+      <p className="text-[10px] font-bold text-secondary uppercase tracking-widest">Processo {index + 1}</p>
+      <div className="space-y-1">
+        <label className="text-xs font-bold text-on-surface-variant uppercase tracking-wider">Número do Processo</label>
+        <input
+          type="text"
+          value={proc.number}
+          onChange={e => onChange(index, 'number', e.target.value)}
+          className="w-full bg-surface-container-highest border-none rounded-xl px-4 py-3 text-on-surface focus:ring-2 focus:ring-secondary placeholder:text-outline/50 transition-all font-medium"
+          placeholder="0000000-00.0000.0.00.0000"
+        />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1">
+          <label className="text-xs font-bold text-on-surface-variant uppercase tracking-wider">Local / Comarca</label>
+          <input
+            type="text"
+            value={proc.court}
+            onChange={e => onChange(index, 'court', e.target.value)}
+            className="w-full bg-surface-container-highest border-none rounded-xl px-4 py-3 text-on-surface focus:ring-2 focus:ring-secondary placeholder:text-outline/50 transition-all font-medium"
+            placeholder="TJSP, TRF3..."
+          />
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs font-bold text-on-surface-variant uppercase tracking-wider">Responsáveis</label>
+          <input
+            type="text"
+            value={proc.responsible}
+            onChange={e => onChange(index, 'responsible', e.target.value)}
+            className="w-full bg-surface-container-highest border-none rounded-xl px-4 py-3 text-on-surface focus:ring-2 focus:ring-secondary placeholder:text-outline/50 transition-all font-medium"
+            placeholder="Nome do responsável"
+          />
+        </div>
+      </div>
+      <div className="space-y-1">
+        <label className="text-xs font-bold text-on-surface-variant uppercase tracking-wider">Tipo de Processo</label>
+        <select
+          value={proc.type}
+          onChange={e => onChange(index, 'type', e.target.value)}
+          className="w-full bg-surface-container-highest border-none rounded-xl px-4 py-3 text-on-surface focus:ring-2 focus:ring-secondary transition-all font-medium appearance-none"
+        >
+          <option value="">Selecione o tipo</option>
+          <option value="Penal">Penal</option>
+          <option value="Civil">Civil</option>
+          <option value="Previdenciário">Previdenciário</option>
+          <option value="Administrativo">Administrativo</option>
+          <option value="Contencioso">Contencioso</option>
+        </select>
+      </div>
+    </div>
+  );
+}
+
 function NewClientModal({ isOpen, onClose, onSuccess }: { isOpen: boolean; onClose: () => void; onSuccess: () => void }) {
-  const [formData, setFormData] = useState({
-    name: '', cpf_cnpj: '', email: '', phone: '',
-    process_number: '', process_court: '', process_responsible: '', process_type: ''
-  });
+  const [formData, setFormData] = useState({ name: '', cpf_cnpj: '', email: '', phone: '' });
+  const [processes, setProcesses] = useState<ProcessEntry[]>([emptyProcess()]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
   if (!isOpen) return null;
+
+  function handleProcessChange(index: number, field: keyof ProcessEntry, value: string) {
+    setProcesses(prev => prev.map((p, i) => i === index ? { ...p, [field]: value } : p));
+  }
+
+  function addProcess() {
+    setProcesses(prev => [...prev, emptyProcess()]);
+  }
+
+  function removeProcess(index: number) {
+    setProcesses(prev => prev.filter((_, i) => i !== index));
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -23,6 +106,8 @@ function NewClientModal({ isOpen, onClose, onSuccess }: { isOpen: boolean; onClo
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Sessão inválida. Faça login novamente.');
 
+      const validProcesses = processes.filter(p => p.number.trim() !== '');
+
       const { data: clientData, error: insertError } = await supabase.from('clients').insert([{
         user_id: user.id,
         name: formData.name,
@@ -30,27 +115,29 @@ function NewClientModal({ isOpen, onClose, onSuccess }: { isOpen: boolean; onClo
         email: formData.email,
         phone: formData.phone,
         status: 'Ativo',
-        process_count: formData.process_number ? 1 : 0
+        process_count: validProcesses.length
       }]).select().single();
 
       if (insertError) throw insertError;
 
-      // If process data was provided, create the process
-      if (formData.process_number && clientData) {
-        await supabase.from('processes').insert([{
-          user_id: user.id,
-          client_id: clientData.id,
-          number: formData.process_number,
-          court: formData.process_court || null,
-          responsible: formData.process_responsible || null,
-          area: formData.process_type || null,
-          status: 'Em Andamento'
-        }]);
+      if (validProcesses.length > 0 && clientData) {
+        await supabase.from('processes').insert(
+          validProcesses.map(p => ({
+            user_id: user.id,
+            client_id: clientData.id,
+            number: p.number,
+            court: p.court || null,
+            responsible: p.responsible || null,
+            area: p.type || null,
+            status: 'Em Andamento'
+          }))
+        );
       }
 
       onSuccess();
       onClose();
-      setFormData({ name: '', cpf_cnpj: '', email: '', phone: '', process_number: '', process_court: '', process_responsible: '', process_type: '' });
+      setFormData({ name: '', cpf_cnpj: '', email: '', phone: '' });
+      setProcesses([emptyProcess()]);
     } catch (err: any) {
       setError(err.message || 'Erro ao criar cliente.');
     } finally {
@@ -64,7 +151,7 @@ function NewClientModal({ isOpen, onClose, onSuccess }: { isOpen: boolean; onClo
         <div className="p-6 border-b border-outline-variant/10 flex justify-between items-center bg-surface-container-low shrink-0">
           <div>
             <h3 className="font-headline font-bold text-xl text-on-surface">Novo Cliente</h3>
-            <p className="text-xs text-on-surface-variant mt-1">Cadastre o cliente e vincule um processo</p>
+            <p className="text-xs text-on-surface-variant mt-1">Cadastre o cliente e vincule um ou mais processos</p>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-surface-container-high rounded-full text-on-surface-variant transition-colors">
             <X className="w-5 h-5" />
@@ -123,57 +210,30 @@ function NewClientModal({ isOpen, onClose, onSuccess }: { isOpen: boolean; onClo
             />
           </div>
 
-          {/* Dados do processo */}
+          {/* Processos */}
           <div className="pt-4 border-t border-outline-variant/10">
-            <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-4">Processo (Opcional)</p>
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">Processos (Opcional)</p>
+              <button
+                type="button"
+                onClick={addProcess}
+                className="flex items-center gap-1.5 text-xs font-bold text-secondary hover:text-secondary/70 transition-colors"
+              >
+                <PlusCircle className="w-4 h-4" />
+                Adicionar Processo
+              </button>
+            </div>
             <div className="space-y-4">
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-on-surface-variant uppercase tracking-wider">Número do Processo</label>
-                <input 
-                  type="text" 
-                  value={formData.process_number}
-                  onChange={e => setFormData({ ...formData, process_number: e.target.value })}
-                  className="w-full bg-surface-container-highest border-none rounded-xl px-4 py-3 text-on-surface focus:ring-2 focus:ring-secondary placeholder:text-outline/50 transition-all font-medium"
-                  placeholder="0000000-00.0000.0.00.0000"
+              {processes.map((proc, idx) => (
+                <ProcessForm
+                  key={idx}
+                  proc={proc}
+                  index={idx}
+                  onChange={handleProcessChange}
+                  onRemove={removeProcess}
+                  showRemove={processes.length > 1}
                 />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-on-surface-variant uppercase tracking-wider">Local / Comarca</label>
-                  <input 
-                    type="text" 
-                    value={formData.process_court}
-                    onChange={e => setFormData({ ...formData, process_court: e.target.value })}
-                    className="w-full bg-surface-container-highest border-none rounded-xl px-4 py-3 text-on-surface focus:ring-2 focus:ring-secondary placeholder:text-outline/50 transition-all font-medium"
-                    placeholder="Ex: TJSP, TRF3, JFSP..."
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-on-surface-variant uppercase tracking-wider">Responsáveis</label>
-                  <input 
-                    type="text" 
-                    value={formData.process_responsible}
-                    onChange={e => setFormData({ ...formData, process_responsible: e.target.value })}
-                    className="w-full bg-surface-container-highest border-none rounded-xl px-4 py-3 text-on-surface focus:ring-2 focus:ring-secondary placeholder:text-outline/50 transition-all font-medium"
-                    placeholder="Nomes dos responsáveis"
-                  />
-                </div>
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-on-surface-variant uppercase tracking-wider">Tipo de Processo</label>
-                <select
-                  value={formData.process_type}
-                  onChange={e => setFormData({ ...formData, process_type: e.target.value })}
-                  className="w-full bg-surface-container-highest border-none rounded-xl px-4 py-3 text-on-surface focus:ring-2 focus:ring-secondary placeholder:text-outline/50 transition-all font-medium appearance-none"
-                >
-                  <option value="">Selecione o tipo</option>
-                  <option value="Penal">Penal</option>
-                  <option value="Civil">Civil</option>
-                  <option value="Previdenciário">Previdenciário</option>
-                  <option value="Administrativo">Administrativo</option>
-                  <option value="Contencioso">Contencioso</option>
-                </select>
-              </div>
+              ))}
             </div>
           </div>
           
@@ -294,19 +354,29 @@ function ClientProcesses({ clientId, userRole }: { clientId: string; userRole: s
 function EditClientModal({ isOpen, onClose, onSuccess, client }: { isOpen: boolean; onClose: () => void; onSuccess: () => void; client: Client }) {
   const [formData, setFormData] = useState({
     name: client.name, cpf_cnpj: client.cpf_cnpj, email: client.email, phone: client.phone,
-    process_number: '', process_court: '', process_responsible: '', process_type: ''
   });
+  const [newProcesses, setNewProcesses] = useState<ProcessEntry[]>([emptyProcess()]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    setFormData({
-      name: client.name, cpf_cnpj: client.cpf_cnpj, email: client.email, phone: client.phone,
-      process_number: '', process_court: '', process_responsible: '', process_type: ''
-    });
+    setFormData({ name: client.name, cpf_cnpj: client.cpf_cnpj, email: client.email, phone: client.phone });
+    setNewProcesses([emptyProcess()]);
   }, [client]);
 
   if (!isOpen) return null;
+
+  function handleProcessChange(index: number, field: keyof ProcessEntry, value: string) {
+    setNewProcesses(prev => prev.map((p, i) => i === index ? { ...p, [field]: value } : p));
+  }
+
+  function addProcess() {
+    setNewProcesses(prev => [...prev, emptyProcess()]);
+  }
+
+  function removeProcess(index: number) {
+    setNewProcesses(prev => prev.filter((_, i) => i !== index));
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -319,20 +389,22 @@ function EditClientModal({ isOpen, onClose, onSuccess, client }: { isOpen: boole
         .eq('id', client.id);
       if (updateError) throw updateError;
 
-      // Add new process if provided
-      if (formData.process_number) {
+      const validProcesses = newProcesses.filter(p => p.number.trim() !== '');
+
+      if (validProcesses.length > 0) {
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
-          await supabase.from('processes').insert([{
-            user_id: user.id,
-            client_id: client.id,
-            number: formData.process_number,
-            court: formData.process_court || null,
-            responsible: formData.process_responsible || null,
-            area: formData.process_type || null,
-            status: 'Em Andamento'
-          }]);
-          // Update process count
+          await supabase.from('processes').insert(
+            validProcesses.map(p => ({
+              user_id: user.id,
+              client_id: client.id,
+              number: p.number,
+              court: p.court || null,
+              responsible: p.responsible || null,
+              area: p.type || null,
+              status: 'Em Andamento'
+            }))
+          );
           const { count } = await supabase.from('processes').select('*', { count: 'exact', head: true }).eq('client_id', client.id);
           await supabase.from('clients').update({ process_count: count || 0 }).eq('id', client.id);
         }
@@ -353,7 +425,7 @@ function EditClientModal({ isOpen, onClose, onSuccess, client }: { isOpen: boole
         <div className="p-6 border-b border-outline-variant/10 flex justify-between items-center bg-surface-container-low shrink-0">
           <div>
             <h3 className="font-headline font-bold text-xl text-on-surface">Editar Cliente</h3>
-            <p className="text-xs text-on-surface-variant mt-1">Atualize os dados do cliente ou adicione um processo</p>
+            <p className="text-xs text-on-surface-variant mt-1">Atualize os dados do cliente ou adicione novos processos</p>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-surface-container-high rounded-full text-on-surface-variant transition-colors">
             <X className="w-5 h-5" />
@@ -382,57 +454,30 @@ function EditClientModal({ isOpen, onClose, onSuccess, client }: { isOpen: boole
             <input type="email" value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} className="w-full bg-surface-container-highest border-none rounded-xl px-4 py-3 text-on-surface focus:ring-2 focus:ring-secondary font-medium" />
           </div>
 
-          {/* Adicionar novo processo */}
+          {/* Adicionar novos processos */}
           <div className="pt-4 border-t border-outline-variant/10">
-            <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-4">Adicionar Novo Processo</p>
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">Adicionar Novos Processos</p>
+              <button
+                type="button"
+                onClick={addProcess}
+                className="flex items-center gap-1.5 text-xs font-bold text-secondary hover:text-secondary/70 transition-colors"
+              >
+                <PlusCircle className="w-4 h-4" />
+                Adicionar Processo
+              </button>
+            </div>
             <div className="space-y-4">
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-on-surface-variant uppercase tracking-wider">Número do Processo</label>
-                <input
-                  type="text"
-                  value={formData.process_number}
-                  onChange={e => setFormData({ ...formData, process_number: e.target.value })}
-                  className="w-full bg-surface-container-highest border-none rounded-xl px-4 py-3 text-on-surface focus:ring-2 focus:ring-secondary placeholder:text-outline/50 transition-all font-medium"
-                  placeholder="0000000-00.0000.0.00.0000"
+              {newProcesses.map((proc, idx) => (
+                <ProcessForm
+                  key={idx}
+                  proc={proc}
+                  index={idx}
+                  onChange={handleProcessChange}
+                  onRemove={removeProcess}
+                  showRemove={newProcesses.length > 1}
                 />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-on-surface-variant uppercase tracking-wider">Local / Comarca</label>
-                  <input
-                    type="text"
-                    value={formData.process_court}
-                    onChange={e => setFormData({ ...formData, process_court: e.target.value })}
-                    className="w-full bg-surface-container-highest border-none rounded-xl px-4 py-3 text-on-surface focus:ring-2 focus:ring-secondary placeholder:text-outline/50 transition-all font-medium"
-                    placeholder="Ex: TJSP, TRF3, JFSP..."
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-on-surface-variant uppercase tracking-wider">Responsáveis</label>
-                  <input
-                    type="text"
-                    value={formData.process_responsible}
-                    onChange={e => setFormData({ ...formData, process_responsible: e.target.value })}
-                    className="w-full bg-surface-container-highest border-none rounded-xl px-4 py-3 text-on-surface focus:ring-2 focus:ring-secondary placeholder:text-outline/50 transition-all font-medium"
-                    placeholder="Nomes dos responsáveis"
-                  />
-                </div>
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-on-surface-variant uppercase tracking-wider">Tipo de Processo</label>
-                <select
-                  value={formData.process_type}
-                  onChange={e => setFormData({ ...formData, process_type: e.target.value })}
-                  className="w-full bg-surface-container-highest border-none rounded-xl px-4 py-3 text-on-surface focus:ring-2 focus:ring-secondary placeholder:text-outline/50 transition-all font-medium appearance-none"
-                >
-                  <option value="">Selecione o tipo</option>
-                  <option value="Penal">Penal</option>
-                  <option value="Civil">Civil</option>
-                  <option value="Previdenciário">Previdenciário</option>
-                  <option value="Administrativo">Administrativo</option>
-                  <option value="Contencioso">Contencioso</option>
-                </select>
-              </div>
+              ))}
             </div>
           </div>
 

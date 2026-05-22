@@ -601,10 +601,10 @@ export function Agenda() {
                         key={event.id}
                         className={cn(
                           "px-1.5 py-0.5 rounded-md border-l-2 text-[9px] font-bold truncate transition-all hover:brightness-110",
-                          event.color,
-                          "bg-opacity-20 border-opacity-100",
-                          event.color === 'bg-error' ? 'text-error' : 
-                          event.color === 'bg-secondary' ? 'text-secondary' : 'text-blue-400'
+                          event.color === 'bg-error' ? 'bg-error/20 text-error border-error' : 
+                          event.color === 'bg-secondary' ? 'bg-secondary/20 text-secondary border-secondary' : 
+                          event.color === 'bg-amber-500' ? 'bg-amber-500/20 text-amber-400 border-amber-500' :
+                          'bg-blue-500/20 text-blue-400 border-blue-500'
                         )}
                         title={event.title}
                       >
@@ -648,10 +648,11 @@ export function Agenda() {
                   <div key={event.id} className="group p-5 rounded-3xl bg-surface-container-high/40 hover:bg-surface-container-high transition-all border border-outline-variant/10 cursor-pointer shadow-sm hover:shadow-md">
                     <div className="flex justify-between items-start mb-3">
                       <span className={cn(
-                        "px-2.5 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-widest bg-opacity-15 border border-opacity-20",
-                        event.color,
-                        event.color === 'bg-error' ? 'text-error border-error' : 
-                        event.color === 'bg-secondary' ? 'text-secondary border-secondary' : 'text-blue-400 border-blue-400'
+                        "px-2.5 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-widest border",
+                        event.color === 'bg-error' ? 'bg-error/15 text-error border-error/20' : 
+                        event.color === 'bg-secondary' ? 'bg-secondary/15 text-secondary border-secondary/20' : 
+                        event.color === 'bg-amber-500' ? 'bg-amber-500/15 text-amber-400 border-amber-500/20' :
+                        'bg-blue-500/15 text-blue-400 border-blue-500/20'
                       )}>
                         {event.type}
                       </span>
