@@ -87,6 +87,12 @@ export function Dashboard() {
   const [deadlineSearch, setDeadlineSearch] = useState('');
   const [deadlineFilter, setDeadlineFilter] = useState<'all' | 'atrasados' | 'hoje' | 'em_dia' | 'revisoes'>('all');
 
+  // Follow-up state
+  const [followUpProcessId, setFollowUpProcessId] = useState<string | null>(null);
+  const [showFollowUpPrompt, setShowFollowUpPrompt] = useState(false);
+  const [modalLockedProcessId, setModalLockedProcessId] = useState<string | undefined>(undefined);
+  const [modalInitialTaskType, setModalInitialTaskType] = useState<string | undefined>(undefined);
+
   const getDaysInMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
   const getFirstDayOfMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth(), 1).getDay();
   const daysInMonth = getDaysInMonth(currentMonth);
@@ -225,6 +231,10 @@ export function Dashboard() {
            responsible: task.responsible,
            user_id: user?.id
         }]);
+
+        // Trigger follow-up prompt
+        setFollowUpProcessId(task.process_id);
+        setShowFollowUpPrompt(true);
       }
     }
 
@@ -261,11 +271,13 @@ export function Dashboard() {
   const completedTasks = allCompletedTasks.slice(0, 5);
   const totalCompletedCount = allCompletedTasks.length;
 
+  const sortByDate = (a: any, b: any) => new Date(a.fatal_date).getTime() - new Date(b.fatal_date).getTime();
+
   const categorizedTasks = {
-    atrasados: tasks.filter(t => t.fatal_date && t.status !== 'Concluída' && getDaysUntil(t.fatal_date) < 0 && t.task_type !== 'Acompanhamento de Processo'),
-    hoje: tasks.filter(t => t.fatal_date && t.status !== 'Concluída' && getDaysUntil(t.fatal_date) === 0 && t.task_type !== 'Acompanhamento de Processo'),
-    em_dia: tasks.filter(t => t.fatal_date && t.status !== 'Concluída' && getDaysUntil(t.fatal_date) > 0 && t.task_type !== 'Acompanhamento de Processo'),
-    revisoes_pendentes: tasks.filter(t => t.task_type === 'Acompanhamento de Processo' && t.status !== 'Concluída'),
+    atrasados: tasks.filter(t => t.fatal_date && t.status !== 'Concluída' && getDaysUntil(t.fatal_date) < 0 && t.task_type !== 'Acompanhamento de Processo').sort(sortByDate),
+    hoje: tasks.filter(t => t.fatal_date && t.status !== 'Concluída' && getDaysUntil(t.fatal_date) === 0 && t.task_type !== 'Acompanhamento de Processo').sort(sortByDate),
+    em_dia: tasks.filter(t => t.fatal_date && t.status !== 'Concluída' && getDaysUntil(t.fatal_date) > 0 && t.task_type !== 'Acompanhamento de Processo').sort(sortByDate),
+    revisoes_pendentes: tasks.filter(t => t.task_type === 'Acompanhamento de Processo' && t.status !== 'Concluída').sort((a,b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()),
     outras: tasks.filter(t => !t.fatal_date && t.status !== 'Concluída'),
   };
 
@@ -1082,9 +1094,44 @@ export function Dashboard() {
     <div className="space-y-8">
       <NewTaskModal
         isOpen={isTaskModalOpen}
-        onClose={() => setIsTaskModalOpen(false)}
-        onSuccess={fetchTasks}
+        onClose={() => {
+          setIsTaskModalOpen(false);
+          setModalLockedProcessId(undefined);
+          setModalInitialTaskType(undefined);
+        }}
+        onSuccess={() => { if (userData) fetchTasks(userData); }}
+        lockedProcessId={modalLockedProcessId}
+        initialTaskType={modalInitialTaskType}
       />
+
+      {showFollowUpPrompt && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[110] flex items-center justify-center p-6">
+          <div className="bg-surface-container-low w-full max-w-sm rounded-3xl p-6 shadow-2xl flex flex-col items-center text-center border border-outline-variant/10">
+            <RotateCcw className="w-12 h-12 text-amber-500 mb-4" />
+            <h3 className="font-headline font-bold text-lg text-on-surface mb-2">Acompanhamento de Processo</h3>
+            <p className="text-sm text-on-surface-variant mb-6">Deseja criar um acompanhamento (Revisão Pendente) para o processo desta demanda?</p>
+            <div className="flex gap-3 w-full">
+              <button 
+                onClick={() => setShowFollowUpPrompt(false)} 
+                className="flex-1 py-3 bg-surface-container-highest text-on-surface-variant font-bold rounded-xl hover:bg-surface-container-high transition-all"
+              >
+                Não agora
+              </button>
+              <button 
+                onClick={() => {
+                  setShowFollowUpPrompt(false);
+                  setModalLockedProcessId(followUpProcessId || undefined);
+                  setModalInitialTaskType('Acompanhamento de Processo');
+                  setIsTaskModalOpen(true);
+                }} 
+                className="flex-1 py-3 bg-amber-500 text-white font-bold rounded-xl hover:bg-amber-600 transition-all shadow-md shadow-amber-500/20"
+              >
+                Criar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {selectedTaskDetail && (
         <TaskDetailModal task={selectedTaskDetail} onClose={() => setSelectedTaskDetail(null)} />
