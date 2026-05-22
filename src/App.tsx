@@ -19,6 +19,7 @@ import { BlogManagement } from '@/pages/BlogManagement';
 import { Analytics } from '@/pages/Analytics';
 import { Atendimento } from '@/pages/Atendimento';
 import { MarketingVisual } from '@/pages/MarketingVisual';
+import { PainelExecutivo } from '@/pages/PainelExecutivo';
 import { supabase } from '@/lib/supabase';
 
 function ProtectedRoute({ 
@@ -201,6 +202,7 @@ export default function App() {
         <Route path="atendimento" element={<Atendimento />} />
         <Route path="analytics" element={<Analytics />} />
         <Route path="marketing" element={<MarketingVisual />} />
+        <Route path="painel-executivo" element={<PainelExecutivo />} />
         <Route path="configuracoes" element={<Settings />} />
       </Route>
 

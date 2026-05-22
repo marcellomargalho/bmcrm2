@@ -32,7 +32,8 @@ import {
   Headset,
   Palette,
   Database,
-  CircleDollarSign
+  CircleDollarSign,
+  LayoutList
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -44,6 +45,7 @@ const navItems = [
   { icon: Bookmark, label: 'Intimações', path: '/intimacoes', adminOnly: true },
   { icon: FileText, label: 'Documentos', path: '/documentos' },
   { icon: CircleDollarSign, label: 'Financeiro', path: '/financeiro', adminOnly: true },
+  { icon: LayoutList, label: 'Painel Executivo', path: '/painel-executivo', adminOnly: true },
   { icon: Palette, label: 'Marketing Visual', path: '/marketing', adminOnly: true },
   { icon: MessageSquare, label: 'Atendimento', path: '/atendimento', adminOnly: true },
   { icon: BarChart2, label: 'Analytics', path: '/analytics', adminOnly: true },

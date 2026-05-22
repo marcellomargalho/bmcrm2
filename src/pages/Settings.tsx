@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { User, Bell, Shield, CreditCard, Globe, Moon, Sun, Save, Camera, Users, CheckCircle, XCircle, ChevronDown, Trophy, TrendingUp, Award, Target, Star, Loader2, Bookmark, AlertCircle, Database, Key } from 'lucide-react';
+import { User, Bell, Shield, CreditCard, Globe, Moon, Sun, Save, Camera, Users, CheckCircle, XCircle, ChevronDown, Trophy, TrendingUp, Award, Target, Star, Loader2, Bookmark, AlertCircle, Database, Key, Mail, ArrowUpRight, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 
@@ -23,6 +23,10 @@ export function Settings() {
   const [datajudApiKey, setDatajudApiKey] = useState('');
   const [datajudSaving, setDatajudSaving] = useState(false);
   const [datajudSaved, setDatajudSaved] = useState(false);
+
+  // Exclusão de Usuário
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
 
   useEffect(() => {
     async function getProfile() {
@@ -166,6 +170,33 @@ export function Settings() {
     }
   };
 
+  const deleteUser = async (profileId: string) => {
+    setDeletingUserId(profileId);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/delete-user`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({ userId: profileId }),
+      });
+
+      if (!res.ok) {
+        throw new Error('Falha ao excluir usuário. Verifique se a Edge Function está configurada corretamente.');
+      }
+
+      setProfiles(profiles.filter(p => p.id !== profileId));
+      setConfirmDeleteId(null);
+    } catch (err: any) {
+      alert(err.message || 'Ocorreu um erro ao excluir o usuário.');
+    } finally {
+      setDeletingUserId(null);
+    }
+  };
+
   const userName = profile?.name || user?.user_metadata?.full_name || '';
   const userEmail = profile?.email || user?.email || '';
   const role = profile?.role || 'Advogado';
@@ -185,23 +216,33 @@ export function Settings() {
             { id: 'productivity', icon: Trophy, label: 'Produtividade', adminOnly: true },
             { id: 'intimacoes_config', icon: Bookmark, label: 'Monitoramento DJEN', adminOnly: true },
             { id: 'datajud_config', icon: Database, label: 'API Datajud (CNJ)', adminOnly: true },
-            { id: 'notifications', icon: Bell, label: 'Notificações' },
+            { id: 'email_notifications', icon: Mail, label: 'Notificações por E-mail', adminOnly: true },
+            { id: 'notifications', icon: Bell, label: 'Notificações (Sistema)' },
             { id: 'security', icon: Shield, label: 'Segurança e Acesso' },
             { id: 'billing', icon: CreditCard, label: 'Assinatura e Planos' },
             { id: 'region', icon: Globe, label: 'Idioma e Region' },
           ].filter(item => !item.adminOnly || isAdmin).map((item) => (
             <button 
               key={item.id} 
-              onClick={() => setActiveTab(item.id)}
+              onClick={() => {
+                if (item.id === 'email_notifications') {
+                  window.location.href = '/painel-executivo?tab=email';
+                } else {
+                  setActiveTab(item.id);
+                }
+              }}
               className={cn(
-                "w-full flex items-center gap-3 px-4 py-3 rounded-xl font-headline text-sm font-bold transition-all",
+                "w-full flex items-center justify-between px-4 py-3 rounded-xl font-headline text-sm font-bold transition-all",
                 activeTab === item.id 
                   ? "bg-secondary text-on-secondary shadow-lg shadow-secondary/10" 
                   : "text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface"
               )}
             >
-              <item.icon className="w-4 h-4" />
-              {item.label}
+              <div className="flex items-center gap-3">
+                <item.icon className="w-4 h-4" />
+                {item.label}
+              </div>
+              {item.id === 'email_notifications' && <ArrowUpRight className="w-3.5 h-3.5 opacity-50" />}
             </button>
           ))}
         </aside>
@@ -675,27 +716,55 @@ export function Settings() {
 
                         <div className="flex flex-col gap-1.5">
                           <span className="text-[10px] font-black text-transparent uppercase tracking-widest px-1 hidden md:block">Ações</span>
-                          <button 
-                            onClick={() => toggleApproval(profile.id, profile.is_approved)}
-                            className={cn(
-                              "flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-sm",
-                              profile.is_approved
-                                ? "bg-surface-container-high text-on-surface-variant hover:bg-error/10 hover:text-error hover:border-error/20 border border-transparent"
-                                : "bg-secondary text-on-secondary hover:opacity-90 shadow-lg shadow-secondary/10"
-                            )}
-                          >
-                            {profile.is_approved ? (
-                              <>
-                                <XCircle className="w-3.5 h-3.5" />
-                                Desativar
-                              </>
+                          <div className="flex items-center gap-2">
+                            <button 
+                              onClick={() => toggleApproval(profile.id, profile.is_approved)}
+                              className={cn(
+                                "flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-sm",
+                                profile.is_approved
+                                  ? "bg-surface-container-high text-on-surface-variant hover:bg-amber-500/10 hover:text-amber-500 hover:border-amber-500/20 border border-transparent"
+                                  : "bg-secondary text-on-secondary hover:opacity-90 shadow-lg shadow-secondary/10"
+                              )}
+                            >
+                              {profile.is_approved ? (
+                                <>
+                                  <XCircle className="w-3.5 h-3.5" />
+                                  Desativar
+                                </>
+                              ) : (
+                                <>
+                                  <CheckCircle className="w-3.5 h-3.5" />
+                                  Aprovar
+                                </>
+                              )}
+                            </button>
+
+                            {confirmDeleteId === profile.id ? (
+                              <div className="flex items-center gap-1 bg-error/10 p-1 rounded-xl border border-error/20">
+                                <button
+                                  onClick={() => deleteUser(profile.id)}
+                                  disabled={deletingUserId === profile.id}
+                                  className="px-3 py-1.5 bg-error text-white text-[10px] font-black uppercase tracking-widest rounded-lg hover:opacity-90 transition-all flex items-center gap-1 disabled:opacity-50"
+                                >
+                                  {deletingUserId === profile.id ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Confirmar'}
+                                </button>
+                                <button
+                                  onClick={() => setConfirmDeleteId(null)}
+                                  className="p-1.5 text-error hover:bg-error/20 rounded-lg transition-all"
+                                >
+                                  <XCircle className="w-4 h-4" />
+                                </button>
+                              </div>
                             ) : (
-                              <>
-                                <CheckCircle className="w-3.5 h-3.5" />
-                                Aprovar
-                              </>
+                              <button
+                                onClick={() => setConfirmDeleteId(profile.id)}
+                                className="p-2.5 bg-surface-container-high text-outline hover:bg-error/10 hover:text-error hover:border-error/20 border border-transparent rounded-xl transition-all shadow-sm"
+                                title="Excluir Usuário"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
                             )}
-                          </button>
+                          </div>
                         </div>
                       </div>
                     </div>
