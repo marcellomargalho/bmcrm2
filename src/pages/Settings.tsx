@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { User, Bell, Shield, CreditCard, Globe, Moon, Sun, Save, Camera, Users, CheckCircle, XCircle, ChevronDown, Trophy, TrendingUp, Award, Target, Star, Loader2, Bookmark, AlertCircle, Database, Key, Mail, ArrowUpRight, Trash2 } from 'lucide-react';
+import { User, Bell, Shield, CreditCard, Globe, Moon, Sun, Save, Camera, Users, CheckCircle, XCircle, ChevronDown, Trophy, TrendingUp, Award, Target, Star, Loader2, Bookmark, AlertCircle, Database, Key, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 
@@ -173,24 +173,18 @@ export function Settings() {
   const deleteUser = async (profileId: string) => {
     setDeletingUserId(profileId);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/delete-user`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session?.access_token}`,
-        },
-        body: JSON.stringify({ userId: profileId }),
+      const { error } = await supabase.rpc('delete_user_by_admin', {
+        user_id_to_delete: profileId
       });
 
-      if (!res.ok) {
-        throw new Error('Falha ao excluir usuário. Verifique se a Edge Function está configurada corretamente.');
+      if (error) {
+        throw new Error(error.message || 'Falha ao excluir usuário. Verifique as permissões.');
       }
 
       setProfiles(profiles.filter(p => p.id !== profileId));
       setConfirmDeleteId(null);
     } catch (err: any) {
+      console.error(err);
       alert(err.message || 'Ocorreu um erro ao excluir o usuário.');
     } finally {
       setDeletingUserId(null);
@@ -216,7 +210,6 @@ export function Settings() {
             { id: 'productivity', icon: Trophy, label: 'Produtividade', adminOnly: true },
             { id: 'intimacoes_config', icon: Bookmark, label: 'Monitoramento DJEN', adminOnly: true },
             { id: 'datajud_config', icon: Database, label: 'API Datajud (CNJ)', adminOnly: true },
-            { id: 'email_notifications', icon: Mail, label: 'Notificações por E-mail', adminOnly: true },
             { id: 'notifications', icon: Bell, label: 'Notificações (Sistema)' },
             { id: 'security', icon: Shield, label: 'Segurança e Acesso' },
             { id: 'billing', icon: CreditCard, label: 'Assinatura e Planos' },
@@ -225,11 +218,7 @@ export function Settings() {
             <button 
               key={item.id} 
               onClick={() => {
-                if (item.id === 'email_notifications') {
-                  window.location.href = '/painel-executivo?tab=email';
-                } else {
-                  setActiveTab(item.id);
-                }
+                setActiveTab(item.id);
               }}
               className={cn(
                 "w-full flex items-center justify-between px-4 py-3 rounded-xl font-headline text-sm font-bold transition-all",
@@ -242,7 +231,7 @@ export function Settings() {
                 <item.icon className="w-4 h-4" />
                 {item.label}
               </div>
-              {item.id === 'email_notifications' && <ArrowUpRight className="w-3.5 h-3.5 opacity-50" />}
+              {false && item.id === 'email_notifications' && null}
             </button>
           ))}
         </aside>

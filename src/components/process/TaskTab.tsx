@@ -39,7 +39,7 @@ export function TaskTab({ processId }: { processId: string }) {
 
   useEffect(() => {
     fetchTasks();
-    supabase.from('profiles').select('id, name, role').order('name').then(({ data }) => setProfiles(data || []));
+    supabase.from('profiles').select('id, name, role').eq('is_approved', true).order('name').then(({ data }) => setProfiles(data || []));
   }, [processId]);
 
   function toggleExpand(id: string) {

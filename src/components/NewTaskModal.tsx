@@ -70,7 +70,7 @@ export function NewTaskModal({ isOpen, onClose, onSuccess, lockedProcessId, edit
       setLoadingClients(false);
     });
 
-    supabase.from('profiles').select('id, name, role').order('name').then(({ data }) => {
+    supabase.from('profiles').select('id, name, role').eq('is_approved', true).order('name').then(({ data }) => {
       setProfiles(data || []);
     });
   }, [isOpen, editingTask, lockedProcessId]);

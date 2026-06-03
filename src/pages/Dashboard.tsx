@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, Reorder } from 'motion/react';
-import { TrendingUp, Users, Calendar, Clock, FileText, ArrowRight, Plus, Loader2, CheckCircle2, Check, CalendarClock, AlertTriangle, RotateCcw, GripVertical, ChevronLeft, ChevronRight, X, Gavel, MapPin, User, Tag, Pencil, Save } from 'lucide-react';
+import { TrendingUp, Users, Calendar, Clock, FileText, ArrowRight, Plus, Loader2, CheckCircle2, Check, CalendarClock, AlertTriangle, RotateCcw, GripVertical, ChevronLeft, ChevronRight, X, Gavel, MapPin, User, Tag, Pencil, Save, Filter } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { NewTaskModal } from '@/components/NewTaskModal';
 import { supabase } from '@/lib/supabase';
@@ -68,7 +68,7 @@ function DraggableWidget({
 export function Dashboard() {
   const navigate = useNavigate();
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
-  const [tasks, setTasks] = useState<any[]>([]);
+  const [allTasks, setAllTasks] = useState<any[]>([]); // all tasks from DB
   const [loadingTasks, setLoadingTasks] = useState(true);
   const [activeProcessesCount, setActiveProcessesCount] = useState(0);
   const [todayEventsCount, setTodayEventsCount] = useState(0);
@@ -77,6 +77,11 @@ export function Dashboard() {
   const [expandedTasks, setExpandedTasks] = useState<string[]>([]);
   const [readTasks, setReadTasks] = useState<Set<string>>(new Set());
   const [selectedTaskDetail, setSelectedTaskDetail] = useState<any | null>(null);
+
+  // Person filter state (for admin/adv)
+  const [allProfiles, setAllProfiles] = useState<{id: string, name: string, role: string}[]>([]);
+  const [personFilter, setPersonFilter] = useState<string>('all'); // 'all' or profile name
+  const [personRoleFilter, setPersonRoleFilter] = useState<string>('all'); // 'all' | 'Administrador' | 'Advogado' | 'Estagiário'
 
   // Calendar State
   const [currentMonth, setCurrentMonth] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
@@ -136,15 +141,25 @@ export function Dashboard() {
   const fetchTasks = useCallback(async (u: {id: string, name: string, role: string}) => {
     if (!u) return;
     setLoadingTasks(true);
-    const orQuery = `user_id.eq.${u.id}${u.name ? `,responsible.ilike.%${u.name}%` : ''}`;
+    const isAdminOrAdv = u.role === 'Administrador' || u.role === 'Advogado';
 
-    const { data } = await supabase
-      .from('tasks')
-      .select('*, processes(id, number, vara, comarca, court, area, status, responsible, autor, reu, clients(name, cpf_cnpj))')
-      .or(orQuery)
-      .order('created_at', { ascending: false });
-      
-    setTasks(data || []);
+    if (isAdminOrAdv) {
+      // Fetch ALL tasks for admin/adv (to enable person filter)
+      const { data } = await supabase
+        .from('tasks')
+        .select('*, processes(id, number, vara, comarca, court, area, status, responsible, autor, reu, clients(name, cpf_cnpj))')
+        .order('created_at', { ascending: false });
+      setAllTasks(data || []);
+    } else {
+      // Estagiário: only their own tasks
+      const orQuery = `user_id.eq.${u.id}${u.name ? `,responsible.ilike.%${u.name}%` : ''}`;
+      const { data } = await supabase
+        .from('tasks')
+        .select('*, processes(id, number, vara, comarca, court, area, status, responsible, autor, reu, clients(name, cpf_cnpj))')
+        .or(orQuery)
+        .order('created_at', { ascending: false });
+      setAllTasks(data || []);
+    }
     setLoadingTasks(false);
   }, []);
 
@@ -170,6 +185,16 @@ export function Dashboard() {
         setUserData(u);
         fetchTasks(u);
         fetchStats(u);
+
+        // Fetch all profiles for person filter (admin/adv only)
+        if (u.role === 'Administrador' || u.role === 'Advogado') {
+          const { data: profilesData } = await supabase
+            .from('profiles')
+            .select('id, name, role')
+            .eq('is_approved', true)
+            .order('name', { ascending: true });
+          setAllProfiles(profilesData || []);
+        }
 
         // Realtime Tasks
         tasksChannel = supabase.channel('tasks_dashboard_changes')
@@ -204,14 +229,14 @@ export function Dashboard() {
     setLocalSubmitting(taskId);
     
     // Optimistic Update: move task in local state immediately
-    const originalTasks = [...tasks];
-    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: newStatus, updated_at: new Date().toISOString() } : t));
+    const originalAllTasks = [...allTasks];
+    setAllTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: newStatus, updated_at: new Date().toISOString() } : t));
 
     const { error } = await supabase.from('tasks').update({ status: newStatus, updated_at: new Date().toISOString() }).eq('id', taskId);
     
     if (error) {
       console.error("Erro ao atualizar tarefa:", error);
-      setTasks(originalTasks); // Rollback on error
+      setAllTasks(originalAllTasks); // Rollback on error
       setLocalSubmitting(null);
       return;
     }
@@ -249,10 +274,8 @@ export function Dashboard() {
     'Alta': 'bg-error/10 text-error',
   };
 
-  const upcomingDeadlines = tasks
-    .filter(t => t.fatal_date && t.status !== 'Concluída')
-    .sort((a, b) => new Date(a.fatal_date).getTime() - new Date(b.fatal_date).getTime())
-    .slice(0, 3);
+  const isAdmin = userData?.role === 'Administrador';
+  const isAdminOrAdv = userData?.role === 'Administrador' || userData?.role === 'Advogado';
 
   function getDaysUntil(dateStr: string) {
     const today = new Date();
@@ -262,7 +285,25 @@ export function Dashboard() {
     return diff;
   }
 
-  const isAdmin = userData?.role === 'Administrador';
+  // Apply person + role filters (for admin/adv only)
+  const tasks = React.useMemo(() => {
+    if (!isAdminOrAdv) return allTasks;
+    let result = allTasks;
+    if (personRoleFilter !== 'all') {
+      const profilesOfRole = allProfiles.filter(p => p.role === personRoleFilter).map(p => p.name?.toLowerCase());
+      result = result.filter(t => profilesOfRole.some(name => name && t.responsible?.toLowerCase().includes(name)));
+    }
+    if (personFilter !== 'all') {
+      result = result.filter(t => t.responsible?.toLowerCase().includes(personFilter.toLowerCase()));
+    }
+    return result;
+  }, [allTasks, isAdminOrAdv, personFilter, personRoleFilter, allProfiles]);
+
+  const upcomingDeadlines = tasks
+    .filter(t => t.fatal_date && t.status !== 'Concluída')
+    .sort((a, b) => new Date(a.fatal_date).getTime() - new Date(b.fatal_date).getTime())
+    .slice(0, 3);
+
   const pendingTasks = tasks.filter(t => t.status !== 'Concluída');
   const recentTasks = pendingTasks;
   const allCompletedTasks = tasks
@@ -271,12 +312,13 @@ export function Dashboard() {
   const completedTasks = allCompletedTasks.slice(0, 5);
   const totalCompletedCount = allCompletedTasks.length;
 
-  const sortByDate = (a: any, b: any) => new Date(a.fatal_date).getTime() - new Date(b.fatal_date).getTime();
+  // Ordena do prazo mais urgente (menos dias restantes) ao menos urgente (mais dias restantes)
+  const sortByUrgency = (a: any, b: any) => getDaysUntil(a.fatal_date) - getDaysUntil(b.fatal_date);
 
   const categorizedTasks = {
-    atrasados: tasks.filter(t => t.fatal_date && t.status !== 'Concluída' && getDaysUntil(t.fatal_date) < 0 && t.task_type !== 'Acompanhamento de Processo').sort(sortByDate),
-    hoje: tasks.filter(t => t.fatal_date && t.status !== 'Concluída' && getDaysUntil(t.fatal_date) === 0 && t.task_type !== 'Acompanhamento de Processo').sort(sortByDate),
-    em_dia: tasks.filter(t => t.fatal_date && t.status !== 'Concluída' && getDaysUntil(t.fatal_date) > 0 && t.task_type !== 'Acompanhamento de Processo').sort(sortByDate),
+    atrasados: tasks.filter(t => t.fatal_date && t.status !== 'Concluída' && getDaysUntil(t.fatal_date) < 0 && t.task_type !== 'Acompanhamento de Processo').sort(sortByUrgency),
+    hoje: tasks.filter(t => t.fatal_date && t.status !== 'Concluída' && getDaysUntil(t.fatal_date) === 0 && t.task_type !== 'Acompanhamento de Processo').sort(sortByUrgency),
+    em_dia: tasks.filter(t => t.fatal_date && t.status !== 'Concluída' && getDaysUntil(t.fatal_date) > 0 && t.task_type !== 'Acompanhamento de Processo').sort(sortByUrgency),
     revisoes_pendentes: tasks.filter(t => t.task_type === 'Acompanhamento de Processo' && t.status !== 'Concluída').sort((a,b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()),
     outras: tasks.filter(t => !t.fatal_date && t.status !== 'Concluída'),
   };
@@ -325,19 +367,40 @@ export function Dashboard() {
                     className="hover:bg-surface-container-high/50 transition-colors group cursor-pointer"
                   >
                     <td className="px-6 py-3">
-                      <div className="flex flex-col">
+                      <div className="flex flex-col gap-1.5">
                         <span className={cn(
                           "text-xs font-bold",
-                          daysUntil !== null && daysUntil < 0 ? "text-error" : 
-                          daysUntil === 0 ? "text-secondary" : "text-on-surface"
+                          daysUntil !== null && daysUntil < 0 ? "text-error" :
+                          daysUntil === 0 ? "text-secondary" :
+                          daysUntil !== null && daysUntil <= 3 ? "text-orange-400" :
+                          "text-on-surface"
                         )}>
                           {task.fatal_date ? new Date(task.fatal_date + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : 'S/D'}
                         </span>
                         {daysUntil !== null && daysUntil < 0 && (
-                          <span className="text-[9px] text-error font-bold">{Math.abs(daysUntil)}d atrás</span>
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-error/15 text-error text-[9px] font-black border border-error/25 animate-pulse w-fit">
+                            ⚠ {Math.abs(daysUntil)}d atraso
+                          </span>
                         )}
-                        {daysUntil !== null && daysUntil > 0 && (
-                          <span className="text-[9px] text-outline">em {daysUntil}d</span>
+                        {daysUntil === 0 && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary/15 text-secondary text-[9px] font-black border border-secondary/25 w-fit">
+                            🔔 Vence hoje
+                          </span>
+                        )}
+                        {daysUntil !== null && daysUntil > 0 && daysUntil <= 3 && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-orange-500/15 text-orange-400 text-[9px] font-black border border-orange-500/25 w-fit">
+                            ⏳ {daysUntil}d restantes
+                          </span>
+                        )}
+                        {daysUntil !== null && daysUntil > 3 && daysUntil <= 7 && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 text-[9px] font-bold border border-amber-500/20 w-fit">
+                            {daysUntil}d restantes
+                          </span>
+                        )}
+                        {daysUntil !== null && daysUntil > 7 && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 text-[9px] font-bold border border-emerald-500/20 w-fit">
+                            {daysUntil}d restantes
+                          </span>
                         )}
                       </div>
                     </td>
@@ -693,6 +756,88 @@ export function Dashboard() {
             </div>
           </div>
 
+          {/* Person Filter — visible only to Admins and Advogados */}
+          {isAdminOrAdv && allProfiles.length > 0 && (
+            <div className="bg-surface-container-low border border-outline-variant/10 rounded-2xl p-4 flex flex-col gap-3">
+              <div className="flex items-center gap-2 mb-1">
+                <Filter className="w-3.5 h-3.5 text-secondary" />
+                <span className="text-[10px] font-black uppercase tracking-widest text-outline">Filtrar por Pessoa</span>
+                {(personFilter !== 'all' || personRoleFilter !== 'all') && (
+                  <button
+                    onClick={() => { setPersonFilter('all'); setPersonRoleFilter('all'); }}
+                    className="ml-auto text-[9px] font-bold text-outline hover:text-error flex items-center gap-1 transition-colors"
+                  >
+                    <X className="w-3 h-3" /> Limpar filtro
+                  </button>
+                )}
+              </div>
+              {/* Role filter chips */}
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { id: 'all', label: 'Todos' },
+                  { id: 'Administrador', label: 'Administradores' },
+                  { id: 'Advogado', label: 'Advogados' },
+                  { id: 'Estagiário', label: 'Estagiários' },
+                ].map(roleOpt => {
+                  const hasRole = roleOpt.id === 'all' ? true : allProfiles.some(p => p.role === roleOpt.id);
+                  if (!hasRole && roleOpt.id !== 'all') return null;
+                  return (
+                    <button
+                      key={roleOpt.id}
+                      onClick={() => { setPersonRoleFilter(roleOpt.id); setPersonFilter('all'); }}
+                      className={cn(
+                        "px-3 py-1.5 rounded-xl text-[10px] font-bold transition-all border",
+                        personRoleFilter === roleOpt.id
+                          ? "bg-secondary text-on-secondary border-secondary shadow-sm"
+                          : "bg-surface-container-high text-outline border-outline-variant/20 hover:text-on-surface hover:border-outline-variant/40"
+                      )}
+                    >
+                      {roleOpt.label}
+                      {roleOpt.id !== 'all' && (
+                        <span className="ml-1.5 opacity-60">{allProfiles.filter(p => p.role === roleOpt.id).length}</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+              {/* Individual person chips */}
+              {(() => {
+                const profilesToShow = personRoleFilter === 'all' 
+                  ? allProfiles 
+                  : allProfiles.filter(p => p.role === personRoleFilter);
+                return (
+                  <div className="flex flex-wrap gap-2">
+                    {profilesToShow.map(profile => (
+                      <button
+                        key={profile.id}
+                        onClick={() => setPersonFilter(personFilter === profile.name ? 'all' : profile.name)}
+                        className={cn(
+                          "flex items-center gap-2 px-3 py-1.5 rounded-xl text-[10px] font-bold transition-all border",
+                          personFilter === profile.name
+                            ? "bg-secondary/20 text-secondary border-secondary/40 ring-1 ring-secondary/30"
+                            : "bg-surface-container text-on-surface-variant border-outline-variant/10 hover:border-secondary/20 hover:text-on-surface"
+                        )}
+                      >
+                        <span className="w-5 h-5 rounded-full bg-secondary/20 text-secondary flex items-center justify-center font-black text-[9px] shrink-0">
+                          {profile.name?.charAt(0).toUpperCase()}
+                        </span>
+                        {profile.name}
+                        <span className={cn(
+                          "text-[9px] px-1.5 py-0.5 rounded-md font-black uppercase tracking-tight",
+                          profile.role === 'Administrador' ? "bg-purple-500/10 text-purple-400" :
+                          profile.role === 'Advogado' ? "bg-secondary/10 text-secondary" :
+                          "bg-emerald-500/10 text-emerald-400"
+                        )}>
+                          {profile.role === 'Administrador' ? 'Adm' : profile.role === 'Advogado' ? 'Adv' : 'Est'}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
             <div className="bg-gradient-to-br from-error/10 to-surface-container-low p-4 rounded-2xl border border-error/10 flex flex-col gap-2">
               <div className="flex items-center justify-between">
@@ -805,7 +950,7 @@ export function Dashboard() {
       
       if (!error) {
         // Update local tasks state
-        setTasks(prev => prev.map(t => 
+        setAllTasks(prev => prev.map(t => 
           t.id === task.id ? { ...t, fatal_date: fatalDate || null, ideal_date: idealDate || null } : t
         ));
         setSelectedTaskDetail({ ...task, fatal_date: fatalDate || null, ideal_date: idealDate || null });
