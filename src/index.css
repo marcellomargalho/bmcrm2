@@ -5,6 +5,7 @@
   --font-headline: "Manrope", ui-sans-serif, system-ui, sans-serif;
   --font-body: "Inter", ui-sans-serif, system-ui, sans-serif;
 
+  /* ── Superfícies (mantidas) ── */
   --color-surface: #08151b;
   --color-surface-container: #132026;
   --color-surface-container-low: #101d23;
@@ -12,14 +13,37 @@
   --color-surface-container-highest: #2a373d;
   --color-surface-container-lowest: #041015;
 
+  /* ── Acento principal (mantido — âmbar fosco) ── */
   --color-primary: #bbc9d1;
   --color-secondary: #c4986b;
   --color-on-secondary: #08151b;
+
+  /* ── Texto ── */
   --color-on-surface: #d7e5ed;
   --color-on-surface-variant: #c3c7ca;
   --color-outline: #8d9194;
   --color-outline-variant: #43474a;
-  --color-error: #ffb4ab;
+
+  /* ── Status — tons terrosos/foscos no lugar de neon ── */
+  --color-error: #D4756B;          /* vermelho tijolo (era #ffb4ab neon-pink) */
+  --color-success: #5A8F72;        /* verde musgo sólido (substitui #3dffa0 neon) */
+  --color-warning: #B8863A;        /* âmbar escuro fosco */
+
+  /* ── Tailwind emerald → verde musgo (sem neon) ── */
+  --color-emerald-300: #7DAF8E;
+  --color-emerald-400: #6A9E7C;
+  --color-emerald-500: #5A8F72;
+  --color-emerald-600: #4A7A5E;
+
+  /* ── Tailwind amber → âmbar terroso (sem neon) ── */
+  --color-amber-300: #C9A06A;
+  --color-amber-400: #B88C52;
+  --color-amber-500: #A87840;
+  --color-amber-600: #906432;
+
+  /* ── Tailwind orange → laranja queimado (sem neon) ── */
+  --color-orange-400: #B87848;
+  --color-orange-500: #A06035;
 }
 
 @layer base {
@@ -29,7 +53,7 @@
 }
 
 .premium-gradient {
-  background: radial-gradient(circle at center, #132026 0%, #08151b 100%);
+  background: #08151b;
 }
 
 .glass-panel {
@@ -52,5 +76,5 @@
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #f1bd89;
+  background: var(--color-secondary);
 }
