@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, Reorder } from 'motion/react';
-import { TrendingUp, Users, Calendar, Clock, FileText, ArrowRight, Plus, Loader2, CheckCircle2, Check, CalendarClock, AlertTriangle, RotateCcw, GripVertical, ChevronLeft, ChevronRight, X, Gavel, MapPin, User, Tag, Pencil, Save, Filter } from 'lucide-react';
+import { TrendingUp, Users, Calendar, Clock, FileText, ArrowRight, Plus, Loader2, CheckCircle2, Check, CalendarClock, AlertTriangle, RotateCcw, GripVertical, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, X, Gavel, MapPin, User, Tag, Pencil, Save, Filter, AlignLeft, LayoutGrid } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { NewTaskModal } from '@/components/NewTaskModal';
 import { supabase } from '@/lib/supabase';
@@ -91,6 +91,18 @@ export function Dashboard() {
   // Deadline Tables State
   const [deadlineSearch, setDeadlineSearch] = useState('');
   const [deadlineFilter, setDeadlineFilter] = useState<'all' | 'atrasados' | 'hoje' | 'em_dia' | 'revisoes'>('all');
+  const [deadlineViewMode, setDeadlineViewMode] = useState<'lista' | 'tabela'>('lista');
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
+  const [tableExpandedCategory, setTableExpandedCategory] = useState<string | null>(null);
+
+  function toggleSectionCollapse(sectionKey: string) {
+    setCollapsedSections(prev => {
+      const next = new Set(prev);
+      if (next.has(sectionKey)) next.delete(sectionKey);
+      else next.add(sectionKey);
+      return next;
+    });
+  }
 
   // Follow-up state
   const [followUpProcessId, setFollowUpProcessId] = useState<string | null>(null);
@@ -323,139 +335,187 @@ export function Dashboard() {
     outras: tasks.filter(t => !t.fatal_date && t.status !== 'Concluída'),
   };
 
-  const renderDeadlineTable = (tasksList: any[], title: string, color: string, icon: React.ReactNode) => (
-    <div className="bg-surface-container-low rounded-3xl border border-outline-variant/10 overflow-hidden mb-6">
-      <div className="px-6 py-4 border-b border-outline-variant/10 flex items-center justify-between bg-surface-container-high/30">
-        <div className="flex items-center gap-3">
-          <div className={cn("p-2 rounded-xl", color)}>
-            {icon}
-          </div>
-          <h3 className="font-headline font-bold text-sm text-on-surface">{title}</h3>
-          <span className="px-2 py-0.5 bg-surface-container-highest rounded-full text-[10px] font-black text-outline">
-            {tasksList.length}
-          </span>
-        </div>
-      </div>
-      <div className="overflow-x-auto">
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr className="text-[9px] uppercase tracking-widest text-outline font-black border-b border-outline-variant/5">
-              <th className="px-6 py-3">Prazo</th>
-              <th className="px-6 py-3">Descrição</th>
-              <th className="px-6 py-3">Cliente</th>
-              <th className="px-6 py-3">Processo / Origem</th>
-              <th className="px-6 py-3">Tipo</th>
-              <th className="px-6 py-3">Responsável</th>
-              <th className="px-6 py-3 text-right">Ações</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-outline-variant/5">
-            {tasksList.length === 0 ? (
-              <tr>
-                <td colSpan={7} className="px-6 py-8 text-center text-outline text-xs italic">
-                  Nenhuma demanda nesta categoria.
-                </td>
-              </tr>
-            ) : (
-              tasksList.map((task) => {
-                const daysUntil = task.fatal_date ? getDaysUntil(task.fatal_date) : null;
-                const proc = task.processes;
-                return (
-                  <tr 
-                    key={task.id} 
-                    onClick={() => setSelectedTaskDetail(task)}
-                    className="hover:bg-surface-container-high/50 transition-colors group cursor-pointer"
-                  >
-                    <td className="px-6 py-3">
-                      <div className="flex flex-col gap-1.5">
-                        <span className={cn(
-                          "text-xs font-bold",
-                          daysUntil !== null && daysUntil < 0 ? "text-error" :
-                          daysUntil === 0 ? "text-secondary" :
-                          daysUntil !== null && daysUntil <= 3 ? "text-orange-400" :
-                          "text-on-surface"
-                        )}>
-                          {task.fatal_date ? new Date(task.fatal_date + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : 'S/D'}
-                        </span>
-                        {daysUntil !== null && daysUntil < 0 && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-error/15 text-error text-[9px] font-black border border-error/25 animate-pulse w-fit">
-                            ⚠ {Math.abs(daysUntil)}d atraso
-                          </span>
-                        )}
-                        {daysUntil === 0 && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary/15 text-secondary text-[9px] font-black border border-secondary/25 w-fit">
-                            🔔 Vence hoje
-                          </span>
-                        )}
-                        {daysUntil !== null && daysUntil > 0 && daysUntil <= 3 && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-orange-500/15 text-orange-400 text-[9px] font-black border border-orange-500/25 w-fit">
-                            ⏳ {daysUntil}d restantes
-                          </span>
-                        )}
-                        {daysUntil !== null && daysUntil > 3 && daysUntil <= 7 && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 text-[9px] font-bold border border-amber-500/20 w-fit">
-                            {daysUntil}d restantes
-                          </span>
-                        )}
-                        {daysUntil !== null && daysUntil > 7 && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 text-[9px] font-bold border border-emerald-500/20 w-fit">
-                            {daysUntil}d restantes
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-6 py-3 max-w-[200px]">
-                      <p className="text-xs text-on-surface font-medium line-clamp-2">{task.description}</p>
-                    </td>
-                    <td className="px-6 py-3">
-                      <span className="text-xs text-on-surface-variant font-medium truncate block max-w-[140px]">
-                        {task.client_name || proc?.clients?.name || '—'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-3">
-                      <div className="flex flex-col">
-                        <span className="text-[10px] text-on-surface font-mono font-medium truncate max-w-[150px]">
-                          {task.process_number || proc?.number || '—'}
-                        </span>
-                        {(proc?.vara || proc?.comarca) && (
-                          <span className="text-[9px] text-outline truncate max-w-[150px]">
-                            {[proc?.vara, proc?.comarca].filter(Boolean).join(' · ')}
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-6 py-3">
-                      {task.task_type && (
-                        <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-secondary/10 text-secondary border border-secondary/15">
-                          {task.task_type}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-6 py-3">
-                      <span className="text-[10px] text-on-surface-variant font-medium truncate block max-w-[100px]">
-                        {task.responsible?.split(',')[0]?.trim() || '—'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-3 text-right">
-                      <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button 
-                          onClick={(e) => { e.stopPropagation(); toggleTaskComplete(task.id, task.status); }}
-                          className="p-1.5 hover:bg-emerald-500/10 text-outline hover:text-emerald-500 rounded-lg transition-all"
-                          title="Concluir tarefa"
-                        >
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })
+  const AUTO_COLLAPSE_THRESHOLD = 5;
+
+  const renderDeadlineTable = (tasksList: any[], title: string, color: string, icon: React.ReactNode, sectionKey: string) => {
+    const isCollapsed = collapsedSections.has(sectionKey);
+    const shouldAutoCollapse = tasksList.length > AUTO_COLLAPSE_THRESHOLD;
+
+    return (
+      <div className="bg-surface-container-low rounded-3xl border border-outline-variant/10 overflow-hidden mb-6">
+        <div className="px-6 py-4 border-b border-outline-variant/10 flex items-center justify-between bg-surface-container-high/30">
+          <div className="flex items-center gap-3">
+            <div className={cn("p-2 rounded-xl", color)}>
+              {icon}
+            </div>
+            <h3 className="font-headline font-bold text-sm text-on-surface">{title}</h3>
+            <span className="px-2 py-0.5 bg-surface-container-highest rounded-full text-[10px] font-black text-outline">
+              {tasksList.length}
+            </span>
+            {shouldAutoCollapse && !isCollapsed && (
+              <span className="px-2 py-0.5 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-full text-[9px] font-black">
+                +{tasksList.length - AUTO_COLLAPSE_THRESHOLD} ocultas
+              </span>
             )}
-          </tbody>
-        </table>
+          </div>
+          {shouldAutoCollapse && (
+            <button
+              onClick={() => toggleSectionCollapse(sectionKey)}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-bold transition-all border",
+                isCollapsed
+                  ? "bg-secondary/10 text-secondary border-secondary/20 hover:bg-secondary/20"
+                  : "bg-surface-container-highest text-outline border-outline-variant/20 hover:text-on-surface"
+              )}
+            >
+              {isCollapsed ? (
+                <><ChevronDown className="w-3.5 h-3.5" /> Mostrar todas ({tasksList.length})</>
+              ) : (
+                <><ChevronUp className="w-3.5 h-3.5" /> Ocultar ({tasksList.length - AUTO_COLLAPSE_THRESHOLD} a menos)</>
+              )}
+            </button>
+          )}
+        </div>
+        {!isCollapsed && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="text-[9px] uppercase tracking-widest text-outline font-black border-b border-outline-variant/5">
+                <th className="px-6 py-3">Prazo</th>
+                <th className="px-6 py-3">Descrição</th>
+                <th className="px-6 py-3">Cliente</th>
+                <th className="px-6 py-3">Processo / Origem</th>
+                <th className="px-6 py-3">Tipo</th>
+                <th className="px-6 py-3">Responsável</th>
+                <th className="px-6 py-3 text-right">Ações</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-outline-variant/5">
+              {tasksList.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-6 py-8 text-center text-outline text-xs italic">
+                    Nenhuma demanda nesta categoria.
+                  </td>
+                </tr>
+              ) : (
+                tasksList.map((task) => {
+                  const daysUntil = task.fatal_date ? getDaysUntil(task.fatal_date) : null;
+                  const proc = task.processes;
+                  return (
+                    <tr 
+                      key={task.id} 
+                      onClick={() => setSelectedTaskDetail(task)}
+                      className="hover:bg-surface-container-high/50 transition-colors group cursor-pointer"
+                    >
+                      <td className="px-6 py-3">
+                        <div className="flex flex-col gap-1.5">
+                          <span className={cn(
+                            "text-xs font-bold",
+                            daysUntil !== null && daysUntil < 0 ? "text-error" :
+                            daysUntil === 0 ? "text-secondary" :
+                            daysUntil !== null && daysUntil <= 3 ? "text-orange-400" :
+                            "text-on-surface"
+                          )}>
+                            {task.fatal_date ? new Date(task.fatal_date + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : 'S/D'}
+                          </span>
+                          {daysUntil !== null && daysUntil < 0 && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-error/15 text-error text-[9px] font-black border border-error/25 animate-pulse w-fit">
+                              ⚠ {Math.abs(daysUntil)}d atraso
+                            </span>
+                          )}
+                          {daysUntil === 0 && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary/15 text-secondary text-[9px] font-black border border-secondary/25 w-fit">
+                              🔔 Vence hoje
+                            </span>
+                          )}
+                          {daysUntil !== null && daysUntil > 0 && daysUntil <= 3 && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-orange-500/15 text-orange-400 text-[9px] font-black border border-orange-500/25 w-fit">
+                              ⏳ {daysUntil}d restantes
+                            </span>
+                          )}
+                          {daysUntil !== null && daysUntil > 3 && daysUntil <= 7 && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 text-[9px] font-bold border border-amber-500/20 w-fit">
+                              {daysUntil}d restantes
+                            </span>
+                          )}
+                          {daysUntil !== null && daysUntil > 7 && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 text-[9px] font-bold border border-emerald-500/20 w-fit">
+                              {daysUntil}d restantes
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-6 py-3 max-w-[200px]">
+                        <p className="text-xs text-on-surface font-medium line-clamp-2">{task.description}</p>
+                      </td>
+                      <td className="px-6 py-3">
+                        <span className="text-xs text-on-surface-variant font-medium truncate block max-w-[140px]">
+                          {task.client_name || proc?.clients?.name || '—'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-3">
+                        <div className="flex flex-col">
+                          <span className="text-[10px] text-on-surface font-mono font-medium truncate max-w-[150px]">
+                            {task.process_number || proc?.number || '—'}
+                          </span>
+                          {(proc?.vara || proc?.comarca) && (
+                            <span className="text-[9px] text-outline truncate max-w-[150px]">
+                              {[proc?.vara, proc?.comarca].filter(Boolean).join(' · ')}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-6 py-3">
+                        {task.task_type && (
+                          <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-secondary/10 text-secondary border border-secondary/15">
+                            {task.task_type}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-6 py-3">
+                        <span className="text-[10px] text-on-surface-variant font-medium truncate block max-w-[100px]">
+                          {task.responsible?.split(',')[0]?.trim() || '—'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-3 text-right">
+                        <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); toggleTaskComplete(task.id, task.status); }}
+                            className="p-1.5 hover:bg-emerald-500/10 text-outline hover:text-emerald-500 rounded-lg transition-all"
+                            title="Concluir tarefa"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+        )}
+        {isCollapsed && tasksList.length > 0 && (
+          <div className="px-6 py-4 flex items-center gap-3 flex-wrap">
+            {tasksList.slice(0, 3).map(task => (
+              <button
+                key={task.id}
+                onClick={() => setSelectedTaskDetail(task)}
+                className="flex items-center gap-2 px-3 py-1.5 bg-surface-container-highest rounded-xl text-[10px] font-medium text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-all border border-outline-variant/10"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-outline shrink-0" />
+                <span className="truncate max-w-[160px]">{task.description}</span>
+              </button>
+            ))}
+            {tasksList.length > 3 && (
+              <span className="text-[10px] text-outline font-bold">+{tasksList.length - 3} demandas ocultas</span>
+            )}
+          </div>
+        )}
       </div>
-    </div>
-  );
+    );
+  };
 
   // Drag-and-drop
   const { order, draggedId, overId, handleDragStart, handleDragOver, handleDrop, handleDragEnd } =
@@ -725,34 +785,58 @@ export function Dashboard() {
                 Nova Tarefa
               </button>
             </div>
-            <div className="flex bg-surface-container-low p-1 rounded-xl border border-outline-variant/10">
-              <button 
-                onClick={() => setDeadlineFilter('all')}
-                className={cn(
-                  "px-3 py-1 rounded-lg text-[10px] font-bold transition-all",
-                  deadlineFilter === 'all' ? "bg-secondary text-on-secondary" : "text-outline hover:text-on-surface"
-                )}
-              >
-                Todos
-              </button>
-              <button 
-                onClick={() => setDeadlineFilter('atrasados')}
-                className={cn(
-                  "px-3 py-1 rounded-lg text-[10px] font-bold transition-all",
-                  deadlineFilter === 'atrasados' ? "bg-error text-white" : "text-outline hover:text-on-surface"
-                )}
-              >
-                Atrasados
-              </button>
-              <button 
-                onClick={() => setDeadlineFilter('revisoes')}
-                className={cn(
-                  "px-3 py-1 rounded-lg text-[10px] font-bold transition-all",
-                  deadlineFilter === 'revisoes' ? "bg-amber-500 text-white" : "text-outline hover:text-on-surface"
-                )}
-              >
-                Revisões
-              </button>
+            <div className="flex items-center gap-2">
+              {/* View mode toggle */}
+              <div className="flex bg-surface-container-low p-1 rounded-xl border border-outline-variant/10">
+                <button
+                  onClick={() => setDeadlineViewMode('lista')}
+                  className={cn(
+                    "flex items-center gap-1.5 px-3 py-1 rounded-lg text-[10px] font-bold transition-all",
+                    deadlineViewMode === 'lista' ? "bg-secondary text-on-secondary" : "text-outline hover:text-on-surface"
+                  )}
+                >
+                  <AlignLeft className="w-3 h-3" /> Lista
+                </button>
+                <button
+                  onClick={() => setDeadlineViewMode('tabela')}
+                  className={cn(
+                    "flex items-center gap-1.5 px-3 py-1 rounded-lg text-[10px] font-bold transition-all",
+                    deadlineViewMode === 'tabela' ? "bg-secondary text-on-secondary" : "text-outline hover:text-on-surface"
+                  )}
+                >
+                  <LayoutGrid className="w-3 h-3" /> Tabela
+                </button>
+              </div>
+              {/* Category filter */}
+              <div className="flex bg-surface-container-low p-1 rounded-xl border border-outline-variant/10">
+                <button 
+                  onClick={() => setDeadlineFilter('all')}
+                  className={cn(
+                    "px-3 py-1 rounded-lg text-[10px] font-bold transition-all",
+                    deadlineFilter === 'all' ? "bg-secondary text-on-secondary" : "text-outline hover:text-on-surface"
+                  )}
+                >
+                  Todos
+                </button>
+                <button 
+                  onClick={() => setDeadlineFilter('atrasados')}
+                  className={cn(
+                    "px-3 py-1 rounded-lg text-[10px] font-bold transition-all",
+                    deadlineFilter === 'atrasados' ? "bg-error text-white" : "text-outline hover:text-on-surface"
+                  )}
+                >
+                  Atrasados
+                </button>
+                <button 
+                  onClick={() => setDeadlineFilter('revisoes')}
+                  className={cn(
+                    "px-3 py-1 rounded-lg text-[10px] font-bold transition-all",
+                    deadlineFilter === 'revisoes' ? "bg-amber-500 text-white" : "text-outline hover:text-on-surface"
+                  )}
+                >
+                  Acompanhamentos
+                </button>
+              </div>
             </div>
           </div>
 
@@ -838,59 +922,164 @@ export function Dashboard() {
             </div>
           )}
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-            <div className="bg-gradient-to-br from-error/10 to-surface-container-low p-4 rounded-2xl border border-error/10 flex flex-col gap-2">
-              <div className="flex items-center justify-between">
-                <span className="text-[9px] font-black uppercase tracking-widest text-error/80">Atrasados</span>
-                <AlertTriangle className="w-4 h-4 text-error" />
-              </div>
-              <h3 className="text-2xl font-headline font-black text-error">{categorizedTasks.atrasados.length}</h3>
-            </div>
-            <div className="bg-gradient-to-br from-secondary/10 to-surface-container-low p-4 rounded-2xl border border-secondary/10 flex flex-col gap-2">
-              <div className="flex items-center justify-between">
-                <span className="text-[9px] font-black uppercase tracking-widest text-secondary/80">Para Hoje</span>
-                <Clock className="w-4 h-4 text-secondary" />
-              </div>
-              <h3 className="text-2xl font-headline font-black text-secondary">{categorizedTasks.hoje.length}</h3>
-            </div>
-            <div className="bg-gradient-to-br from-emerald-500/10 to-surface-container-low p-4 rounded-2xl border border-emerald-500/10 flex flex-col gap-2">
-              <div className="flex items-center justify-between">
-                <span className="text-[9px] font-black uppercase tracking-widest text-emerald-500/80">Em Dia</span>
-                <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-              </div>
-              <h3 className="text-2xl font-headline font-black text-on-surface">{categorizedTasks.em_dia.length}</h3>
-            </div>
+          {/* Summary cards - always visible */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            {[
+              { key: 'atrasados', label: 'Atrasados', count: categorizedTasks.atrasados.length, color: 'from-error/10', border: 'border-error/10', textColor: 'text-error', icon: <AlertTriangle className="w-4 h-4 text-error" /> },
+              { key: 'hoje', label: 'Para Hoje', count: categorizedTasks.hoje.length, color: 'from-secondary/10', border: 'border-secondary/10', textColor: 'text-secondary', icon: <Clock className="w-4 h-4 text-secondary" /> },
+              { key: 'em_dia', label: 'Em Dia', count: categorizedTasks.em_dia.length, color: 'from-emerald-500/10', border: 'border-emerald-500/10', textColor: 'text-emerald-500', icon: <CheckCircle2 className="w-4 h-4 text-emerald-500" /> },
+              { key: 'revisoes', label: 'Acompanhamentos', count: categorizedTasks.revisoes_pendentes.length, color: 'from-amber-500/10', border: 'border-amber-500/10', textColor: 'text-amber-500', icon: <RotateCcw className="w-4 h-4 text-amber-500" /> },
+            ].map(({ key, label, count, color, border, textColor, icon }) => (
+              <button
+                key={key}
+                onClick={() => {
+                  setDeadlineFilter(key as any);
+                  if (deadlineViewMode === 'tabela') {
+                    setTableExpandedCategory(tableExpandedCategory === key ? null : key);
+                  }
+                }}
+                className={cn(
+                  "bg-gradient-to-br to-surface-container-low p-4 rounded-2xl border flex flex-col gap-2 text-left transition-all hover:scale-[1.02] hover:shadow-lg",
+                  color, border,
+                  deadlineFilter === key && "ring-2 ring-offset-1 ring-offset-transparent",
+                  key === 'atrasados' && deadlineFilter === key && "ring-error/40",
+                  key === 'hoje' && deadlineFilter === key && "ring-secondary/40",
+                  key === 'em_dia' && deadlineFilter === key && "ring-emerald-500/40",
+                  key === 'revisoes' && deadlineFilter === key && "ring-amber-500/40",
+                )}
+              >
+                <div className="flex items-center justify-between">
+                  <span className={cn("text-[9px] font-black uppercase tracking-widest opacity-80", textColor)}>{label}</span>
+                  {icon}
+                </div>
+                <div className="flex items-end justify-between">
+                  <h3 className={cn("text-3xl font-headline font-black", textColor)}>{count}</h3>
+                  {deadlineViewMode === 'tabela' && count > 0 && (
+                    <span className={cn("text-[9px] font-bold flex items-center gap-1", textColor)}>
+                      {tableExpandedCategory === key ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                      {tableExpandedCategory === key ? 'Fechar' : 'Ver'}
+                    </span>
+                  )}
+                </div>
+              </button>
+            ))}
           </div>
 
-          <div className="grid grid-cols-1 xl:grid-cols-1 gap-6">
-            {(deadlineFilter === 'all' || deadlineFilter === 'atrasados') && renderDeadlineTable(
-              categorizedTasks.atrasados, 
-              "Demandas em Atraso", 
-              "bg-error/10 text-error", 
-              <AlertTriangle className="w-4 h-4" />
-            )}
+          {/* TABLE MODE: compact expandable panels per category */}
+          {deadlineViewMode === 'tabela' && (
+            <div className="space-y-3">
+              {[
+                { key: 'atrasados', label: 'Demandas em Atraso', tasks: categorizedTasks.atrasados, color: 'bg-error/10 text-error', icon: <AlertTriangle className="w-4 h-4" /> },
+                { key: 'revisoes', label: 'Acompanhamentos Pendentes', tasks: categorizedTasks.revisoes_pendentes, color: 'bg-amber-500/10 text-amber-500', icon: <RotateCcw className="w-4 h-4" /> },
+                { key: 'hoje', label: 'Vencendo Hoje', tasks: categorizedTasks.hoje, color: 'bg-secondary/10 text-secondary', icon: <Clock className="w-4 h-4" /> },
+                { key: 'em_dia', label: 'Prazos em Dia', tasks: categorizedTasks.em_dia, color: 'bg-emerald-500/10 text-emerald-500', icon: <CheckCircle2 className="w-4 h-4" /> },
+              ].filter(({ key }) => deadlineFilter === 'all' || deadlineFilter === key || (deadlineFilter === 'revisoes' && key === 'revisoes'))
+               .map(({ key, label, tasks, color, icon }) => {
+                const isExpanded = tableExpandedCategory === key;
+                return (
+                  <div key={key} className="bg-surface-container-low rounded-2xl border border-outline-variant/10 overflow-hidden">
+                    <button
+                      onClick={() => setTableExpandedCategory(isExpanded ? null : key)}
+                      className="w-full px-6 py-4 flex items-center justify-between hover:bg-surface-container-high/30 transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={cn("p-1.5 rounded-lg", color)}>{icon}</div>
+                        <span className="font-headline font-bold text-sm text-on-surface">{label}</span>
+                        <span className="px-2 py-0.5 bg-surface-container-highest rounded-full text-[10px] font-black text-outline">{tasks.length}</span>
+                      </div>
+                      <ChevronDown className={cn("w-4 h-4 text-outline transition-transform duration-200", isExpanded && "rotate-180")} />
+                    </button>
+                    {isExpanded && tasks.length > 0 && (
+                      <div className="border-t border-outline-variant/10 overflow-x-auto">
+                        <table className="w-full text-left border-collapse">
+                          <thead>
+                            <tr className="text-[9px] uppercase tracking-widest text-outline font-black border-b border-outline-variant/5">
+                              <th className="px-6 py-3">Prazo</th>
+                              <th className="px-6 py-3">Descrição</th>
+                              <th className="px-6 py-3">Cliente</th>
+                              <th className="px-6 py-3">Processo</th>
+                              <th className="px-6 py-3">Responsável</th>
+                              <th className="px-6 py-3 text-right">Ações</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-outline-variant/5">
+                            {tasks.map(task => {
+                              const daysUntil = task.fatal_date ? getDaysUntil(task.fatal_date) : null;
+                              const proc = task.processes;
+                              return (
+                                <tr key={task.id} onClick={() => setSelectedTaskDetail(task)} className="hover:bg-surface-container-high/50 transition-colors group cursor-pointer">
+                                  <td className="px-6 py-3">
+                                    <span className={cn("text-xs font-bold",
+                                      daysUntil !== null && daysUntil < 0 ? "text-error" :
+                                      daysUntil === 0 ? "text-secondary" :
+                                      "text-on-surface"
+                                    )}>
+                                      {task.fatal_date ? new Date(task.fatal_date + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : 'S/D'}
+                                    </span>
+                                  </td>
+                                  <td className="px-6 py-3 max-w-[220px]"><p className="text-xs text-on-surface font-medium line-clamp-2">{task.description}</p></td>
+                                  <td className="px-6 py-3"><span className="text-xs text-on-surface-variant font-medium truncate block max-w-[140px]">{task.client_name || proc?.clients?.name || '—'}</span></td>
+                                  <td className="px-6 py-3"><span className="text-[10px] text-on-surface font-mono font-medium truncate block max-w-[150px]">{task.process_number || proc?.number || '—'}</span></td>
+                                  <td className="px-6 py-3"><span className="text-[10px] text-on-surface-variant font-medium truncate block max-w-[100px]">{task.responsible?.split(',')[0]?.trim() || '—'}</span></td>
+                                  <td className="px-6 py-3 text-right">
+                                    <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                      <button onClick={(e) => { e.stopPropagation(); toggleTaskComplete(task.id, task.status); }} className="p-1.5 hover:bg-emerald-500/10 text-outline hover:text-emerald-500 rounded-lg transition-all" title="Concluir">
+                                        <CheckCircle2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                    {isExpanded && tasks.length === 0 && (
+                      <p className="px-6 py-4 text-xs text-outline italic text-center border-t border-outline-variant/10">Nenhuma demanda nesta categoria.</p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
-            {(deadlineFilter === 'all' || deadlineFilter === 'revisoes') && categorizedTasks.revisoes_pendentes.length > 0 && renderDeadlineTable(
-              categorizedTasks.revisoes_pendentes, 
-              "Revisões Pendentes", 
-              "bg-amber-500/10 text-amber-500", 
-              <RotateCcw className="w-4 h-4" />
-            )}
-            
-            {(deadlineFilter === 'all' || deadlineFilter === 'hoje') && renderDeadlineTable(
-              categorizedTasks.hoje, 
-              "Vencendo Hoje", 
-              "bg-secondary/10 text-secondary", 
-              <Clock className="w-4 h-4" />
-            )}
+          {/* LIST MODE: full expanded tables */}
+          {deadlineViewMode === 'lista' && (
+            <div className="grid grid-cols-1 xl:grid-cols-1 gap-6">
+              {(deadlineFilter === 'all' || deadlineFilter === 'atrasados') && renderDeadlineTable(
+                categorizedTasks.atrasados, 
+                "Demandas em Atraso", 
+                "bg-error/10 text-error", 
+                <AlertTriangle className="w-4 h-4" />,
+                'atrasados'
+              )}
 
-            {(deadlineFilter === 'all' || deadlineFilter === 'em_dia') && renderDeadlineTable(
-              categorizedTasks.em_dia, 
-              "Prazos em Dia", 
-              "bg-emerald-500/10 text-emerald-500", 
-              <Calendar className="w-4 h-4" />
-            )}
-          </div>
+              {(deadlineFilter === 'all' || deadlineFilter === 'revisoes') && categorizedTasks.revisoes_pendentes.length > 0 && renderDeadlineTable(
+                categorizedTasks.revisoes_pendentes, 
+                "Acompanhamentos Pendentes", 
+                "bg-amber-500/10 text-amber-500", 
+                <RotateCcw className="w-4 h-4" />,
+                'revisoes'
+              )}
+              
+              {(deadlineFilter === 'all' || deadlineFilter === 'hoje') && renderDeadlineTable(
+                categorizedTasks.hoje, 
+                "Vencendo Hoje", 
+                "bg-secondary/10 text-secondary", 
+                <Clock className="w-4 h-4" />,
+                'hoje'
+              )}
+
+              {(deadlineFilter === 'all' || deadlineFilter === 'em_dia') && renderDeadlineTable(
+                categorizedTasks.em_dia, 
+                "Prazos em Dia", 
+                "bg-emerald-500/10 text-emerald-500", 
+                <Calendar className="w-4 h-4" />,
+                'em_dia'
+              )}
+            </div>
+          )}
         </div>
       </DraggableWidget>
     ),

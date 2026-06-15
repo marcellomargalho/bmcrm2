@@ -93,9 +93,7 @@ export function NewTaskModal({ isOpen, onClose, onSuccess, lockedProcessId, edit
 
   // Reset form
   function resetForm() {
-    if (lockedProcessId) return;
-    setSelectedClientId('');
-    setSelectedProcessId('');
+    // Always reset task-specific fields
     setTaskType('');
     setDescription('');
     setResponsibles([]);
@@ -104,6 +102,11 @@ export function NewTaskModal({ isOpen, onClose, onSuccess, lockedProcessId, edit
     setFatalDate('');
     setIdealDate('');
     setError('');
+    // Only reset client/process selection if no locked process
+    if (!lockedProcessId) {
+      setSelectedClientId('');
+      setSelectedProcessId('');
+    }
   }
 
   function handleClose() {
