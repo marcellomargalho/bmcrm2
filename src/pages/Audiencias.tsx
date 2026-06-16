@@ -1644,53 +1644,13 @@ export function Audiencias() {
                   </div>
                 </div>
 
-                 <div className="flex justify-end gap-2 pt-4 border-t border-outline-variant/10 shrink-0">
+                 <div className="flex justify-end gap-3 pt-4 border-t border-outline-variant/10 shrink-0">
                   <button
                     type="button"
                     onClick={() => setShowConfig(false)}
                     className="px-4 py-2 hover:bg-surface-container-high text-on-surface rounded-xl font-bold"
                   >
                     Fechar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      if (!emailConfig.senior_email) {
-                        toast.error('Configure o e-mail da sênior antes de testar.');
-                        return;
-                      }
-                      setSavingConfig(true);
-                      try {
-                        const { data, error } = await supabase.functions.invoke('send-notification', {
-                          body: {
-                            type: 'task_created',
-                            recipients: [emailConfig.senior_email],
-                            data: {
-                              processNumber: '0000000-00.2026.8.26.0000',
-                              clientName: 'Cliente de Teste (Audiência)',
-                              responsible: 'Brenda Margalho',
-                              nextAction: 'Esta é uma notificação de teste enviada a partir do painel de audiências.',
-                              deadline: '16/06/2026',
-                              observations: 'Verificação das configurações do painel de audiências.',
-                              systemUrl: window.location.origin
-                            }
-                          }
-                        });
-                        
-                        if (error) throw error;
-                        
-                        toast.success('E-mail de teste enviado com sucesso!');
-                      } catch (err: any) {
-                        console.error(err);
-                        toast.error(`Falha no envio de teste: ${err.message || String(err)}`);
-                      } finally {
-                        setSavingConfig(false);
-                      }
-                    }}
-                    disabled={savingConfig}
-                    className="px-4 py-2 bg-surface-container-highest text-on-surface-variant hover:bg-surface-container-high rounded-xl font-bold transition-all"
-                  >
-                    Testar Envio
                   </button>
                   <button
                     type="button"
