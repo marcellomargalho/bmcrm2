@@ -1661,13 +1661,8 @@ export function Audiencias() {
                       }
                       setSavingConfig(true);
                       try {
-                        const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-notification`, {
-                          method: 'POST',
-                          headers: {
-                            'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-                          },
-                          body: JSON.stringify({
+                        const { data, error } = await supabase.functions.invoke('send-notification', {
+                          body: {
                             type: 'task_created',
                             recipients: [emailConfig.senior_email],
                             data: {
@@ -1679,13 +1674,10 @@ export function Audiencias() {
                               observations: 'Verificação das configurações do painel de audiências.',
                               systemUrl: window.location.origin
                             }
-                          })
+                          }
                         });
                         
-                        const result = await response.json();
-                        if (!response.ok) {
-                          throw new Error(result.error || 'Erro ao chamar a Edge Function de envio.');
-                        }
+                        if (error) throw error;
                         
                         toast.success('E-mail de teste enviado com sucesso!');
                       } catch (err: any) {
