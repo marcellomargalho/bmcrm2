@@ -128,24 +128,42 @@ export function Dashboard() {
   }
 
   const fetchStats = useCallback(async (u: {id: string, name: string, role: string}) => {
-    // 1. Fetch Active Processes where user is responsible
-    // The query depends on whether we want strict equality or ILIKE
-    // Based on ProcessList, responsible is a string (often comma-separated)
-    const { count: procCount } = await supabase
-      .from('processes')
-      .select('*', { count: 'exact', head: true })
-      .neq('status', 'Arquivado')
-      .ilike('responsible', `%${u.name}%`);
-    
-    setActiveProcessesCount(procCount || 0);
+    // 1. Fetch Processes Em Monitoramento (processos com tarefas de Acompanhamento de Processo ativas do usuário)
+    const isAdminOrAdv = u.role === 'Administrador' || u.role === 'Advogado';
+    let procCount = 0;
+    if (isAdminOrAdv) {
+      // Admin/Adv: conta processos com tarefas de acompanhamento ativas
+      const { data: monitoringTasks } = await supabase
+        .from('tasks')
+        .select('process_id')
+        .eq('task_type', 'Acompanhamento de Processo')
+        .neq('status', 'Concluída')
+        .ilike('responsible', `%${u.name}%`)
+        .not('process_id', 'is', null);
+      // Distinct process IDs
+      const uniqueProcessIds = new Set((monitoringTasks || []).map((t: any) => t.process_id));
+      procCount = uniqueProcessIds.size;
+    } else {
+      // Estagiário: conta processos com tarefas de acompanhamento ativas
+      const { data: monitoringTasks } = await supabase
+        .from('tasks')
+        .select('process_id')
+        .eq('task_type', 'Acompanhamento de Processo')
+        .neq('status', 'Concluída')
+        .or(`user_id.eq.${u.id}${u.name ? `,responsible.ilike.%${u.name}%` : ''}`)
+        .not('process_id', 'is', null);
+      const uniqueProcessIds = new Set((monitoringTasks || []).map((t: any) => t.process_id));
+      procCount = uniqueProcessIds.size;
+    }
+    setActiveProcessesCount(procCount);
 
-    // 2. Fetch Today's Appointments
+    // 2. Fetch Today's Audiências (from hearings table)
     const today = new Date().toISOString().split('T')[0];
     const { count: eventCount } = await supabase
-      .from('appointments')
+      .from('hearings')
       .select('*', { count: 'exact', head: true })
-      .gte('start_time', `${today}T00:00:00Z`)
-      .lte('start_time', `${today}T23:59:59Z`);
+      .eq('hearing_date', today)
+      .neq('status', 'cancelada');
 
     setTodayEventsCount(eventCount || 0);
   }, []);
@@ -527,12 +545,12 @@ export function Dashboard() {
       <DraggableWidget id="stats" draggedId={draggedId} overId={overId} onDragStart={handleDragStart} onDragOver={handleDragOver} onDrop={handleDrop} onDragEnd={handleDragEnd}>
         <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="bg-surface-container-low p-6 rounded-2xl border-l-4 border-secondary flex flex-col justify-between">
-            <span className="text-outline text-xs uppercase tracking-widest font-semibold">Processos Ativos</span>
+            <span className="text-outline text-xs uppercase tracking-widest font-semibold">Em Monitoramento</span>
             <div className="mt-4">
               <h3 className="text-4xl font-headline font-black text-on-surface">{activeProcessesCount}</h3>
               <p className="text-secondary text-sm font-medium mt-1 flex items-center gap-1">
                 <TrendingUp className="w-4 h-4" />
-                Seus processos
+                Processos em acompanhamento
               </p>
             </div>
           </div>
@@ -541,7 +559,7 @@ export function Dashboard() {
             <span className="text-outline text-xs uppercase tracking-widest font-semibold">Audiências do Dia</span>
             <div className="mt-4">
               <h3 className="text-3xl font-headline font-bold text-on-surface">{todayEventsCount.toString().padStart(2, '0')}</h3>
-              <p className="text-on-surface-variant text-sm mt-1">Sua agenda de hoje</p>
+              <p className="text-on-surface-variant text-sm mt-1">Agendadas para hoje</p>
             </div>
           </div>
 

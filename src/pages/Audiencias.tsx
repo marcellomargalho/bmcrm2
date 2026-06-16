@@ -3,7 +3,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   Calendar, Clock, Plus, Loader2, AlertCircle, RefreshCw, Trash2, Edit2,
   X, Check, FileText, CheckCircle2, AlertTriangle, Upload, Eye, FileCheck,
-  Search, Filter, ExternalLink, Mail, ShieldAlert, FileSpreadsheet, ArrowRight
+  Search, Filter, ExternalLink, Mail, ShieldAlert, FileSpreadsheet, ArrowRight,
+  ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
@@ -152,6 +153,13 @@ export function Audiencias() {
   const [showConfig, setShowConfig] = useState(false);
   const [savingConfig, setSavingConfig] = useState(false);
   const [newTeamEmail, setNewTeamEmail] = useState('');
+
+  // Mês View State
+  const [monthViewDate, setMonthViewDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+  const monthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+  const handlePrevMonth = () => setMonthViewDate(d => new Date(d.getFullYear(), d.getMonth() - 1, 1));
+  const handleNextMonth = () => setMonthViewDate(d => new Date(d.getFullYear(), d.getMonth() + 1, 1));
+
 
   const fetchHearingsAndLogs = useCallback(async () => {
     setLoading(true);
@@ -686,6 +694,150 @@ export function Audiencias() {
           </button>
         </div>
       </section>
+
+      {/* ─── AUDIÊNCIAS DO MÊSPara todos os usuários ──────────────────────────── */}
+      <div className="bg-surface-container-low border border-outline-variant/10 rounded-3xl overflow-hidden">
+        {/* Cabeçalho do mês */}
+        <div className="px-6 py-4 border-b border-outline-variant/10 flex items-center justify-between bg-surface-container-high/30">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-xl bg-secondary/10">
+              <Calendar className="w-4 h-4 text-secondary" />
+            </div>
+            <div>
+              <h3 className="font-headline font-bold text-sm text-on-surface">Audiências do Mês</h3>
+              <p className="text-[10px] text-outline uppercase tracking-wider font-bold">
+                {monthNames[monthViewDate.getMonth()]} {monthViewDate.getFullYear()}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handlePrevMonth}
+              className="p-1.5 hover:bg-surface-container-highest rounded-xl text-on-surface-variant transition-colors"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setMonthViewDate(new Date(new Date().getFullYear(), new Date().getMonth(), 1))}
+              className="px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-secondary bg-secondary/10 hover:bg-secondary/20 rounded-lg transition-colors"
+            >
+              Hoje
+            </button>
+            <button
+              onClick={handleNextMonth}
+              className="p-1.5 hover:bg-surface-container-highest rounded-xl text-on-surface-variant transition-colors"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Audiências do mês selecionado */}
+        {(() => {
+          const year = monthViewDate.getFullYear();
+          const month = monthViewDate.getMonth();
+          const monthStr = `${year}-${String(month + 1).padStart(2, '0')}`;
+          const monthHearings = hearings
+            .filter(h => h.hearing_date.startsWith(monthStr) && h.status !== 'cancelada')
+            .sort((a, b) => a.hearing_date.localeCompare(b.hearing_date) || a.hearing_time.localeCompare(b.hearing_time));
+
+          if (loading) {
+            return (
+              <div className="flex items-center justify-center py-10">
+                <Loader2 className="w-6 h-6 animate-spin text-secondary" />
+              </div>
+            );
+          }
+
+          if (monthHearings.length === 0) {
+            return (
+              <div className="flex flex-col items-center justify-center py-12 gap-3 text-center">
+                <div className="w-12 h-12 rounded-2xl bg-secondary/5 flex items-center justify-center">
+                  <Calendar className="w-6 h-6 text-secondary/40" />
+                </div>
+                <p className="text-sm font-bold text-on-surface-variant">Nenhuma audiência em {monthNames[month]}</p>
+                <button
+                  onClick={handleOpenCreateModal}
+                  className="flex items-center gap-2 px-4 py-2 bg-secondary text-on-secondary hover:opacity-90 rounded-xl font-bold text-xs shadow-lg shadow-secondary/15 transition-all"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Agendar Audiência
+                </button>
+              </div>
+            );
+          }
+
+          // Agrupa por dia
+          const byDay: Record<string, typeof monthHearings> = {};
+          monthHearings.forEach(h => {
+            if (!byDay[h.hearing_date]) byDay[h.hearing_date] = [];
+            byDay[h.hearing_date].push(h);
+          });
+
+          return (
+            <div className="divide-y divide-outline-variant/10">
+              {Object.entries(byDay).map(([date, dayHearings]) => {
+                const [, , dd] = date.split('-');
+                const dayOfWeek = new Date(date + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'short' });
+                const isToday = date === new Date().toISOString().split('T')[0];
+                return (
+                  <div key={date} className={cn('px-6 py-4 flex gap-4', isToday && 'bg-secondary/5')}>
+                    {/* Data pill */}
+                    <div className={cn(
+                      'flex-shrink-0 w-14 h-14 rounded-2xl flex flex-col items-center justify-center text-center',
+                      isToday ? 'bg-secondary text-on-secondary' : 'bg-surface-container-high text-on-surface'
+                    )}>
+                      <span className="text-[10px] font-bold uppercase tracking-widest opacity-70">{dayOfWeek}</span>
+                      <span className="text-xl font-headline font-black leading-none">{dd}</span>
+                    </div>
+
+                    {/* Audiências do dia */}
+                    <div className="flex-1 space-y-2">
+                      {dayHearings.map(h => (
+                        <div key={h.id} className="flex items-center gap-3 bg-surface-container-high/40 rounded-xl px-3 py-2.5 border border-outline-variant/10 hover:border-secondary/20 transition-colors">
+                          <div className="w-1.5 h-8 rounded-full flex-shrink-0" style={{ background: h.status === 'concluida' ? '#34d399' : h.status.startsWith('notificacao') ? '#a78bfa' : '#60a5fa' }} />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-xs font-black text-on-surface truncate">{h.client_name}</span>
+                              <span className={cn('text-[9px] px-1.5 py-0.5 rounded-md font-bold border', STATUS_STYLES[h.status])}>{STATUS_LABELS[h.status]}</span>
+                            </div>
+                            <div className="flex items-center gap-3 mt-0.5">
+                              <span className="text-[10px] text-secondary font-bold">{h.hearing_time.slice(0,5)}h</span>
+                              <span className="text-[10px] text-outline font-mono">{h.process_number}</span>
+                              {h.comarca && <span className="text-[10px] text-outline">· {h.comarca}</span>}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1 flex-shrink-0">
+                            <button
+                              onClick={() => handleOpenEditModal(h)}
+                              className="p-1.5 rounded-lg hover:bg-surface-container-highest text-outline hover:text-on-surface transition-colors"
+                              title="Editar"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+
+              {/* Rodapé com total */}
+              <div className="px-6 py-3 flex items-center justify-between bg-surface-container-high/20">
+                <span className="text-[10px] text-outline font-bold uppercase tracking-wider">
+                  {monthHearings.length} audiência{monthHearings.length !== 1 ? 's' : ''} em {monthNames[month]}
+                </span>
+                <button
+                  onClick={handleOpenCreateModal}
+                  className="flex items-center gap-1.5 text-[10px] font-bold text-secondary hover:text-secondary/80 transition-colors uppercase tracking-wider"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Nova Audiência
+                </button>
+              </div>
+            </div>
+          );
+        })()}
+      </div>
 
       {/* Tabs */}
       <div className="flex bg-surface-container-low p-1 rounded-2xl border border-outline-variant/10 gap-1">
