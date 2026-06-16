@@ -392,10 +392,23 @@ export function Sidebar({ onLogout, userRole }: { onLogout: () => void, userRole
   );
 }
 
-export function TopBar({ userRole }: { userRole: string | null }) {
+export function TopBar({ userRole, onLogout }: { userRole: string | null, onLogout: () => void }) {
   const user = useUser();
   const userName = user?.user_metadata?.full_name || 'Usuário';
   const role = userRole || user?.user_metadata?.role || 'Advogado';
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  // Close on outside click
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
 
   return (
     <header className="fixed top-0 right-0 w-[calc(100%-16rem)] h-16 bg-surface/80 backdrop-blur-xl flex justify-end items-center px-8 z-40 shadow-[0_20px_40px_rgba(4,16,21,0.4)]">
@@ -406,14 +419,34 @@ export function TopBar({ userRole }: { userRole: string | null }) {
         
         <div className="h-8 w-[1px] bg-outline-variant/20"></div>
         
-        <div className="flex items-center gap-3">
-          <div className="text-right">
-            <p className="text-xs font-headline font-bold text-on-surface leading-none">{userName}</p>
-            <p className="text-[10px] text-outline">{role}</p>
-          </div>
-          <div className="w-8 h-8 rounded-full bg-surface-container-high ring-2 ring-secondary/20 flex items-center justify-center">
-            <span className="font-headline font-bold text-secondary text-xs">{userName.charAt(0).toUpperCase()}</span>
-          </div>
+        <div className="relative" ref={ref}>
+          <button 
+            onClick={() => setOpen(v => !v)}
+            className="flex items-center gap-3 hover:opacity-80 transition-opacity focus:outline-none"
+          >
+            <div className="text-right">
+              <p className="text-xs font-headline font-bold text-on-surface leading-none">{userName}</p>
+              <p className="text-[10px] text-outline mt-1">{role}</p>
+            </div>
+            <div className="w-8 h-8 rounded-full bg-surface-container-high ring-2 ring-secondary/20 flex items-center justify-center shrink-0">
+              <span className="font-headline font-bold text-secondary text-xs">{userName.charAt(0).toUpperCase()}</span>
+            </div>
+          </button>
+
+          {open && (
+            <div className="absolute right-0 top-12 w-48 bg-surface-container rounded-2xl shadow-2xl border border-outline-variant/20 z-[200] overflow-hidden animate-in fade-in zoom-in-95 duration-150 p-2">
+              <button 
+                onClick={() => {
+                  setOpen(false);
+                  onLogout();
+                }}
+                className="flex items-center gap-3 px-4 py-3 rounded-xl text-error opacity-70 hover:bg-error/10 hover:opacity-100 transition-all w-full text-left active:scale-95"
+              >
+                <LogOut className="w-4 h-4" />
+                <span className="font-headline text-sm tracking-tight">Sair do perfil</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </header>
