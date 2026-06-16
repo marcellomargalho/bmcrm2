@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
+import toast from 'react-hot-toast';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -493,15 +494,28 @@ export function PainelExecutivo() {
 
   async function saveEmailSettings() {
     setSavingEmail(true);
-    const { id, ...rest } = emailSettings as any;
-    if (id) {
-      await supabase.from('email_notification_settings').update({ ...rest, updated_at: new Date().toISOString() }).eq('id', id);
-    } else {
-      await supabase.from('email_notification_settings').insert([{ ...rest }]);
+    try {
+      const { id, ...rest } = emailSettings as any;
+      let error;
+      if (id) {
+        const { error: updateError } = await supabase.from('email_notification_settings').update({ ...rest, updated_at: new Date().toISOString() }).eq('id', id);
+        error = updateError;
+      } else {
+        const { error: insertError } = await supabase.from('email_notification_settings').insert([{ ...rest }]);
+        error = insertError;
+      }
+      
+      if (error) throw error;
+      
+      setEmailSaved(true);
+      setTimeout(() => setEmailSaved(false), 3000);
+      toast.success('Configurações de e-mail salvas com sucesso!');
+    } catch (err: any) {
+      console.error(err);
+      toast.error(`Erro ao salvar configurações: ${err.message || String(err)}`);
+    } finally {
+      setSavingEmail(false);
     }
-    setSavingEmail(false);
-    setEmailSaved(true);
-    setTimeout(() => setEmailSaved(false), 3000);
   }
 
   // ─── Derived Data ──────────────────────────────────────────────────────────

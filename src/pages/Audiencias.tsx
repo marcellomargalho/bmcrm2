@@ -608,7 +608,8 @@ export function Audiencias() {
   const handleSaveEmailConfig = async () => {
     setSavingConfig(true);
     try {
-      const { data: current } = await supabase.from('email_notification_settings').select('id').limit(1).maybeSingle();
+      const { data: current, error: fetchError } = await supabase.from('email_notification_settings').select('id').limit(1).maybeSingle();
+      if (fetchError) throw fetchError;
       
       const payload = {
         senior_email: emailConfig.senior_email,
@@ -616,17 +617,22 @@ export function Audiencias() {
         updated_at: new Date().toISOString(),
       };
 
+      let saveError;
       if (current?.id) {
-        await supabase.from('email_notification_settings').update(payload).eq('id', current.id);
+        const { error: updateError } = await supabase.from('email_notification_settings').update(payload).eq('id', current.id);
+        saveError = updateError;
       } else {
-        await supabase.from('email_notification_settings').insert([payload]);
+        const { error: insertError } = await supabase.from('email_notification_settings').insert([payload]);
+        saveError = insertError;
       }
+
+      if (saveError) throw saveError;
 
       toast.success('Configurações de e-mail salvas!');
       setShowConfig(false);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast.error('Erro ao salvar configurações.');
+      toast.error(`Erro ao salvar configurações: ${err.message || String(err)}`);
     } finally {
       setSavingConfig(false);
     }
