@@ -831,7 +831,7 @@ export function Audiencias() {
             </div>
           ) : (
             <div className="bg-surface-container-low rounded-3xl border border-outline-variant/10 overflow-hidden">
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto custom-scrollbar">
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
                     <tr className="border-b border-outline-variant/10 bg-surface-container-high/40 text-outline font-black uppercase tracking-wider">
@@ -1027,7 +1027,7 @@ export function Audiencias() {
                 </div>
               </div>
 
-              <div className="overflow-x-auto max-h-96">
+              <div className="overflow-x-auto max-h-96 custom-scrollbar">
                 <table className="w-full text-left border-collapse text-[10px]">
                   <thead>
                     <tr className="border-b border-outline-variant/10 bg-surface-container-high/40 text-outline font-black uppercase tracking-wider">
@@ -1083,7 +1083,7 @@ export function Audiencias() {
                 <p className="text-xs font-bold text-outline">Nenhum log de disparo registrado até o momento.</p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto custom-scrollbar">
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
                     <tr className="border-b border-outline-variant/10 bg-surface-container-high/40 text-outline font-black uppercase tracking-wider">

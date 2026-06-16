@@ -629,7 +629,7 @@ export function Financeiro() {
           </div>
         </div>
 
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto custom-scrollbar">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-outline-variant/10 bg-surface-container-highest/5">

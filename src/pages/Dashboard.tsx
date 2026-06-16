@@ -377,7 +377,7 @@ export function Dashboard() {
           )}
         </div>
         {!isCollapsed && (
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto custom-scrollbar">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="text-[9px] uppercase tracking-widest text-outline font-black border-b border-outline-variant/5">
@@ -990,7 +990,7 @@ export function Dashboard() {
                       <ChevronDown className={cn("w-4 h-4 text-outline transition-transform duration-200", isExpanded && "rotate-180")} />
                     </button>
                     {isExpanded && tasks.length > 0 && (
-                      <div className="border-t border-outline-variant/10 overflow-x-auto">
+                      <div className="border-t border-outline-variant/10 overflow-x-auto custom-scrollbar">
                         <table className="w-full text-left border-collapse">
                           <thead>
                             <tr className="text-[9px] uppercase tracking-widest text-outline font-black border-b border-outline-variant/5">

@@ -162,7 +162,7 @@ export function ProcessList() {
       </section>
 
       <section className="bg-surface-container-lowest rounded-3xl overflow-hidden shadow-2xl">
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto custom-scrollbar">
           {loading ? (
             <div className="flex justify-center py-16">
               <Loader2 className="w-8 h-8 animate-spin text-secondary" />
