@@ -38,14 +38,8 @@ serve(async (req) => {
       })
     }
 
-    // Lista consolidada de destinatários
-    const recipients = [seniorEmail, ...teamEmails].filter(Boolean)
-    if (recipients.length === 0) {
-      return new Response(JSON.stringify({ error: 'Nenhum destinatário de e-mail configurado.' }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 400,
-      })
-    }
+    // Lista consolidada de destinatários globais (fallback)
+    const globalRecipients = [seniorEmail, ...teamEmails].filter(Boolean)
 
     // 2. Definir datas/horas locais em America/Sao_Paulo (UTC-3)
     const getLocalDate = (offsetHours = -3) => {
@@ -75,6 +69,23 @@ serve(async (req) => {
       const hDate = hearing.hearing_date // YYYY-MM-DD
       const hTime = hearing.hearing_time // HH:MM:SS ou HH:MM
 
+      // Determine recipients for this hearing: either specific emails or the global fallback
+      let hearingRecipients = globalRecipients
+      if (hearing.notification_emails) {
+        const customEmails = hearing.notification_emails
+          .split(',')
+          .map((e: string) => e.trim())
+          .filter((e: string) => e.length > 0)
+        if (customEmails.length > 0) {
+          hearingRecipients = customEmails
+        }
+      }
+
+      if (hearingRecipients.length === 0) {
+        processedList.push({ id: hearingId, error: 'Nenhum destinatário de e-mail configurado para esta audiência.' })
+        continue
+      }
+
       // ── A. ALERTA DE 01 DIA ANTES ──────────────────────────────────────────
       if (hDate === tomorrowStr) {
         // Verifica se já existe log de envio de 1 dia para esta audiência
@@ -90,7 +101,7 @@ serve(async (req) => {
           const sendResult = await sendEmail({
             apiKey,
             from: `${fromName} <${fromEmail}>`,
-            to: recipients,
+            to: hearingRecipients,
             hearing,
             typeLabel: 'Lembrete de Audiência (Amanhã)',
           })
@@ -99,7 +110,7 @@ serve(async (req) => {
           await supabase.from('hearing_logs').insert([{
             hearing_id: hearingId,
             notification_type: '1_day_before',
-            recipient: recipients.join(', '),
+            recipient: hearingRecipients.join(', '),
             status: sendResult.success ? 'success' : 'error',
             error_message: sendResult.error || null,
           }])
@@ -143,7 +154,7 @@ serve(async (req) => {
             const sendResult = await sendEmail({
               apiKey,
               from: `${fromName} <${fromEmail}>`,
-              to: recipients,
+              to: hearingRecipients,
               hearing,
               typeLabel: 'Lembrete Urgente (Em 15 minutos)',
             })
@@ -152,7 +163,7 @@ serve(async (req) => {
             await supabase.from('hearing_logs').insert([{
               hearing_id: hearingId,
               notification_type: '15_minutes_before',
-              recipient: recipients.join(', '),
+              recipient: hearingRecipients.join(', '),
               status: sendResult.success ? 'success' : 'error',
               error_message: sendResult.error || null,
             }])

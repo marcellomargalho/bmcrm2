@@ -24,6 +24,7 @@ interface Hearing {
   hearing_time: string;
   link: string | null;
   observations: string | null;
+  notification_emails?: string | null;
   status: 'cadastrada' | 'notificacao_1dia_enviada' | 'notificacao_15min_enviada' | 'concluida' | 'cancelada';
   created_at?: string;
   updated_at?: string;
@@ -129,6 +130,7 @@ export function Audiencias() {
     hearing_time: '',
     link: '',
     observations: '',
+    notification_emails: '',
     status: 'cadastrada' as Hearing['status'],
   });
 
@@ -212,6 +214,7 @@ export function Audiencias() {
       hearing_time: '',
       link: '',
       observations: '',
+      notification_emails: emailConfig.senior_email || '',
       status: 'cadastrada',
     });
     setIsModalOpen(true);
@@ -231,6 +234,7 @@ export function Audiencias() {
       hearing_time: h.hearing_time.slice(0, 5),
       link: h.link || '',
       observations: h.observations || '',
+      notification_emails: h.notification_emails || '',
       status: h.status,
     });
     setIsModalOpen(true);
@@ -265,6 +269,7 @@ export function Audiencias() {
         hearing_time: formData.hearing_time,
         link: formData.link || null,
         observations: formData.observations || null,
+        notification_emails: formData.notification_emails || null,
         status: formData.status,
       };
 
@@ -564,6 +569,7 @@ export function Audiencias() {
       hearing_time: hearingTime,
       link,
       observations: 'Dados extraídos automaticamente via leitura de PDF.',
+      notification_emails: emailConfig.senior_email || '',
       status: 'cadastrada',
     });
 
@@ -1297,6 +1303,19 @@ export function Audiencias() {
                   />
                 </div>
 
+                {/* Destinatários dos E-mails */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-outline uppercase tracking-wider">E-mails para Notificação (separados por vírgula)</label>
+                  <input
+                    type="text"
+                    value={formData.notification_emails}
+                    onChange={e => setFormData({ ...formData, notification_emails: e.target.value })}
+                    placeholder="advogado@exemplo.com, estagiario@exemplo.com"
+                    className="w-full bg-surface-container-highest border border-outline-variant/10 rounded-xl px-4 py-3 text-on-surface focus:ring-2 focus:ring-secondary focus:outline-none"
+                  />
+                  <p className="text-[9px] text-outline mt-0.5">Se deixado em branco, enviará para o e-mail sênior/equipe configurados globalmente.</p>
+                </div>
+
                 {/* Observações */}
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold text-outline uppercase tracking-wider">Observações Adicionais</label>
@@ -1497,6 +1516,17 @@ export function Audiencias() {
                       type="url"
                       value={formData.link}
                       onChange={e => setFormData({ ...formData, link: e.target.value })}
+                      className="w-full bg-surface-container-highest border border-outline-variant/10 rounded-xl px-3 py-2 text-on-surface focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-outline uppercase tracking-wider">E-mails para Notificação (separados por vírgula)</label>
+                    <input
+                      type="text"
+                      value={formData.notification_emails}
+                      onChange={e => setFormData({ ...formData, notification_emails: e.target.value })}
+                      placeholder="advogado@exemplo.com, estagiario@exemplo.com"
                       className="w-full bg-surface-container-highest border border-outline-variant/10 rounded-xl px-3 py-2 text-on-surface focus:outline-none"
                     />
                   </div>
