@@ -350,7 +350,14 @@ export function Dashboard() {
     atrasados: tasks.filter(t => t.fatal_date && t.status !== 'Concluída' && getDaysUntil(t.fatal_date) < 0 && t.task_type !== 'Acompanhamento de Processo').sort(sortByUrgency),
     hoje: tasks.filter(t => t.fatal_date && t.status !== 'Concluída' && getDaysUntil(t.fatal_date) === 0 && t.task_type !== 'Acompanhamento de Processo').sort(sortByUrgency),
     em_dia: tasks.filter(t => t.fatal_date && t.status !== 'Concluída' && getDaysUntil(t.fatal_date) > 0 && t.task_type !== 'Acompanhamento de Processo').sort(sortByUrgency),
-    revisoes_pendentes: tasks.filter(t => t.task_type === 'Acompanhamento de Processo' && t.status !== 'Concluída').sort((a,b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()),
+    revisoes_pendentes: tasks.filter(t => t.task_type === 'Acompanhamento de Processo' && t.status !== 'Concluída').sort((a, b) => {
+      // Sem prazo vai para o final
+      if (!a.fatal_date && !b.fatal_date) return 0;
+      if (!a.fatal_date) return 1;
+      if (!b.fatal_date) return -1;
+      // Dos mais atrasados (dias negativos) até os mais distantes
+      return getDaysUntil(a.fatal_date) - getDaysUntil(b.fatal_date);
+    }),
     outras: tasks.filter(t => !t.fatal_date && t.status !== 'Concluída'),
   };
 
