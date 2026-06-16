@@ -15,6 +15,7 @@ import { UpdatePassword } from '@/pages/UpdatePassword';
 import { PendingApproval } from '@/pages/PendingApproval';
 import { Financeiro } from '@/pages/Financeiro';
 import { Intimacoes } from '@/pages/Intimacoes';
+import { Audiencias } from '@/pages/Audiencias';
 import { BlogManagement } from '@/pages/BlogManagement';
 import { Analytics } from '@/pages/Analytics';
 import { Atendimento } from '@/pages/Atendimento';
@@ -197,6 +198,7 @@ export default function App() {
         <Route path="documentos" element={<DocumentManagement />} />
         <Route path="financeiro" element={<Financeiro />} />
         <Route path="intimacoes" element={<Intimacoes />} />
+        <Route path="audiencias" element={<Audiencias />} />
         <Route path="blog" element={<BlogManagement />} />
         <Route path="atendimento" element={<Atendimento />} />
         <Route path="analytics" element={<Analytics />} />

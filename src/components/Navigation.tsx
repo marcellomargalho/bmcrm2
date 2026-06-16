@@ -32,7 +32,8 @@ import {
   Headset,
   Palette,
   Database,
-  CircleDollarSign
+  CircleDollarSign,
+  CalendarClock
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -42,6 +43,7 @@ const navItems = [
   { icon: Users, label: 'Clientes', path: '/clientes' },
   { icon: Calendar, label: 'Agenda', path: '/agenda' },
   { icon: Bookmark, label: 'Intimações', path: '/intimacoes', adminOnly: true },
+  { icon: CalendarClock, label: 'Audiências', path: '/audiencias' },
   { icon: FileText, label: 'Documentos', path: '/documentos' },
   { icon: CircleDollarSign, label: 'Financeiro', path: '/financeiro', adminOnly: true },
   { icon: Palette, label: 'Marketing Visual', path: '/marketing', adminOnly: true },
