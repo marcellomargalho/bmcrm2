@@ -91,6 +91,7 @@ export function Dashboard() {
   // Deadline Tables State
   const [deadlineSearch, setDeadlineSearch] = useState('');
   const [deadlineFilter, setDeadlineFilter] = useState<'all' | 'atrasados' | 'hoje' | 'em_dia' | 'revisoes'>('all');
+  const [deadlinePeriodFilter, setDeadlinePeriodFilter] = useState<'all' | 'atrasados' | '7' | '15' | '30' | '60' | '60plus'>('all');
   const [deadlineViewMode, setDeadlineViewMode] = useState<'lista' | 'tabela'>('lista');
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
   const [tableExpandedCategory, setTableExpandedCategory] = useState<string | null>(null);
@@ -351,6 +352,26 @@ export function Dashboard() {
     em_dia: tasks.filter(t => t.fatal_date && t.status !== 'Concluída' && getDaysUntil(t.fatal_date) > 0 && t.task_type !== 'Acompanhamento de Processo').sort(sortByUrgency),
     revisoes_pendentes: tasks.filter(t => t.task_type === 'Acompanhamento de Processo' && t.status !== 'Concluída').sort((a,b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()),
     outras: tasks.filter(t => !t.fatal_date && t.status !== 'Concluída'),
+  };
+
+  // Aplica filtro de período sobre as categorias (exceto revisoes que não têm fatal_date fixa)
+  const applyPeriodFilter = (taskList: any[]) => {
+    if (deadlinePeriodFilter === 'all') return taskList;
+    if (deadlinePeriodFilter === 'atrasados') return taskList.filter(t => t.fatal_date && getDaysUntil(t.fatal_date) < 0);
+    if (deadlinePeriodFilter === '7') return taskList.filter(t => t.fatal_date && getDaysUntil(t.fatal_date) >= 0 && getDaysUntil(t.fatal_date) <= 7);
+    if (deadlinePeriodFilter === '15') return taskList.filter(t => t.fatal_date && getDaysUntil(t.fatal_date) >= 0 && getDaysUntil(t.fatal_date) <= 15);
+    if (deadlinePeriodFilter === '30') return taskList.filter(t => t.fatal_date && getDaysUntil(t.fatal_date) >= 0 && getDaysUntil(t.fatal_date) <= 30);
+    if (deadlinePeriodFilter === '60') return taskList.filter(t => t.fatal_date && getDaysUntil(t.fatal_date) >= 0 && getDaysUntil(t.fatal_date) <= 60);
+    if (deadlinePeriodFilter === '60plus') return taskList.filter(t => t.fatal_date && getDaysUntil(t.fatal_date) > 60);
+    return taskList;
+  };
+
+  const filteredCategorizedTasks = {
+    atrasados: applyPeriodFilter(categorizedTasks.atrasados),
+    hoje: applyPeriodFilter(categorizedTasks.hoje),
+    em_dia: applyPeriodFilter(categorizedTasks.em_dia),
+    revisoes_pendentes: categorizedTasks.revisoes_pendentes, // acompanhamentos não filtram por período de prazo
+    outras: categorizedTasks.outras,
   };
 
   const AUTO_COLLAPSE_THRESHOLD = 5;
@@ -855,6 +876,38 @@ export function Dashboard() {
                   Acompanhamentos
                 </button>
               </div>
+
+              {/* Period filter */}
+              <div className="flex items-center gap-1.5">
+                <span className="text-[9px] font-black uppercase tracking-widest text-outline whitespace-nowrap">Período</span>
+                <select
+                  value={deadlinePeriodFilter}
+                  onChange={e => setDeadlinePeriodFilter(e.target.value as any)}
+                  className={cn(
+                    "bg-surface-container-low border rounded-xl px-2.5 py-1 text-[10px] font-bold outline-none cursor-pointer transition-colors",
+                    deadlinePeriodFilter !== 'all'
+                      ? "border-secondary/40 text-secondary bg-secondary/5"
+                      : "border-outline-variant/20 text-outline hover:border-outline-variant/40 hover:text-on-surface"
+                  )}
+                >
+                  <option value="all">Todos os períodos</option>
+                  <option value="atrasados">⚠️ Já atrasados</option>
+                  <option value="7">Próximos 7 dias</option>
+                  <option value="15">Próximos 15 dias</option>
+                  <option value="30">Próximos 30 dias</option>
+                  <option value="60">Próximos 60 dias</option>
+                  <option value="60plus">Acima de 60 dias</option>
+                </select>
+                {deadlinePeriodFilter !== 'all' && (
+                  <button
+                    onClick={() => setDeadlinePeriodFilter('all')}
+                    className="p-1 hover:bg-surface-container-high rounded-lg text-outline hover:text-on-surface transition-colors"
+                    title="Limpar filtro de período"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 
@@ -943,10 +996,10 @@ export function Dashboard() {
           {/* Summary cards - always visible */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
             {[
-              { key: 'atrasados', label: 'Atrasados', count: categorizedTasks.atrasados.length, color: 'from-error/10', border: 'border-error/10', textColor: 'text-error', icon: <AlertTriangle className="w-4 h-4 text-error" /> },
-              { key: 'hoje', label: 'Para Hoje', count: categorizedTasks.hoje.length, color: 'from-secondary/10', border: 'border-secondary/10', textColor: 'text-secondary', icon: <Clock className="w-4 h-4 text-secondary" /> },
-              { key: 'em_dia', label: 'Em Dia', count: categorizedTasks.em_dia.length, color: 'from-emerald-500/10', border: 'border-emerald-500/10', textColor: 'text-emerald-500', icon: <CheckCircle2 className="w-4 h-4 text-emerald-500" /> },
-              { key: 'revisoes', label: 'Acompanhamentos', count: categorizedTasks.revisoes_pendentes.length, color: 'from-amber-500/10', border: 'border-amber-500/10', textColor: 'text-amber-500', icon: <RotateCcw className="w-4 h-4 text-amber-500" /> },
+              { key: 'atrasados', label: 'Atrasados', count: filteredCategorizedTasks.atrasados.length, color: 'from-error/10', border: 'border-error/10', textColor: 'text-error', icon: <AlertTriangle className="w-4 h-4 text-error" /> },
+              { key: 'hoje', label: 'Para Hoje', count: filteredCategorizedTasks.hoje.length, color: 'from-secondary/10', border: 'border-secondary/10', textColor: 'text-secondary', icon: <Clock className="w-4 h-4 text-secondary" /> },
+              { key: 'em_dia', label: 'Em Dia', count: filteredCategorizedTasks.em_dia.length, color: 'from-emerald-500/10', border: 'border-emerald-500/10', textColor: 'text-emerald-500', icon: <CheckCircle2 className="w-4 h-4 text-emerald-500" /> },
+              { key: 'revisoes', label: 'Acompanhamentos', count: filteredCategorizedTasks.revisoes_pendentes.length, color: 'from-amber-500/10', border: 'border-amber-500/10', textColor: 'text-amber-500', icon: <RotateCcw className="w-4 h-4 text-amber-500" /> },
             ].map(({ key, label, count, color, border, textColor, icon }) => (
               <button
                 key={key}
@@ -987,10 +1040,10 @@ export function Dashboard() {
           {deadlineViewMode === 'tabela' && (
             <div className="space-y-3">
               {[
-                { key: 'atrasados', label: 'Demandas em Atraso', tasks: categorizedTasks.atrasados, color: 'bg-error/10 text-error', icon: <AlertTriangle className="w-4 h-4" /> },
-                { key: 'revisoes', label: 'Acompanhamentos Pendentes', tasks: categorizedTasks.revisoes_pendentes, color: 'bg-amber-500/10 text-amber-500', icon: <RotateCcw className="w-4 h-4" /> },
-                { key: 'hoje', label: 'Vencendo Hoje', tasks: categorizedTasks.hoje, color: 'bg-secondary/10 text-secondary', icon: <Clock className="w-4 h-4" /> },
-                { key: 'em_dia', label: 'Prazos em Dia', tasks: categorizedTasks.em_dia, color: 'bg-emerald-500/10 text-emerald-500', icon: <CheckCircle2 className="w-4 h-4" /> },
+                { key: 'atrasados', label: 'Demandas em Atraso', tasks: filteredCategorizedTasks.atrasados, color: 'bg-error/10 text-error', icon: <AlertTriangle className="w-4 h-4" /> },
+                { key: 'revisoes', label: 'Acompanhamentos Pendentes', tasks: filteredCategorizedTasks.revisoes_pendentes, color: 'bg-amber-500/10 text-amber-500', icon: <RotateCcw className="w-4 h-4" /> },
+                { key: 'hoje', label: 'Vencendo Hoje', tasks: filteredCategorizedTasks.hoje, color: 'bg-secondary/10 text-secondary', icon: <Clock className="w-4 h-4" /> },
+                { key: 'em_dia', label: 'Prazos em Dia', tasks: filteredCategorizedTasks.em_dia, color: 'bg-emerald-500/10 text-emerald-500', icon: <CheckCircle2 className="w-4 h-4" /> },
               ].filter(({ key }) => deadlineFilter === 'all' || deadlineFilter === key || (deadlineFilter === 'revisoes' && key === 'revisoes'))
                .map(({ key, label, tasks, color, icon }) => {
                 const isExpanded = tableExpandedCategory === key;
@@ -1066,15 +1119,15 @@ export function Dashboard() {
           {deadlineViewMode === 'lista' && (
             <div className="grid grid-cols-1 xl:grid-cols-1 gap-6">
               {(deadlineFilter === 'all' || deadlineFilter === 'atrasados') && renderDeadlineTable(
-                categorizedTasks.atrasados, 
+                filteredCategorizedTasks.atrasados, 
                 "Demandas em Atraso", 
                 "bg-error/10 text-error", 
                 <AlertTriangle className="w-4 h-4" />,
                 'atrasados'
               )}
 
-              {(deadlineFilter === 'all' || deadlineFilter === 'revisoes') && categorizedTasks.revisoes_pendentes.length > 0 && renderDeadlineTable(
-                categorizedTasks.revisoes_pendentes, 
+              {(deadlineFilter === 'all' || deadlineFilter === 'revisoes') && filteredCategorizedTasks.revisoes_pendentes.length > 0 && renderDeadlineTable(
+                filteredCategorizedTasks.revisoes_pendentes, 
                 "Acompanhamentos Pendentes", 
                 "bg-amber-500/10 text-amber-500", 
                 <RotateCcw className="w-4 h-4" />,
@@ -1082,7 +1135,7 @@ export function Dashboard() {
               )}
               
               {(deadlineFilter === 'all' || deadlineFilter === 'hoje') && renderDeadlineTable(
-                categorizedTasks.hoje, 
+                filteredCategorizedTasks.hoje, 
                 "Vencendo Hoje", 
                 "bg-secondary/10 text-secondary", 
                 <Clock className="w-4 h-4" />,
@@ -1090,7 +1143,7 @@ export function Dashboard() {
               )}
 
               {(deadlineFilter === 'all' || deadlineFilter === 'em_dia') && renderDeadlineTable(
-                categorizedTasks.em_dia, 
+                filteredCategorizedTasks.em_dia, 
                 "Prazos em Dia", 
                 "bg-emerald-500/10 text-emerald-500", 
                 <Calendar className="w-4 h-4" />,
