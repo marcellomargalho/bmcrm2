@@ -25,7 +25,7 @@ serve(async (req) => {
       .limit(1)
       .maybeSingle()
 
-    const apiKey = settings?.api_key
+    const apiKey = settings?.api_key || Deno.env.get('RESEND_API_KEY')
     const seniorEmail = settings?.senior_email || 'brendamargalho.adv@gmail.com'
     const teamEmails = settings?.team_emails || []
     const fromEmail = settings?.from_email || 'sistema@escritorio.com.br'

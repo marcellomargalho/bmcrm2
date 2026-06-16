@@ -43,7 +43,9 @@ serve(async (req) => {
       .limit(1)
       .maybeSingle()
 
-    if (!settings?.api_key) {
+    const apiKey = settings?.api_key || Deno.env.get('RESEND_API_KEY')
+
+    if (!apiKey) {
       return new Response(JSON.stringify({ error: 'API Key do Resend não configurada' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 400,
@@ -116,7 +118,7 @@ serve(async (req) => {
     const resendRes = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${settings.api_key}`,
+        'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({

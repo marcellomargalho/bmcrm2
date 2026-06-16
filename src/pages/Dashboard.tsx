@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, Reorder } from 'motion/react';
-import { TrendingUp, Users, Calendar, Clock, FileText, ArrowRight, Plus, Loader2, CheckCircle2, Check, CalendarClock, AlertTriangle, RotateCcw, GripVertical, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, X, Gavel, MapPin, User, Tag, Pencil, Save, Filter, AlignLeft, LayoutGrid } from 'lucide-react';
+import { TrendingUp, Users, Calendar, Clock, FileText, ArrowRight, Plus, Loader2, CheckCircle2, Check, CalendarClock, AlertTriangle, RotateCcw, GripVertical, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, X, Gavel, MapPin, User, Tag, Pencil, Save, Filter, AlignLeft, LayoutGrid, History } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { NewTaskModal } from '@/components/NewTaskModal';
 import { supabase } from '@/lib/supabase';
@@ -1097,8 +1097,30 @@ export function Dashboard() {
     // Acompanhamento State
     const [acompanhamentoRelato, setAcompanhamentoRelato] = useState('');
     const [savingAcompanhamento, setSavingAcompanhamento] = useState(false);
+    const [timelineRecords, setTimelineRecords] = useState<any[]>([]);
+    const [loadingTimeline, setLoadingTimeline] = useState(false);
 
     const currentDaysUntil = fatalDate ? getDaysUntil(fatalDate) : null;
+
+    async function fetchTimeline() {
+      if (!proc?.id) return;
+      setLoadingTimeline(true);
+      const { data } = await supabase
+        .from('process_movements')
+        .select('*')
+        .eq('process_id', proc.id)
+        .like('description', '[ACOMPANHAMENTO]:%')
+        .order('date', { ascending: false });
+      setTimelineRecords(data || []);
+      setLoadingTimeline(false);
+    }
+
+    // Load timeline on mount if applicable
+    useEffect(() => {
+      if (task.task_type === 'Acompanhamento de Processo') {
+        fetchTimeline();
+      }
+    }, [task.id]);
 
     async function handleRegistrarAcompanhamento() {
       if (!acompanhamentoRelato.trim()) {
@@ -1122,8 +1144,9 @@ export function Dashboard() {
       }
       
       setAcompanhamentoRelato('');
-      alert("Acompanhamento registrado com sucesso!");
       setSavingAcompanhamento(false);
+      // Refresh timeline after saving
+      await fetchTimeline();
     }
 
     async function handleSaveDates() {
@@ -1310,28 +1333,104 @@ export function Dashboard() {
 
             {/* Acompanhamento Block */}
             {task.task_type === 'Acompanhamento de Processo' && (
-              <div className="bg-surface-container-highest/50 p-5 rounded-2xl border border-amber-500/30 ring-1 ring-amber-500/10">
-                <h4 className="text-[10px] uppercase tracking-widest text-amber-500 font-black mb-3 flex items-center gap-1.5">
-                  <RotateCcw className="w-3.5 h-3.5" /> Registrar Acompanhamento
-                </h4>
-                
-                <textarea 
-                  value={acompanhamentoRelato}
-                  onChange={(e) => setAcompanhamentoRelato(e.target.value)}
-                  placeholder="Relate o que foi verificado neste acompanhamento..."
-                  className="w-full bg-surface-container-low border border-outline-variant/20 rounded-xl p-3 text-sm mb-3 focus:border-amber-500/40 focus:ring-2 focus:ring-amber-500/10 outline-none transition-all"
-                  rows={3}
-                />
-                
-                <div className="flex justify-end">
-                  <button 
-                    onClick={handleRegistrarAcompanhamento}
-                    disabled={savingAcompanhamento}
-                    className="bg-amber-500 text-white px-5 py-2.5 rounded-xl font-bold text-xs hover:bg-amber-600 transition-all flex items-center gap-2"
-                  >
-                    {savingAcompanhamento ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                    Salvar Relato
-                  </button>
+              <div className="space-y-4">
+                {/* Input form */}
+                <div className="bg-surface-container-highest/50 p-5 rounded-2xl border border-amber-500/30 ring-1 ring-amber-500/10">
+                  <h4 className="text-[10px] uppercase tracking-widest text-amber-500 font-black mb-3 flex items-center gap-1.5">
+                    <RotateCcw className="w-3.5 h-3.5" /> Registrar Acompanhamento
+                  </h4>
+                  
+                  <textarea 
+                    value={acompanhamentoRelato}
+                    onChange={(e) => setAcompanhamentoRelato(e.target.value)}
+                    placeholder="Relate o que foi verificado neste acompanhamento..."
+                    className="w-full bg-surface-container-low border border-outline-variant/20 rounded-xl p-3 text-sm mb-3 focus:border-amber-500/40 focus:ring-2 focus:ring-amber-500/10 outline-none transition-all"
+                    rows={3}
+                  />
+                  
+                  <div className="flex justify-end">
+                    <button 
+                      onClick={handleRegistrarAcompanhamento}
+                      disabled={savingAcompanhamento}
+                      className="bg-amber-500 text-white px-5 py-2.5 rounded-xl font-bold text-xs hover:bg-amber-600 transition-all flex items-center gap-2"
+                    >
+                      {savingAcompanhamento ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                      Salvar Relato
+                    </button>
+                  </div>
+                </div>
+
+                {/* Timeline */}
+                <div className="bg-surface-container-highest/30 rounded-2xl border border-outline-variant/10 overflow-hidden">
+                  <div className="px-5 py-3 border-b border-outline-variant/10 flex items-center justify-between">
+                    <h4 className="text-[10px] uppercase tracking-widest text-outline font-black flex items-center gap-1.5">
+                      <History className="w-3.5 h-3.5" /> Histórico de Acompanhamentos
+                    </h4>
+                    {loadingTimeline && <Loader2 className="w-3.5 h-3.5 text-outline animate-spin" />}
+                  </div>
+
+                  {!loadingTimeline && timelineRecords.length === 0 && (
+                    <div className="px-5 py-6 text-center">
+                      <p className="text-xs text-outline italic">Nenhum acompanhamento registrado ainda.</p>
+                    </div>
+                  )}
+
+                  {timelineRecords.length > 0 && (
+                    <div className="px-5 py-4">
+                      <div className="relative">
+                        {/* Vertical line */}
+                        <div className="absolute left-[7px] top-2 bottom-2 w-px bg-amber-500/20" />
+                        
+                        <div className="space-y-4">
+                          {timelineRecords.map((record, idx) => {
+                            const relato = record.description.replace(/^\[ACOMPANHAMENTO\]:\s*/, '');
+                            const date = new Date(record.date);
+                            const isFirst = idx === 0;
+                            return (
+                              <div key={record.id} className="flex gap-4 relative">
+                                {/* Node */}
+                                <div className={cn(
+                                  "w-3.5 h-3.5 rounded-full shrink-0 mt-0.5 ring-2 ring-surface-container-highest/80 z-10",
+                                  isFirst ? "bg-amber-500 ring-amber-500/30" : "bg-surface-container-high ring-outline-variant/30"
+                                )} />
+                                
+                                {/* Content */}
+                                <div className={cn(
+                                  "flex-1 rounded-xl p-3 border transition-all",
+                                  isFirst
+                                    ? "bg-amber-500/8 border-amber-500/20"
+                                    : "bg-surface-container-highest/40 border-outline-variant/10"
+                                )}>
+                                  <div className="flex items-center justify-between gap-2 mb-1.5">
+                                    <span className={cn(
+                                      "text-[9px] font-black uppercase tracking-widest",
+                                      isFirst ? "text-amber-500" : "text-outline"
+                                    )}>
+                                      {isFirst ? '● Mais recente' : `#${timelineRecords.length - idx}`}
+                                    </span>
+                                    <span className="text-[9px] text-outline font-mono">
+                                      {date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' })}
+                                      {' '}
+                                      {date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                                    </span>
+                                  </div>
+                                  <p className="text-xs text-on-surface leading-relaxed">{relato}</p>
+                                  {record.responsible && (
+                                    <div className="flex items-center gap-1 mt-2">
+                                      <div className="w-4 h-4 rounded-full bg-secondary/15 text-secondary flex items-center justify-center text-[8px] font-black shrink-0">
+                                        {record.responsible.charAt(0).toUpperCase()}
+                                      </div>
+                                      <span className="text-[9px] text-outline font-medium">{record.responsible.split(',')[0].trim()}</span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
