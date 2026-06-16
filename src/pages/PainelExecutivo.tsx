@@ -1332,14 +1332,48 @@ export function PainelExecutivo() {
                 )}
               </div>
               <div className="flex gap-3">
-                <button
+                 <button
                   className="flex items-center gap-2 px-6 py-3 bg-surface-container-highest text-on-surface-variant font-bold rounded-xl hover:bg-surface-container-high transition-all text-sm border border-outline-variant/10"
                   onClick={async () => {
-                    if (!emailSettings.api_key || !emailSettings.senior_email) {
-                      alert('Configure a API Key e o e-mail da sênior antes de testar.');
+                    if (!emailSettings.senior_email) {
+                      toast.error('Configure o e-mail da sênior antes de testar.');
                       return;
                     }
-                    alert('Funcionalidade de teste disponível após deploy da Edge Function. Configure a Resend API Key e faça o deploy das funções.');
+                    setSavingEmail(true);
+                    try {
+                      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-notification`, {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+                        },
+                        body: JSON.stringify({
+                          type: 'task_created',
+                          recipients: [emailSettings.senior_email],
+                          data: {
+                            processNumber: '0000000-00.2026.8.26.0000',
+                            clientName: 'Cliente de Teste',
+                            responsible: 'Brenda Margalho',
+                            nextAction: 'Esta é uma notificação de teste enviada a partir das configurações do painel.',
+                            deadline: '16/06/2026',
+                            observations: 'Verificação do domínio bmjuris.com.br e funcionamento das configurações.',
+                            systemUrl: window.location.origin
+                          }
+                        })
+                      });
+                      
+                      const result = await response.json();
+                      if (!response.ok) {
+                        throw new Error(result.error || 'Erro ao chamar a Edge Function de envio.');
+                      }
+                      
+                      toast.success('E-mail de teste enviado com sucesso!');
+                    } catch (err: any) {
+                      console.error(err);
+                      toast.error(`Falha no envio de teste: ${err.message || String(err)}`);
+                    } finally {
+                      setSavingEmail(false);
+                    }
                   }}
                 >
                   <Send className="w-4 h-4" /> Testar E-mail
