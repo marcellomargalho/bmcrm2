@@ -132,6 +132,9 @@ export function Audiencias() {
     status: 'cadastrada' as Hearing['status'],
   });
 
+  const [submittingHearing, setSubmittingHearing] = useState(false);
+  const [submittingImport, setSubmittingImport] = useState(false);
+
   // Importações
   const [csvText, setCsvText] = useState('');
   const [importPreview, setImportPreview] = useState<any[]>([]);
@@ -237,11 +240,14 @@ export function Audiencias() {
 
   const handleSubmitHearing = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submittingHearing) return;
+
     if (!formData.process_number || !formData.client_name || !formData.hearing_date || !formData.hearing_time) {
       toast.error('Preencha todos os campos obrigatórios (*).');
       return;
     }
 
+    setSubmittingHearing(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Sessão inválida. Faça login novamente.');
@@ -276,10 +282,13 @@ export function Audiencias() {
       }
 
       setIsModalOpen(false);
+      setIsPdfReviewOpen(false); // Just in case it's called from PDF review
       fetchHearingsAndLogs();
     } catch (err: any) {
       console.error(err);
       toast.error(err.message || 'Erro ao salvar audiência.');
+    } finally {
+      setSubmittingHearing(false);
     }
   };
 
@@ -418,7 +427,9 @@ export function Audiencias() {
 
   const handleSaveImport = async () => {
     if (importPreview.length === 0) return;
+    if (submittingImport) return;
 
+    setSubmittingImport(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Sessão inválida.');
@@ -450,6 +461,8 @@ export function Audiencias() {
     } catch (err: any) {
       console.error(err);
       toast.error(err.message || 'Erro ao salvar importações.');
+    } finally {
+      setSubmittingImport(false);
     }
   };
 
@@ -1020,8 +1033,10 @@ export function Audiencias() {
                   </button>
                   <button
                     onClick={handleSaveImport}
-                    className="px-4 py-2 bg-secondary text-on-secondary hover:opacity-90 rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-lg shadow-secondary/10"
+                    disabled={submittingImport}
+                    className="px-4 py-2 bg-secondary text-on-secondary hover:opacity-90 rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-lg shadow-secondary/10 flex items-center gap-2 disabled:opacity-50"
                   >
+                    {submittingImport && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                     Salvar {importPreview.length} Audiências
                   </button>
                 </div>
@@ -1322,8 +1337,10 @@ export function Audiencias() {
                   </button>
                   <button
                     type="submit"
-                    className="px-5 py-2.5 bg-secondary text-on-secondary hover:opacity-90 rounded-xl font-bold transition-all shadow-lg shadow-secondary/15"
+                    disabled={submittingHearing}
+                    className="px-5 py-2.5 bg-secondary text-on-secondary hover:opacity-90 rounded-xl font-bold transition-all shadow-lg shadow-secondary/15 flex items-center gap-2 disabled:opacity-50"
                   >
+                    {submittingHearing && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                     {editingHearing ? 'Salvar Alterações' : 'Cadastrar Audiência'}
                   </button>
                 </div>
@@ -1504,12 +1521,10 @@ export function Audiencias() {
                     </button>
                     <button
                       type="submit"
-                      onClick={() => {
-                        // Força fechar modal de revisão ao submeter com sucesso
-                        setTimeout(() => setIsPdfReviewOpen(false), 500);
-                      }}
-                      className="px-4 py-2 bg-secondary text-on-secondary hover:opacity-90 rounded-xl font-black uppercase tracking-wider transition-all"
+                      disabled={submittingHearing}
+                      className="px-4 py-2 bg-secondary text-on-secondary hover:opacity-90 rounded-xl font-black uppercase tracking-wider transition-all flex items-center gap-2 disabled:opacity-50"
                     >
+                      {submittingHearing && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                       Confirmar e Salvar
                     </button>
                   </div>
