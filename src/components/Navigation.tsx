@@ -30,7 +30,6 @@ import {
   BarChart2,
   MessageSquare,
   Headset,
-  Palette,
   Database,
   CircleDollarSign,
   CalendarClock
@@ -46,7 +45,6 @@ const navItems = [
   { icon: CalendarClock, label: 'Audiências', path: '/audiencias' },
   { icon: FileText, label: 'Documentos', path: '/documentos' },
   { icon: CircleDollarSign, label: 'Financeiro', path: '/financeiro', adminOnly: true },
-  { icon: Palette, label: 'Marketing Visual', path: '/marketing', adminOnly: true },
   { icon: MessageSquare, label: 'Atendimento', path: '/atendimento', adminOnly: true },
   { icon: BarChart2, label: 'Analytics', path: '/analytics', adminOnly: true },
   { icon: Globe, label: 'Blog (Site)', path: '/blog', adminOnly: true },

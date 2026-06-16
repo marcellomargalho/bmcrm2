@@ -91,7 +91,6 @@ export function Dashboard() {
   // Deadline Tables State
   const [deadlineSearch, setDeadlineSearch] = useState('');
   const [deadlineFilter, setDeadlineFilter] = useState<'all' | 'atrasados' | 'hoje' | 'em_dia' | 'revisoes'>('all');
-  const [deadlinePeriodFilter, setDeadlinePeriodFilter] = useState<'all' | 'atrasados' | '7' | '15' | '30' | '60' | '60plus'>('all');
   const [deadlineViewMode, setDeadlineViewMode] = useState<'lista' | 'tabela'>('lista');
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
   const [tableExpandedCategory, setTableExpandedCategory] = useState<string | null>(null);
@@ -361,25 +360,7 @@ export function Dashboard() {
     outras: tasks.filter(t => !t.fatal_date && t.status !== 'Concluída'),
   };
 
-  // Aplica filtro de período sobre as categorias (exceto revisoes que não têm fatal_date fixa)
-  const applyPeriodFilter = (taskList: any[]) => {
-    if (deadlinePeriodFilter === 'all') return taskList;
-    if (deadlinePeriodFilter === 'atrasados') return taskList.filter(t => t.fatal_date && getDaysUntil(t.fatal_date) < 0);
-    if (deadlinePeriodFilter === '7') return taskList.filter(t => t.fatal_date && getDaysUntil(t.fatal_date) >= 0 && getDaysUntil(t.fatal_date) <= 7);
-    if (deadlinePeriodFilter === '15') return taskList.filter(t => t.fatal_date && getDaysUntil(t.fatal_date) >= 0 && getDaysUntil(t.fatal_date) <= 15);
-    if (deadlinePeriodFilter === '30') return taskList.filter(t => t.fatal_date && getDaysUntil(t.fatal_date) >= 0 && getDaysUntil(t.fatal_date) <= 30);
-    if (deadlinePeriodFilter === '60') return taskList.filter(t => t.fatal_date && getDaysUntil(t.fatal_date) >= 0 && getDaysUntil(t.fatal_date) <= 60);
-    if (deadlinePeriodFilter === '60plus') return taskList.filter(t => t.fatal_date && getDaysUntil(t.fatal_date) > 60);
-    return taskList;
-  };
-
-  const filteredCategorizedTasks = {
-    atrasados: applyPeriodFilter(categorizedTasks.atrasados),
-    hoje: applyPeriodFilter(categorizedTasks.hoje),
-    em_dia: applyPeriodFilter(categorizedTasks.em_dia),
-    revisoes_pendentes: categorizedTasks.revisoes_pendentes, // acompanhamentos não filtram por período de prazo
-    outras: categorizedTasks.outras,
-  };
+  const filteredCategorizedTasks = categorizedTasks;
 
   const AUTO_COLLAPSE_THRESHOLD = 5;
 
@@ -882,38 +863,6 @@ export function Dashboard() {
                 >
                   Acompanhamentos
                 </button>
-              </div>
-
-              {/* Period filter */}
-              <div className="flex items-center gap-1.5">
-                <span className="text-[9px] font-black uppercase tracking-widest text-outline whitespace-nowrap">Período</span>
-                <select
-                  value={deadlinePeriodFilter}
-                  onChange={e => setDeadlinePeriodFilter(e.target.value as any)}
-                  className={cn(
-                    "bg-surface-container-low border rounded-xl px-2.5 py-1 text-[10px] font-bold outline-none cursor-pointer transition-colors",
-                    deadlinePeriodFilter !== 'all'
-                      ? "border-secondary/40 text-secondary bg-secondary/5"
-                      : "border-outline-variant/20 text-outline hover:border-outline-variant/40 hover:text-on-surface"
-                  )}
-                >
-                  <option value="all">Todos os períodos</option>
-                  <option value="atrasados">⚠️ Já atrasados</option>
-                  <option value="7">Próximos 7 dias</option>
-                  <option value="15">Próximos 15 dias</option>
-                  <option value="30">Próximos 30 dias</option>
-                  <option value="60">Próximos 60 dias</option>
-                  <option value="60plus">Acima de 60 dias</option>
-                </select>
-                {deadlinePeriodFilter !== 'all' && (
-                  <button
-                    onClick={() => setDeadlinePeriodFilter('all')}
-                    className="p-1 hover:bg-surface-container-high rounded-lg text-outline hover:text-on-surface transition-colors"
-                    title="Limpar filtro de período"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                )}
               </div>
             </div>
           </div>
