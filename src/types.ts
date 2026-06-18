@@ -20,6 +20,23 @@ export interface Process {
   created_at?: string;
 }
 
+export interface ProcessClient {
+  id: string;
+  process_id: string;
+  client_id: string;
+  role: string;
+  created_at?: string;
+  clients?: { name: string; cpf_cnpj: string; status?: string };
+}
+
+export const PROCESS_CLIENT_ROLES = [
+  'Principal',
+  'Interveniente',
+  'Terceiro Interessado',
+  'Litisconsorte',
+  'Assistente',
+] as const;
+
 export interface Client {
   id: string;
   user_id: string;

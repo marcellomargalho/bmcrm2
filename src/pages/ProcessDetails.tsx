@@ -23,10 +23,10 @@ export function ProcessDetails() {
     if (!id) return;
     const { data } = await supabase
       .from('processes')
-      .select(`*, clients(name, cpf_cnpj, status)`)
+      .select(`*, clients(name, cpf_cnpj, status), process_clients(client_id, role, clients(name, cpf_cnpj, status))`)
       .eq('id', id)
       .single();
-    
+
     setProcess(data);
     setLoading(false);
   }, [id]);
@@ -142,10 +142,53 @@ export function ProcessDetails() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8 pt-8 border-t border-outline-variant/10">
-              <div className="space-y-1">
-                <p className="text-[10px] text-outline uppercase tracking-widest font-bold">Cliente Vinculado</p>
-                <p className="text-sm font-bold text-on-surface">{process.clients?.name || 'Não informado'}</p>
-                <p className="text-xs text-on-surface-variant">{process.clients?.cpf_cnpj}</p>
+              {/* Clientes Vinculados */}
+              <div className="space-y-2 md:col-span-1">
+                <p className="text-[10px] text-outline uppercase tracking-widest font-bold mb-3">Clientes Vinculados</p>
+                {(() => {
+                  const allClients: { name: string; cpf_cnpj: string; status?: string; role: string }[] =
+                    process.process_clients && process.process_clients.length > 0
+                      ? process.process_clients
+                          .filter((pc: any) => pc.clients)
+                          .map((pc: any) => ({ ...pc.clients, role: pc.role }))
+                      : process.clients
+                        ? [{ ...process.clients, role: 'Principal' }]
+                        : [];
+
+                  const roleColors: Record<string, string> = {
+                    'Principal': 'bg-secondary/10 text-secondary border-secondary/20',
+                    'Interveniente': 'bg-primary/10 text-primary border-primary/20',
+                    'Terceiro Interessado': 'bg-amber-500/10 text-amber-600 border-amber-500/20',
+                    'Litisconsorte': 'bg-violet-500/10 text-violet-600 border-violet-500/20',
+                    'Assistente': 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20',
+                  };
+
+                  if (allClients.length === 0) {
+                    return <p className="text-sm text-on-surface-variant">Não informado</p>;
+                  }
+
+                  return (
+                    <div className="space-y-2">
+                      {allClients.map((c, i) => (
+                        <div key={i} className="flex items-center gap-2.5 bg-surface-container-highest rounded-xl p-2.5">
+                          <div className="w-8 h-8 rounded-full bg-secondary/10 flex items-center justify-center text-[10px] font-bold text-secondary shrink-0">
+                            {c.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-bold text-on-surface truncate">{c.name}</p>
+                            <p className="text-[10px] text-outline truncate">{c.cpf_cnpj}</p>
+                          </div>
+                          <span className={cn(
+                            "text-[9px] font-bold border rounded-full px-2 py-0.5 uppercase tracking-wide shrink-0",
+                            roleColors[c.role] || 'bg-surface-container text-on-surface border-outline-variant/20'
+                          )}>
+                            {c.role}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
               </div>
               <div className="space-y-1">
                 <p className="text-[10px] text-outline uppercase tracking-widest font-bold">Partes</p>

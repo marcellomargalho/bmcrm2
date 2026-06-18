@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
-import { X, Loader2, ChevronDown } from 'lucide-react';
+import { X, Loader2, ChevronDown, Search, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Client } from '@/types';
+import { Client, PROCESS_CLIENT_ROLES } from '@/types';
 
 export interface ProcessRow {
   id: string;
@@ -19,11 +19,18 @@ export interface ProcessRow {
   client_id: string;
   responsible?: string | null;
   clients?: { name: string; cpf_cnpj: string } | null;
+  process_clients?: { role: string; clients: { name: string; cpf_cnpj: string } | null }[];
+}
+
+interface SelectedClient {
+  id: string;
+  name: string;
+  cpf_cnpj: string;
+  role: string;
 }
 
 export function NewProcessModal({ isOpen, onClose, onSuccess, editingProcess }: { isOpen: boolean; onClose: () => void; onSuccess: () => void; editingProcess?: ProcessRow | null | any }) {
   const [formData, setFormData] = useState({
-    client_id: '',
     number: '',
     court: '',
     comarca: '',
@@ -35,11 +42,34 @@ export function NewProcessModal({ isOpen, onClose, onSuccess, editingProcess }: 
     responsible: '',
     status: 'Em Andamento',
   });
+
+  const [selectedClients, setSelectedClients] = useState<SelectedClient[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [profiles, setProfiles] = useState<any[]>([]);
   const [loadingClients, setLoadingClients] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+
+  // Client search dropdown
+  const [clientSearch, setClientSearch] = useState('');
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const filteredClients = clients.filter(c => {
+    const term = clientSearch.toLowerCase();
+    const alreadySelected = selectedClients.some(sc => sc.id === c.id);
+    return !alreadySelected && (c.name.toLowerCase().includes(term) || c.cpf_cnpj.includes(term));
+  });
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setDropdownOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   useEffect(() => {
     if (isOpen) {
@@ -48,14 +78,13 @@ export function NewProcessModal({ isOpen, onClose, onSuccess, editingProcess }: 
         setClients(data || []);
         setLoadingClients(false);
       });
-      
+
       supabase.from('profiles').select('id, name, role').order('name').then(({ data }) => {
         setProfiles(data || []);
       });
 
       if (editingProcess) {
         setFormData({
-          client_id: editingProcess.client_id || '',
           number: editingProcess.number || '',
           court: editingProcess.court || '',
           comarca: editingProcess.comarca || '',
@@ -67,13 +96,56 @@ export function NewProcessModal({ isOpen, onClose, onSuccess, editingProcess }: 
           responsible: editingProcess.responsible || '',
           status: editingProcess.status || 'Em Andamento',
         });
+
+        // Load existing linked clients from process_clients
+        if (editingProcess.process_clients && editingProcess.process_clients.length > 0) {
+          const loaded: SelectedClient[] = editingProcess.process_clients
+            .filter((pc: any) => pc.clients)
+            .map((pc: any) => ({
+              id: pc.client_id || '',
+              name: pc.clients?.name || '',
+              cpf_cnpj: pc.clients?.cpf_cnpj || '',
+              role: pc.role || 'Principal',
+            }));
+          setSelectedClients(loaded);
+        } else if (editingProcess.client_id && editingProcess.clients) {
+          // Fallback: migrate from legacy client_id
+          setSelectedClients([{
+            id: editingProcess.client_id,
+            name: editingProcess.clients.name || '',
+            cpf_cnpj: editingProcess.clients.cpf_cnpj || '',
+            role: 'Principal',
+          }]);
+        } else {
+          setSelectedClients([]);
+        }
       } else {
-        setFormData({ client_id: '', number: '', court: '', comarca: '', vara: '', autor: '', reu: '', area: '', type: '', responsible: '', status: 'Em Andamento' });
+        setFormData({ number: '', court: '', comarca: '', vara: '', autor: '', reu: '', area: '', type: '', responsible: '', status: 'Em Andamento' });
+        setSelectedClients([]);
       }
+      setClientSearch('');
+      setDropdownOpen(false);
     }
   }, [isOpen, editingProcess]);
 
   if (!isOpen) return null;
+
+  function addClient(client: Client) {
+    setSelectedClients(prev => [
+      ...prev,
+      { id: client.id, name: client.name, cpf_cnpj: client.cpf_cnpj, role: prev.length === 0 ? 'Principal' : 'Interveniente' },
+    ]);
+    setClientSearch('');
+    setDropdownOpen(false);
+  }
+
+  function removeClient(id: string) {
+    setSelectedClients(prev => prev.filter(c => c.id !== id));
+  }
+
+  function changeClientRole(id: string, role: string) {
+    setSelectedClients(prev => prev.map(c => c.id === id ? { ...c, role } : c));
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -84,12 +156,15 @@ export function NewProcessModal({ isOpen, onClose, onSuccess, editingProcess }: 
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Sessão inválida. Faça login novamente.');
 
-      if (!formData.client_id) throw new Error('Selecione um cliente.');
+      if (selectedClients.length === 0) throw new Error('Vincule ao menos um cliente ao processo.');
       if (!formData.number) throw new Error('Informe o número do processo.');
+
+      // The "Principal" client (or first selected) stays in client_id for backward compatibility
+      const primaryClient = selectedClients.find(c => c.role === 'Principal') || selectedClients[0];
 
       const payload = {
         user_id: user.id,
-        client_id: formData.client_id,
+        client_id: primaryClient.id,
         number: formData.number,
         court: formData.court || null,
         comarca: formData.comarca || null,
@@ -102,26 +177,44 @@ export function NewProcessModal({ isOpen, onClose, onSuccess, editingProcess }: 
         status: formData.status,
       };
 
+      let processId: string;
+
       if (editingProcess) {
         const { error: updateError } = await supabase.from('processes').update(payload).eq('id', editingProcess.id);
         if (updateError) throw updateError;
+        processId = editingProcess.id;
       } else {
-        const { error: insertError } = await supabase.from('processes').insert([payload]);
+        const { data: insertData, error: insertError } = await supabase.from('processes').insert([payload]).select().single();
         if (insertError) throw insertError;
+        processId = insertData.id;
       }
 
-      // Update client process count
-      const { count } = await supabase
-        .from('processes')
-        .select('*', { count: 'exact', head: true })
-        .eq('client_id', formData.client_id);
-      await supabase.from('clients').update({ process_count: count || 0 }).eq('id', formData.client_id);
+      // Sync process_clients: delete all existing, then re-insert
+      await supabase.from('process_clients').delete().eq('process_id', processId);
+
+      const pcRows = selectedClients.map(c => ({
+        process_id: processId,
+        client_id: c.id,
+        role: c.role,
+      }));
+      const { error: pcError } = await supabase.from('process_clients').insert(pcRows);
+      if (pcError) throw pcError;
+
+      // Update process_count for all involved clients
+      for (const c of selectedClients) {
+        const { count } = await supabase
+          .from('process_clients')
+          .select('*', { count: 'exact', head: true })
+          .eq('client_id', c.id);
+        await supabase.from('clients').update({ process_count: count || 0 }).eq('id', c.id);
+      }
 
       onSuccess();
       onClose();
-      setFormData({ client_id: '', number: '', court: '', comarca: '', vara: '', autor: '', reu: '', area: '', type: '', responsible: '', status: 'Em Andamento' });
+      setFormData({ number: '', court: '', comarca: '', vara: '', autor: '', reu: '', area: '', type: '', responsible: '', status: 'Em Andamento' });
+      setSelectedClients([]);
     } catch (err: any) {
-      setError(err.message || 'Erro ao criar processo.');
+      setError(err.message || 'Erro ao salvar processo.');
     } finally {
       setSubmitting(false);
     }
@@ -129,6 +222,14 @@ export function NewProcessModal({ isOpen, onClose, onSuccess, editingProcess }: 
 
   const inputCls = "w-full bg-surface-container-highest border-none rounded-xl px-4 py-3 text-on-surface focus:ring-2 focus:ring-secondary placeholder:text-outline/50 transition-all font-medium";
   const labelCls = "text-xs font-bold text-on-surface-variant uppercase tracking-wider";
+
+  const roleColors: Record<string, string> = {
+    'Principal': 'bg-secondary/15 text-secondary border-secondary/25',
+    'Interveniente': 'bg-primary/15 text-primary border-primary/25',
+    'Terceiro Interessado': 'bg-amber-500/15 text-amber-600 border-amber-500/25',
+    'Litisconsorte': 'bg-violet-500/15 text-violet-600 border-violet-500/25',
+    'Assistente': 'bg-emerald-500/15 text-emerald-600 border-emerald-500/25',
+  };
 
   return (
     <div className="fixed inset-0 bg-surface/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
@@ -149,31 +250,102 @@ export function NewProcessModal({ isOpen, onClose, onSuccess, editingProcess }: 
             </div>
           )}
 
-          {/* Cliente vinculado */}
+          {/* ── Clientes Vinculados (multi) ── */}
           <div>
-            <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-3">Vinculação do Cliente</p>
-            <div className="space-y-1">
-              <label className={labelCls}>Cliente *</label>
-              {loadingClients ? (
-                <div className="flex items-center gap-2 py-3 text-on-surface-variant text-sm">
-                  <Loader2 className="w-4 h-4 animate-spin" /> Carregando clientes...
+            <div className="flex items-center gap-2 mb-3">
+              <Users className="w-3.5 h-3.5 text-secondary" />
+              <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">Clientes Vinculados</p>
+            </div>
+
+            {/* Selected client tags */}
+            {selectedClients.length > 0 && (
+              <div className="space-y-2 mb-3">
+                {selectedClients.map(c => (
+                  <div key={c.id} className="flex items-center gap-2 bg-surface-container-highest rounded-xl px-3 py-2">
+                    <div className="w-7 h-7 rounded-full bg-secondary/10 flex items-center justify-center text-[10px] font-bold text-secondary shrink-0">
+                      {c.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-on-surface truncate">{c.name}</p>
+                      <p className="text-[10px] text-outline truncate">{c.cpf_cnpj}</p>
+                    </div>
+                    <select
+                      value={c.role}
+                      onChange={e => changeClientRole(c.id, e.target.value)}
+                      className={cn(
+                        "text-[10px] font-bold border rounded-full px-2 py-0.5 appearance-none cursor-pointer focus:outline-none focus:ring-1 focus:ring-secondary transition-colors",
+                        roleColors[c.role] || 'bg-surface-container text-on-surface border-outline-variant/20'
+                      )}
+                    >
+                      {PROCESS_CLIENT_ROLES.map(r => (
+                        <option key={r} value={r}>{r}</option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => removeClient(c.id)}
+                      className="p-1 rounded-full hover:bg-error/10 hover:text-error text-outline transition-colors shrink-0"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Client search dropdown */}
+            <div className="relative" ref={dropdownRef}>
+              <div className="relative">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-outline pointer-events-none" />
+                {loadingClients ? (
+                  <div className="flex items-center gap-2 py-3 px-4 text-on-surface-variant text-sm bg-surface-container-highest rounded-xl">
+                    <Loader2 className="w-4 h-4 animate-spin" /> Carregando clientes...
+                  </div>
+                ) : (
+                  <input
+                    type="text"
+                    value={clientSearch}
+                    onChange={e => { setClientSearch(e.target.value); setDropdownOpen(true); }}
+                    onFocus={() => setDropdownOpen(true)}
+                    placeholder={selectedClients.length === 0 ? 'Buscar e adicionar cliente...' : 'Adicionar outro cliente...'}
+                    className={cn(inputCls, "pl-11")}
+                  />
+                )}
+              </div>
+
+              {dropdownOpen && !loadingClients && (
+                <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-surface-container rounded-2xl shadow-2xl border border-outline-variant/20 max-h-52 overflow-y-auto">
+                  {filteredClients.length === 0 ? (
+                    <p className="text-sm text-outline text-center py-4 font-medium">
+                      {clientSearch ? `Nenhum cliente encontrado para "${clientSearch}"` : 'Todos os clientes já foram adicionados'}
+                    </p>
+                  ) : (
+                    filteredClients.map(c => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => addClient(c)}
+                        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-surface-container-high transition-colors text-left"
+                      >
+                        <div className="w-7 h-7 rounded-full bg-secondary/10 flex items-center justify-center text-[10px] font-bold text-secondary shrink-0">
+                          {c.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-on-surface truncate">{c.name}</p>
+                          <p className="text-[10px] text-outline">{c.cpf_cnpj}</p>
+                        </div>
+                      </button>
+                    ))
+                  )}
                 </div>
-              ) : (
-                <select
-                  required
-                  value={formData.client_id}
-                  onChange={e => setFormData({ ...formData, client_id: e.target.value })}
-                  className={cn(inputCls, "appearance-none")}
-                >
-                  <option value="">Selecione o cliente</option>
-                  {clients.map(c => (
-                    <option key={c.id} value={c.id}>
-                      {c.name} — {c.cpf_cnpj}
-                    </option>
-                  ))}
-                </select>
               )}
             </div>
+
+            {selectedClients.length === 0 && !loadingClients && (
+              <p className="text-[11px] text-outline mt-2 flex items-center gap-1">
+                <span className="text-error font-bold">*</span> Pelo menos um cliente deve ser vinculado ao processo
+              </p>
+            )}
           </div>
 
           {/* Dados do processo */}
@@ -338,7 +510,7 @@ export function NewProcessModal({ isOpen, onClose, onSuccess, editingProcess }: 
           <div className="pt-2 border-t border-outline-variant/10">
             <div className="space-y-1.5">
               <label className={labelCls}>Equipe Responsável</label>
-              
+
               {formData.responsible && (
                 <div className="flex flex-wrap gap-1 mb-2 mt-2">
                   {formData.responsible.split(',').map((r, i) => {

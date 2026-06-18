@@ -38,8 +38,8 @@ serve(async (req) => {
       })
     }
 
-    // Lista consolidada de destinatários globais (fallback)
-    const globalRecipients = [seniorEmail, ...teamEmails].filter(Boolean)
+    // Lista consolidada de destinatários globais (fallback) — sem duplicatas
+    const globalRecipients = [...new Set([seniorEmail, ...teamEmails].filter(e => typeof e === 'string' && e.includes('@')))]
 
     // 2. Definir datas/horas locais em America/Sao_Paulo (UTC-3)
     const getLocalDate = (offsetHours = -3) => {
@@ -74,10 +74,11 @@ serve(async (req) => {
       if (hearing.notification_emails) {
         const customEmails = hearing.notification_emails
           .split(',')
-          .map((e: string) => e.trim())
-          .filter((e: string) => e.length > 0)
+          .map((e: string) => e.trim().toLowerCase())
+          .filter((e: string) => e.length > 0 && e.includes('@'))
         if (customEmails.length > 0) {
-          hearingRecipients = customEmails
+          // Deduplicate: merge custom emails with global, removing any duplicates
+          hearingRecipients = [...new Set(customEmails)]
         }
       }
 

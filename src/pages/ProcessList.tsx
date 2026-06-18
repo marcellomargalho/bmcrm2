@@ -34,7 +34,7 @@ export function ProcessList() {
     setLoading(true);
     const { data } = await supabase
       .from('processes')
-      .select('*, clients(name, cpf_cnpj)')
+      .select('*, clients(name, cpf_cnpj), process_clients(client_id, role, clients(name, cpf_cnpj))')
       .order('created_at', { ascending: false });
     setProcesses(data || []);
     setLoading(false);
@@ -75,9 +75,11 @@ export function ProcessList() {
   const filteredProcesses = filterText.trim()
     ? processes.filter(p => {
         const term = filterText.toLowerCase();
-        const clientName = (p.clients?.name || '').toLowerCase();
         const number = p.number.toLowerCase();
-        return clientName.includes(term) || number.includes(term);
+        // Search across all linked clients
+        const linkedClients: string[] = (p.process_clients || []).map((pc: any) => (pc.clients?.name || '').toLowerCase());
+        const primaryClient = (p.clients?.name || '').toLowerCase();
+        return number.includes(term) || primaryClient.includes(term) || linkedClients.some((n: string) => n.includes(term));
       })
     : processes;
 
@@ -203,15 +205,55 @@ export function ProcessList() {
                       </span>
                     </td>
                     <td className="px-6 py-6">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center text-[10px] font-bold text-primary">
-                          {(proc.clients?.name || '?').split(' ').map(n => n[0]).join('').slice(0, 2)}
-                        </div>
-                        <div>
-                          <p className="text-sm font-semibold text-on-surface">{proc.clients?.name || '—'}</p>
-                          <p className="text-[11px] text-outline">{proc.clients?.cpf_cnpj || ''}</p>
-                        </div>
-                      </div>
+                      {(() => {
+                        const allClients: { name: string; cpf_cnpj: string; role: string }[] =
+                          proc.process_clients && proc.process_clients.length > 0
+                            ? proc.process_clients.filter((pc: any) => pc.clients).map((pc: any) => ({ name: pc.clients.name, cpf_cnpj: pc.clients.cpf_cnpj, role: pc.role }))
+                            : proc.clients ? [{ name: proc.clients.name, cpf_cnpj: proc.clients.cpf_cnpj, role: 'Principal' }] : [];
+
+                        if (allClients.length === 0) {
+                          return <span className="text-outline text-sm">—</span>;
+                        }
+
+                        if (allClients.length === 1) {
+                          return (
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center text-[10px] font-bold text-primary shrink-0">
+                                {allClients[0].name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
+                              </div>
+                              <div>
+                                <p className="text-sm font-semibold text-on-surface">{allClients[0].name}</p>
+                                <p className="text-[11px] text-outline">{allClients[0].cpf_cnpj}</p>
+                              </div>
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <div className="flex items-center gap-2">
+                            <div className="flex -space-x-2">
+                              {allClients.slice(0, 3).map((c, i) => (
+                                <div
+                                  key={i}
+                                  title={`${c.name} (${c.role})`}
+                                  className="w-8 h-8 rounded-full bg-surface-container-high border-2 border-surface-container-lowest flex items-center justify-center text-[9px] font-bold text-primary"
+                                >
+                                  {c.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
+                                </div>
+                              ))}
+                              {allClients.length > 3 && (
+                                <div className="w-8 h-8 rounded-full bg-secondary/10 border-2 border-surface-container-lowest flex items-center justify-center text-[9px] font-bold text-secondary">
+                                  +{allClients.length - 3}
+                                </div>
+                              )}
+                            </div>
+                            <div>
+                              <p className="text-sm font-semibold text-on-surface">{allClients[0].name}</p>
+                              <p className="text-[10px] text-secondary font-bold">+{allClients.length - 1} outro{allClients.length > 2 ? 's' : ''}</p>
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </td>
                     <td className="px-6 py-6">
                       <div className="space-y-2">
