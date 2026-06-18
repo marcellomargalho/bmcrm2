@@ -267,12 +267,38 @@ function ClientProcesses({ clientId, userRole }: { clientId: string; userRole: s
 
   async function fetchProcesses() {
     setLoading(true);
-    const { data } = await supabase
+
+    // 1. Processos onde este cliente é o "Principal" (client_id direto)
+    const { data: directProcesses } = await supabase
       .from('processes')
       .select('*')
       .eq('client_id', clientId)
       .order('created_at', { ascending: false });
-    setProcesses(data || []);
+
+    // 2. Processos vinculados posteriormente via process_clients
+    const { data: linkedRows } = await supabase
+      .from('process_clients')
+      .select('process_id, role, processes(*)')
+      .eq('client_id', clientId);
+
+    const linkedProcesses: any[] = (linkedRows || [])
+      .map((row: any) => row.processes)
+      .filter(Boolean);
+
+    // 3. Mescla removendo duplicatas por id
+    const allProcesses = [...(directProcesses || [])];
+    for (const lp of linkedProcesses) {
+      if (!allProcesses.some(p => p.id === lp.id)) {
+        allProcesses.push(lp);
+      }
+    }
+
+    // 4. Ordena por data de criação (mais recentes primeiro)
+    allProcesses.sort((a, b) =>
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+
+    setProcesses(allProcesses);
     setLoading(false);
   }
 
@@ -405,8 +431,13 @@ function EditClientModal({ isOpen, onClose, onSuccess, client }: { isOpen: boole
               status: 'Em Andamento'
             }))
           );
-          const { count } = await supabase.from('processes').select('*', { count: 'exact', head: true }).eq('client_id', client.id);
-          await supabase.from('clients').update({ process_count: count || 0 }).eq('id', client.id);
+          // Conta processos diretos (client_id) + vinculados (process_clients), sem duplicatas
+          const { count: directCount } = await supabase.from('processes').select('*', { count: 'exact', head: true }).eq('client_id', client.id);
+          const { count: linkedCount } = await supabase.from('process_clients').select('*', { count: 'exact', head: true }).eq('client_id', client.id);
+          // A contagem total é a union — process_clients já inclui todos (diretos e secundários)
+          // Usa process_clients como fonte principal de contagem pois é onde todos ficam registrados
+          const totalCount = linkedCount || directCount || 0;
+          await supabase.from('clients').update({ process_count: totalCount }).eq('id', client.id);
         }
       }
 
