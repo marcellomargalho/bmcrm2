@@ -89,65 +89,23 @@ serve(async (req) => {
 
       // ── A. ALERTA DE 01 DIA ANTES ──────────────────────────────────────────
       if (hDate === tomorrowStr) {
-        // Verifica se já existe log de envio de 1 dia para esta audiência
-        const { data: logExists } = await supabase
-          .from('hearing_logs')
-          .select('id')
-          .eq('hearing_id', hearingId)
-          .eq('notification_type', '1_day_before')
-          .maybeSingle()
+        // PROTEÇÃO 1: verifica status da própria audiência (barreira primária)
+        const alreadyNotified1Day = [
+          'notificacao_1dia_enviada',
+          'notificacao_15min_enviada',
+          'concluida',
+          'cancelada',
+        ].includes(hearing.status)
 
-        if (!logExists) {
-          // Dispara e-mail
-          const sendResult = await sendEmail({
-            apiKey,
-            from: `${fromName} <${fromEmail}>`,
-            to: hearingRecipients,
-            hearing,
-            typeLabel: 'Lembrete de Audiência (Amanhã)',
-          })
-
-          // Salva log
-          await supabase.from('hearing_logs').insert([{
-            hearing_id: hearingId,
-            notification_type: '1_day_before',
-            recipient: hearingRecipients.join(', '),
-            status: sendResult.success ? 'success' : 'error',
-            error_message: sendResult.error || null,
-          }])
-
-          // Se sucesso, atualiza status da audiência
-          if (sendResult.success) {
-            await supabase
-              .from('hearings')
-              .update({ status: 'notificacao_1dia_enviada', updated_at: new Date().toISOString() })
-              .eq('id', hearingId)
-            processedList.push({ id: hearingId, type: '1_day_before', status: 'success' })
-          } else {
-            processedList.push({ id: hearingId, type: '1_day_before', status: 'error', error: sendResult.error })
-          }
-        }
-      }
-
-      // ── B. ALERTA DE 15 MINUTOS ANTES ──────────────────────────────────────
-      if (hDate === todayStr) {
-        // Converte data/hora da audiência (UTC-3) para timestamp UTC
-        const [y, m, d] = hDate.split('-')
-        const [hh, mm] = hTime.split(':')
-        const hearingUtc = new Date(Date.UTC(Number(y), Number(m) - 1, Number(d), Number(hh) + 3, Number(mm)))
-        
-        const nowUtc = new Date()
-        const diffMs = hearingUtc.getTime() - nowUtc.getTime()
-        const diffMins = diffMs / 60000
-
-        // Se a audiência começa nos próximos 15 minutos (margem de 0 a 15)
-        if (diffMins >= 0 && diffMins <= 15) {
-          // Verifica se já existe log de envio de 15 minutos para esta audiência
+        if (alreadyNotified1Day) {
+          processedList.push({ id: hearingId, type: '1_day_before', status: 'skipped', reason: 'status já indica notificação enviada' })
+        } else {
+          // PROTEÇÃO 2: verifica se já existe log de envio de 1 dia (barreira secundária)
           const { data: logExists } = await supabase
             .from('hearing_logs')
             .select('id')
             .eq('hearing_id', hearingId)
-            .eq('notification_type', '15_minutes_before')
+            .eq('notification_type', '1_day_before')
             .maybeSingle()
 
           if (!logExists) {
@@ -157,13 +115,13 @@ serve(async (req) => {
               from: `${fromName} <${fromEmail}>`,
               to: hearingRecipients,
               hearing,
-              typeLabel: 'Lembrete Urgente (Em 15 minutos)',
+              typeLabel: 'Lembrete de Audiência (Amanhã)',
             })
 
             // Salva log
             await supabase.from('hearing_logs').insert([{
               hearing_id: hearingId,
-              notification_type: '15_minutes_before',
+              notification_type: '1_day_before',
               recipient: hearingRecipients.join(', '),
               status: sendResult.success ? 'success' : 'error',
               error_message: sendResult.error || null,
@@ -173,11 +131,80 @@ serve(async (req) => {
             if (sendResult.success) {
               await supabase
                 .from('hearings')
-                .update({ status: 'notificacao_15min_enviada', updated_at: new Date().toISOString() })
+                .update({ status: 'notificacao_1dia_enviada', updated_at: new Date().toISOString() })
                 .eq('id', hearingId)
-              processedList.push({ id: hearingId, type: '15_minutes_before', status: 'success' })
+              processedList.push({ id: hearingId, type: '1_day_before', status: 'success' })
             } else {
-              processedList.push({ id: hearingId, type: '15_minutes_before', status: 'error', error: sendResult.error })
+              processedList.push({ id: hearingId, type: '1_day_before', status: 'error', error: sendResult.error })
+            }
+          } else {
+            processedList.push({ id: hearingId, type: '1_day_before', status: 'skipped', reason: 'log já existe' })
+          }
+        }
+      }
+
+      // ── B. ALERTA DE 15 MINUTOS ANTES ──────────────────────────────────────
+      if (hDate === todayStr) {
+        // PROTEÇÃO 1: verifica status da própria audiência (barreira primária)
+        const alreadyNotified15Min = [
+          'notificacao_15min_enviada',
+          'concluida',
+          'cancelada',
+        ].includes(hearing.status)
+
+        if (alreadyNotified15Min) {
+          processedList.push({ id: hearingId, type: '15_minutes_before', status: 'skipped', reason: 'status já indica notificação enviada' })
+        } else {
+          // Converte data/hora da audiência (UTC-3) para timestamp UTC
+          const [y, m, d] = hDate.split('-')
+          const [hh, mm] = hTime.split(':')
+          const hearingUtc = new Date(Date.UTC(Number(y), Number(m) - 1, Number(d), Number(hh) + 3, Number(mm)))
+          
+          const nowUtc = new Date()
+          const diffMs = hearingUtc.getTime() - nowUtc.getTime()
+          const diffMins = diffMs / 60000
+
+          // Se a audiência começa nos próximos 15 minutos (margem de 0 a 15)
+          if (diffMins >= 0 && diffMins <= 15) {
+            // PROTEÇÃO 2: verifica se já existe log de envio de 15 minutos (barreira secundária)
+            const { data: logExists } = await supabase
+              .from('hearing_logs')
+              .select('id')
+              .eq('hearing_id', hearingId)
+              .eq('notification_type', '15_minutes_before')
+              .maybeSingle()
+
+            if (!logExists) {
+              // Dispara e-mail
+              const sendResult = await sendEmail({
+                apiKey,
+                from: `${fromName} <${fromEmail}>`,
+                to: hearingRecipients,
+                hearing,
+                typeLabel: 'Lembrete Urgente (Em 15 minutos)',
+              })
+
+              // Salva log
+              await supabase.from('hearing_logs').insert([{
+                hearing_id: hearingId,
+                notification_type: '15_minutes_before',
+                recipient: hearingRecipients.join(', '),
+                status: sendResult.success ? 'success' : 'error',
+                error_message: sendResult.error || null,
+              }])
+
+              // Se sucesso, atualiza status da audiência
+              if (sendResult.success) {
+                await supabase
+                  .from('hearings')
+                  .update({ status: 'notificacao_15min_enviada', updated_at: new Date().toISOString() })
+                  .eq('id', hearingId)
+                processedList.push({ id: hearingId, type: '15_minutes_before', status: 'success' })
+              } else {
+                processedList.push({ id: hearingId, type: '15_minutes_before', status: 'error', error: sendResult.error })
+              }
+            } else {
+              processedList.push({ id: hearingId, type: '15_minutes_before', status: 'skipped', reason: 'log já existe' })
             }
           }
         }
