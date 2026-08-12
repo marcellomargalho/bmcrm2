@@ -33,6 +33,7 @@ export function NewTaskModal({ isOpen, onClose, onSuccess, lockedProcessId, edit
   const [priority, setPriority] = useState('Média');
   const [fatalDate, setFatalDate] = useState('');
   const [idealDate, setIdealDate] = useState('');
+  const [sendEmail, setSendEmail] = useState(false);
 
   const [clientProcesses, setClientProcesses] = useState<any[]>([]);
 
@@ -70,7 +71,7 @@ export function NewTaskModal({ isOpen, onClose, onSuccess, lockedProcessId, edit
       setLoadingClients(false);
     });
 
-    supabase.from('profiles').select('id, name, role').eq('is_approved', true).order('name').then(({ data }) => {
+    supabase.from('profiles').select('id, name, role, email').eq('is_approved', true).order('name').then(({ data }) => {
       setProfiles(data || []);
     });
   }, [isOpen, editingTask, lockedProcessId]);
@@ -101,6 +102,7 @@ export function NewTaskModal({ isOpen, onClose, onSuccess, lockedProcessId, edit
     setPriority('Média');
     setFatalDate('');
     setIdealDate('');
+    setSendEmail(false);
     setError('');
     // Only reset client/process selection if no locked process
     if (!lockedProcessId) {
@@ -172,7 +174,7 @@ export function NewTaskModal({ isOpen, onClose, onSuccess, lockedProcessId, edit
 
       // Criar notificações para cada responsável (apenas ao criar, não ao editar)
       if (!editingTask && task && responsibles.length > 0) {
-        const { data: allProfiles } = await supabase.from('profiles').select('id, name');
+        const { data: allProfiles } = await supabase.from('profiles').select('id, name, email');
         
         const notificationsPayload = responsibles
           .map((name: string) => {
@@ -194,6 +196,35 @@ export function NewTaskModal({ isOpen, onClose, onSuccess, lockedProcessId, edit
 
         if (notificationsPayload.length > 0) {
           await supabase.from('notifications').insert(notificationsPayload);
+        }
+
+        if (sendEmail) {
+          const recipientEmails = responsibles
+            .map((name: string) => {
+              const profile = (allProfiles || []).find(
+                (p: any) => p.name.toLowerCase().trim() === name.toLowerCase().trim()
+              );
+              return profile?.email;
+            })
+            .filter(Boolean);
+
+          if (recipientEmails.length > 0) {
+            await supabase.functions.invoke('send-notification', {
+              body: {
+                type: 'task_assigned',
+                taskId: task.id,
+                processId: task.process_id,
+                recipients: recipientEmails,
+                data: {
+                  clientName: task.client_name,
+                  processNumber: task.process_number,
+                  responsible: responsibles.join(', '),
+                  observations: task.description,
+                  deadline: task.fatal_date ? new Date(task.fatal_date).toLocaleDateString('pt-BR') : undefined
+                }
+              }
+            });
+          }
         }
       }
 
@@ -356,6 +387,19 @@ export function NewTaskModal({ isOpen, onClose, onSuccess, lockedProcessId, edit
                 </select>
                 <ChevronDown className="w-4 h-4 text-outline absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               </div>
+              {!editingTask && (
+                <label className="flex items-center gap-2 mt-2 cursor-pointer group w-fit">
+                  <input
+                    type="checkbox"
+                    checked={sendEmail}
+                    onChange={(e) => setSendEmail(e.target.checked)}
+                    className="w-4 h-4 rounded border-outline-variant/30 bg-surface-container-lowest text-secondary focus:ring-secondary/20 transition-all cursor-pointer"
+                  />
+                  <span className="text-[11px] text-on-surface-variant group-hover:text-on-surface transition-colors">
+                    Avisar responsáveis por e-mail
+                  </span>
+                </label>
+              )}
             </div>
 
             <div className="space-y-1">
