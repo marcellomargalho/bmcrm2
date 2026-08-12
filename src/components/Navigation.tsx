@@ -41,15 +41,17 @@ const navItems = [
   { icon: Gavel, label: 'Processos', path: '/processos' },
   { icon: Users, label: 'Clientes', path: '/clientes' },
   { icon: Calendar, label: 'Agenda', path: '/agenda' },
-  { icon: Bookmark, label: 'Intimações', path: '/intimacoes', adminOnly: true },
+  // advogadoPlus: visível para Advogado, Advogado com Controladoria e Administrador
+  { icon: Bookmark, label: 'Intimações', path: '/intimacoes', advogadoPlus: true },
   { icon: CalendarClock, label: 'Audiências', path: '/audiencias' },
   { icon: FileText, label: 'Documentos', path: '/documentos' },
+  // adminOnly: visível apenas para Advogado com Controladoria e Administrador
   { icon: CircleDollarSign, label: 'Financeiro', path: '/financeiro', adminOnly: true },
   { icon: MessageSquare, label: 'Atendimento', path: '/atendimento', adminOnly: true },
   { icon: BarChart2, label: 'Analytics', path: '/analytics', adminOnly: true },
   { icon: Globe, label: 'Blog (Site)', path: '/blog', adminOnly: true },
   { icon: Settings, label: 'Configurações', path: '/configuracoes' },
-] as Array<{ icon: any, label: string, path: string, adminOnly?: boolean, badge?: string }>;
+] as Array<{ icon: any, label: string, path: string, adminOnly?: boolean, advogadoPlus?: boolean, badge?: string }>;
 
 const taskTypeColors: Record<string, string> = {
   'Petição': 'bg-blue-500/15 text-blue-400 border-blue-500/20',
@@ -266,6 +268,9 @@ export function Sidebar({ onLogout, userRole }: { onLogout: () => void, userRole
   const userName = user?.user_metadata?.full_name || 'Usuário';
   const role = userRole || user?.user_metadata?.role || 'Advogado';
   const isEstagiario = role === 'Estagiário';
+  const isAdvogadoSimples = role === 'Advogado';
+  const isAdvogadoControladoria = role === 'Advogado com Controladoria';
+  const isAdminOrControladoria = role === 'Administrador' || isAdvogadoControladoria;
 
   const [intimacoesCount, setIntimacoesCount] = useState<number | null>(null);
 
@@ -318,9 +323,14 @@ export function Sidebar({ onLogout, userRole }: { onLogout: () => void, userRole
   }, [isEstagiario]);
 
   const filteredNavItems = navItems.filter(item => {
-    // Se o item for adminOnly, escondemos APENAS se o usuário for explicitamente "Estagiário"
-    // Isso garante que Administradores e Advogados vejam tudo.
-    if ((item as any).adminOnly && role === 'Estagiário') return false;
+    // Itens adminOnly: visíveis apenas para Administrador e Advogado com Controladoria
+    if ((item as any).adminOnly) {
+      return isAdminOrControladoria;
+    }
+    // Itens advogadoPlus (ex: Intimações): visíveis para Advogado, Advogado com Controladoria e Administrador
+    if ((item as any).advogadoPlus) {
+      return !isEstagiario;
+    }
     return true;
   });
 

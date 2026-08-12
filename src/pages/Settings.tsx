@@ -71,7 +71,7 @@ export function Settings() {
     loadDatajudSettings();
   }, []);
 
-  const isAdmin = profile?.role === 'Administrador';
+  const isAdmin = profile?.role === 'Administrador' || profile?.role === 'Advogado com Controladoria';
 
   useEffect(() => {
     if (isAdmin) {

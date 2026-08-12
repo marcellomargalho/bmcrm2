@@ -123,6 +123,7 @@ export function Signup() {
                     >
                       <option value="Estagiário" className="bg-surface-container-high text-on-surface">Estagiário</option>
                       <option value="Advogado" className="bg-surface-container-high text-on-surface">Advogado</option>
+                      <option value="Advogado com Controladoria" className="bg-surface-container-high text-on-surface">Advogado com Controladoria</option>
                       <option value="Assessor Jurídico" className="bg-surface-container-high text-on-surface">Assessor Jurídico</option>
                     </select>
                     <ChevronDown className="w-4 h-4 text-outline absolute right-4 pointer-events-none" />

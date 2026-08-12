@@ -29,6 +29,14 @@ interface SelectedClient {
   role: string;
 }
 
+const COMMON_VARAS = [
+  "1ª Vara Cível", "2ª Vara Cível", "3ª Vara Cível", "4ª Vara Cível", "5ª Vara Cível",
+  "1ª Vara da Família e Sucessões", "2ª Vara da Família e Sucessões",
+  "1ª Vara Federal", "2ª Vara Federal", "1ª Vara do Trabalho", "2ª Vara do Trabalho",
+  "1ª Vara Criminal", "2ª Vara Criminal", "1ª Vara da Fazenda Pública", "Vara Única",
+  "Juizado Especial Cível", "Juizado Especial Federal"
+];
+
 export function NewProcessModal({ isOpen, onClose, onSuccess, editingProcess }: { isOpen: boolean; onClose: () => void; onSuccess: () => void; editingProcess?: ProcessRow | null | any }) {
   const [formData, setFormData] = useState({
     number: '',
@@ -55,16 +63,39 @@ export function NewProcessModal({ isOpen, onClose, onSuccess, editingProcess }: 
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
+  // Comarca and Vara autocomplete states
+  const [existingComarcas, setExistingComarcas] = useState<string[]>([]);
+  const [existingVaras, setExistingVaras] = useState<string[]>([]);
+  const [comarcaDropdownOpen, setComarcaDropdownOpen] = useState(false);
+  const [varaDropdownOpen, setVaraDropdownOpen] = useState(false);
+  const comarcaRef = useRef<HTMLDivElement>(null);
+  const varaRef = useRef<HTMLDivElement>(null);
+
   const filteredClients = clients.filter(c => {
     const term = clientSearch.toLowerCase();
     const alreadySelected = selectedClients.some(sc => sc.id === c.id);
     return !alreadySelected && (c.name.toLowerCase().includes(term) || c.cpf_cnpj.includes(term));
   });
 
+  const filteredComarcas = existingComarcas.filter(c =>
+    c.toLowerCase().includes(formData.comarca.toLowerCase())
+  );
+
+  const allVaras = Array.from(new Set([...existingVaras, ...COMMON_VARAS])).sort((a, b) => a.localeCompare(b));
+  const filteredVaras = allVaras.filter(v =>
+    v.toLowerCase().includes(formData.vara.toLowerCase())
+  );
+
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
         setDropdownOpen(false);
+      }
+      if (comarcaRef.current && !comarcaRef.current.contains(e.target as Node)) {
+        setComarcaDropdownOpen(false);
+      }
+      if (varaRef.current && !varaRef.current.contains(e.target as Node)) {
+        setVaraDropdownOpen(false);
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
@@ -81,6 +112,16 @@ export function NewProcessModal({ isOpen, onClose, onSuccess, editingProcess }: 
 
       supabase.from('profiles').select('id, name, role').order('name').then(({ data }) => {
         setProfiles(data || []);
+      });
+
+      // Fetch distinct comarcas and varas from existing processes
+      supabase.from('processes').select('comarca, vara').then(({ data }) => {
+        if (data) {
+          const comarcas = Array.from(new Set(data.map(p => p.comarca).filter(Boolean))) as string[];
+          const varas = Array.from(new Set(data.map(p => p.vara).filter(Boolean))) as string[];
+          setExistingComarcas(comarcas.sort((a, b) => a.localeCompare(b)));
+          setExistingVaras(varas.sort((a, b) => a.localeCompare(b)));
+        }
       });
 
       if (editingProcess) {
@@ -125,6 +166,8 @@ export function NewProcessModal({ isOpen, onClose, onSuccess, editingProcess }: 
       }
       setClientSearch('');
       setDropdownOpen(false);
+      setComarcaDropdownOpen(false);
+      setVaraDropdownOpen(false);
     }
   }, [isOpen, editingProcess]);
 
@@ -406,25 +449,67 @@ export function NewProcessModal({ isOpen, onClose, onSuccess, editingProcess }: 
                     <option value="TST">TST</option>
                   </select>
                 </div>
-                <div className="space-y-1">
+                <div className="space-y-1 relative" ref={comarcaRef}>
                   <label className={labelCls}>Comarca</label>
                   <input
                     type="text"
                     value={formData.comarca}
-                    onChange={e => setFormData({ ...formData, comarca: e.target.value })}
+                    onChange={e => {
+                      setFormData({ ...formData, comarca: e.target.value });
+                      setComarcaDropdownOpen(true);
+                    }}
+                    onFocus={() => setComarcaDropdownOpen(true)}
                     className={inputCls}
                     placeholder="Ex: São Paulo"
                   />
+                  {comarcaDropdownOpen && filteredComarcas.length > 0 && (
+                    <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-surface-container rounded-2xl shadow-2xl border border-outline-variant/20 max-h-52 overflow-y-auto">
+                      {filteredComarcas.map((c) => (
+                        <button
+                          key={c}
+                          type="button"
+                          onClick={() => {
+                            setFormData({ ...formData, comarca: c });
+                            setComarcaDropdownOpen(false);
+                          }}
+                          className="w-full text-left px-4 py-3 hover:bg-surface-container-high transition-colors text-sm text-on-surface font-medium border-b border-outline-variant/5 last:border-none"
+                        >
+                          {c}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                <div className="space-y-1">
+                <div className="space-y-1 relative" ref={varaRef}>
                   <label className={labelCls}>Vara</label>
                   <input
                     type="text"
                     value={formData.vara}
-                    onChange={e => setFormData({ ...formData, vara: e.target.value })}
+                    onChange={e => {
+                      setFormData({ ...formData, vara: e.target.value });
+                      setVaraDropdownOpen(true);
+                    }}
+                    onFocus={() => setVaraDropdownOpen(true)}
                     className={inputCls}
                     placeholder="Ex: 1ª Vara Cível"
                   />
+                  {varaDropdownOpen && filteredVaras.length > 0 && (
+                    <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-surface-container rounded-2xl shadow-2xl border border-outline-variant/20 max-h-52 overflow-y-auto">
+                      {filteredVaras.map((v) => (
+                        <button
+                          key={v}
+                          type="button"
+                          onClick={() => {
+                            setFormData({ ...formData, vara: v });
+                            setVaraDropdownOpen(false);
+                          }}
+                          className="w-full text-left px-4 py-3 hover:bg-surface-container-high transition-colors text-sm text-on-surface font-medium border-b border-outline-variant/5 last:border-none"
+                        >
+                          {v}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

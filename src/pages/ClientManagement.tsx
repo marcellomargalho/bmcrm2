@@ -276,20 +276,19 @@ function ClientProcesses({ clientId, userRole }: { clientId: string; userRole: s
       .order('created_at', { ascending: false });
 
     // 2. Processos vinculados posteriormente via process_clients
-    const { data: linkedRows } = await supabase
-      .from('process_clients')
-      .select('process_id, role, processes(*)')
-      .eq('client_id', clientId);
-
-    const linkedProcesses: any[] = (linkedRows || [])
-      .map((row: any) => row.processes)
-      .filter(Boolean);
+    const { data: linkedProcesses } = await supabase
+      .from('processes')
+      .select('*, process_clients!inner(client_id, role)')
+      .eq('process_clients.client_id', clientId);
 
     // 3. Mescla removendo duplicatas por id
     const allProcesses = [...(directProcesses || [])];
-    for (const lp of linkedProcesses) {
-      if (!allProcesses.some(p => p.id === lp.id)) {
-        allProcesses.push(lp);
+    if (linkedProcesses) {
+      for (const lp of linkedProcesses) {
+        const { process_clients, ...processData } = lp;
+        if (!allProcesses.some(p => p.id === processData.id)) {
+          allProcesses.push(processData);
+        }
       }
     }
 
