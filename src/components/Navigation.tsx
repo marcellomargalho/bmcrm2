@@ -323,9 +323,9 @@ export function Sidebar({ onLogout, userRole }: { onLogout: () => void, userRole
   }, [isEstagiario]);
 
   const filteredNavItems = navItems.filter(item => {
-    // Itens adminOnly: visíveis apenas para Administrador e Advogado com Controladoria
+    // Itens adminOnly: visíveis APENAS para Administrador
     if ((item as any).adminOnly) {
-      return isAdminOrControladoria;
+      return role === 'Administrador';
     }
     // Itens advogadoPlus (ex: Intimações): visíveis para Advogado, Advogado com Controladoria e Administrador
     if ((item as any).advogadoPlus) {
