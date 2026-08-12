@@ -936,10 +936,10 @@ export function Dashboard() {
                         <span className={cn(
                           "text-[9px] px-1.5 py-0.5 rounded-md font-black uppercase tracking-tight",
                           profile.role === 'Administrador' ? "bg-purple-500/10 text-purple-400" :
-                          profile.role === 'Advogado' ? "bg-secondary/10 text-secondary" :
+                          profile.role?.startsWith('Advogado') ? "bg-secondary/10 text-secondary" :
                           "bg-emerald-500/10 text-emerald-400"
                         )}>
-                          {profile.role === 'Administrador' ? 'Adm' : profile.role === 'Advogado' ? 'Adv' : 'Est'}
+                          {profile.role === 'Administrador' ? 'Adm' : profile.role?.startsWith('Advogado') ? 'Adv' : 'Est'}
                         </span>
                       </button>
                     ))}
