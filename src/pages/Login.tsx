@@ -38,7 +38,7 @@ export function Login({ initialError }: { initialError?: string | null }) {
     }
 
     const { error: signInError } = await supabase.auth.signInWithPassword({
-      email,
+      email: email.trim(),
       password,
     });
 
