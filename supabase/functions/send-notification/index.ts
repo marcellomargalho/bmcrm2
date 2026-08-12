@@ -22,6 +22,7 @@ interface NotificationPayload {
     deadline?: string
     observations?: string
     systemUrl?: string
+    taskType?: string
   }
 }
 
@@ -106,6 +107,7 @@ serve(async (req) => {
     ${data.lastMovement ? `<div class="row"><div class="label">Últ. Movimentação</div><div class="value">${data.lastMovement}</div></div>` : ''}
     ${data.nextAction ? `<div class="row"><div class="label">Próxima Providência</div><div class="value">${data.nextAction}</div></div>` : ''}
     ${data.deadline ? `<div class="row"><div class="label">Prazo</div><div class="value">${data.deadline}</div></div>` : ''}
+    ${data.taskType ? `<div class="row"><div class="label">Tipo de Tarefa</div><div class="value">${data.taskType}</div></div>` : ''}
     ${data.observations ? `<div class="row"><div class="label">Observações</div><div class="value">${data.observations}</div></div>` : ''}
     <a href="${processUrl}" class="btn">Abrir no Sistema →</a>
   </div>

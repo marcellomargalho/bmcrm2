@@ -219,6 +219,7 @@ export function NewTaskModal({ isOpen, onClose, onSuccess, lockedProcessId, edit
                   clientName: task.client_name,
                   processNumber: task.process_number,
                   responsible: responsibles.join(', '),
+                  taskType: task.task_type,
                   observations: task.description,
                   deadline: task.fatal_date ? new Date(task.fatal_date).toLocaleDateString('pt-BR') : undefined
                 }
@@ -380,9 +381,9 @@ export function NewTaskModal({ isOpen, onClose, onSuccess, lockedProcessId, edit
                   }}
                   className="w-full bg-surface-container-highest border-none rounded-xl px-4 py-3 text-on-surface focus:ring-2 focus:ring-secondary transition-all font-medium appearance-none pr-10"
                 >
-                  <option value="">Selecione da equipe...</option>
-                  {profiles.map(p => (
-                    <option key={p.id} value={p.name}>{p.name} ({p.role || 'Usuário'})</option>
+                  <option value="" disabled>Adicionar responsável...</option>
+                  {profiles.filter(p => !responsibles.includes(p.name)).map(p => (
+                    <option key={p.id} value={p.name}>{p.name} ({p.role}){p.email ? ` - ${p.email}` : ''}</option>
                   ))}
                 </select>
                 <ChevronDown className="w-4 h-4 text-outline absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
