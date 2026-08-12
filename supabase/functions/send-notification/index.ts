@@ -68,7 +68,7 @@ serve(async (req) => {
     const subjectPrefix = data.taskType ? `[${data.taskType}] ` : `${typeLabels[type] || type} - `
     const subject = `${subjectPrefix}${data.clientName || data.processNumber || 'Sistema'}`
 
-    const systemUrl = data.systemUrl || Deno.env.get('SYSTEM_URL') || 'https://bmcrm.com.br'
+    const systemUrl = data.systemUrl || Deno.env.get('SYSTEM_URL') || 'https://crm.bmjuris.com.br'
     const processUrl = payload.processId ? `${systemUrl}/processos/${payload.processId}` : systemUrl
 
     const htmlBody = `
