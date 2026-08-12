@@ -247,6 +247,7 @@ export function ProcessList() {
               <button onClick={() => setFilterText('')} className="mt-2 text-secondary font-bold hover:underline text-sm">Limpar filtro</button>
             </div>
           ) : (
+            <>
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-surface-container-low/50">
@@ -427,6 +428,7 @@ export function ProcessList() {
                 </button>
               </div>
             )}
+            </>
           )}
         </div>
       </section>
