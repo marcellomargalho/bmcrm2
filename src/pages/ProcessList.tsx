@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useDebounce } from '@/hooks/useDebounce';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Edit2, Eye, History, Upload, Mail, Calendar as CalendarIcon, Calculator, TrendingUp, Clock, X, Loader2, Search, Trash2, Archive, UserX } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -16,9 +17,18 @@ export function ProcessList() {
   const [editingProcess, setEditingProcess] = useState<ProcessRow | null>(null);
 
   const [filterText, setFilterText] = useState('');
+  const debouncedFilter = useDebounce(filterText, 300);
   const [statusFilter, setStatusFilter] = useState<'todos' | 'ativos' | 'arquivados' | 'cliente_inativo'>('todos');
   const [recentMovements, setRecentMovements] = useState<any[]>([]);
   const [userRole, setUserRole] = useState<string | null>(null);
+  
+  // Pagination
+  const [visibleCount, setVisibleCount] = useState(50);
+
+  // Reset pagination when filter changes
+  useEffect(() => {
+    setVisibleCount(50);
+  }, [debouncedFilter, statusFilter]);
 
   async function fetchMovements() {
     const { data } = await supabase
@@ -92,9 +102,9 @@ export function ProcessList() {
         ? processes.filter(p => p.status === 'Arquivado')
         : processes.filter(p => isClientInactive(p));
 
-  const filteredProcesses = filterText.trim()
+  const filteredProcesses = debouncedFilter.trim()
     ? statusFilteredProcesses.filter(p => {
-        const term = filterText.toLowerCase();
+        const term = debouncedFilter.toLowerCase();
         const number = p.number.toLowerCase();
         // Search across all linked clients
         const linkedClients: string[] = (p.process_clients || []).map((pc: any) => (pc.clients?.name || '').toLowerCase());
@@ -102,6 +112,8 @@ export function ProcessList() {
         return number.includes(term) || primaryClient.includes(term) || linkedClients.some((n: string) => n.includes(term));
       })
     : statusFilteredProcesses;
+
+  const paginatedProcesses = filteredProcesses.slice(0, visibleCount);
 
   return (
     <div className="space-y-8">
@@ -247,7 +259,7 @@ export function ProcessList() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-outline-variant/5">
-                {filteredProcesses.map((proc) => {
+                {paginatedProcesses.map((proc) => {
                   const clientInactive = isClientInactive(proc);
                   const isArchived = proc.status === 'Arquivado';
                   const isDimmed = isArchived || clientInactive;
@@ -404,6 +416,17 @@ export function ProcessList() {
                 })}
               </tbody>
             </table>
+            
+            {visibleCount < filteredProcesses.length && (
+              <div className="p-6 border-t border-outline-variant/5 flex justify-center">
+                <button
+                  onClick={() => setVisibleCount(prev => prev + 50)}
+                  className="px-6 py-2.5 rounded-xl bg-surface-container-high text-on-surface font-semibold hover:bg-secondary/10 hover:text-secondary transition-all text-sm"
+                >
+                  Carregar mais processos ({filteredProcesses.length - visibleCount} restantes)
+                </button>
+              </div>
+            )}
           )}
         </div>
       </section>

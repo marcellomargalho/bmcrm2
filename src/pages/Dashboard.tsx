@@ -178,7 +178,8 @@ export function Dashboard() {
       const { data } = await supabase
         .from('tasks')
         .select('*, processes(id, number, vara, comarca, court, area, status, responsible, autor, reu, clients(name, cpf_cnpj))')
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(100);
       setAllTasks(data || []);
     } else {
       // Estagiário: only their own tasks
@@ -187,7 +188,8 @@ export function Dashboard() {
         .from('tasks')
         .select('*, processes(id, number, vara, comarca, court, area, status, responsible, autor, reu, clients(name, cpf_cnpj))')
         .or(orQuery)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(100);
       setAllTasks(data || []);
     }
     setLoadingTasks(false);
@@ -228,7 +230,13 @@ export function Dashboard() {
 
         // Realtime Tasks
         tasksChannel = supabase.channel('tasks_dashboard_changes')
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, () => fetchTasks(u))
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, (payload) => {
+            if (payload.eventType === 'UPDATE') {
+              setAllTasks(prev => prev.map(t => t.id === payload.new.id ? { ...t, ...payload.new } : t));
+            } else {
+              fetchTasks(u);
+            }
+          })
           .subscribe();
 
         // Realtime Processes Stats
