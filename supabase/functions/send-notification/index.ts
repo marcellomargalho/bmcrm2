@@ -65,7 +65,8 @@ serve(async (req) => {
       needs_review: '⭐ Revisão Necessária',
     }
 
-    const subject = `${typeLabels[type] || type} – ${data.clientName || data.processNumber || 'Sistema'}`
+    const subjectPrefix = data.taskType ? `[${data.taskType}] ` : `${typeLabels[type] || type} - `
+    const subject = `${subjectPrefix}${data.clientName || data.processNumber || 'Sistema'}`
 
     const systemUrl = data.systemUrl || Deno.env.get('SYSTEM_URL') || 'https://bmcrm.com.br'
     const processUrl = payload.processId ? `${systemUrl}/processos/${payload.processId}` : systemUrl

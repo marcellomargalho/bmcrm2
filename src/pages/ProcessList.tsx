@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Edit2, Eye, History, Upload, Mail, Calendar as CalendarIcon, Calculator, TrendingUp, Clock, X, Loader2, Search, Trash2 } from 'lucide-react';
+import { Plus, Edit2, Eye, History, Upload, Mail, Calendar as CalendarIcon, Calculator, TrendingUp, Clock, X, Loader2, Search, Trash2, Archive, UserX } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 import { supabase } from '@/lib/supabase';
@@ -16,6 +16,7 @@ export function ProcessList() {
   const [editingProcess, setEditingProcess] = useState<ProcessRow | null>(null);
 
   const [filterText, setFilterText] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'todos' | 'ativos' | 'arquivados' | 'cliente_inativo'>('todos');
   const [recentMovements, setRecentMovements] = useState<any[]>([]);
   const [userRole, setUserRole] = useState<string | null>(null);
 
@@ -34,7 +35,7 @@ export function ProcessList() {
     setLoading(true);
     const { data } = await supabase
       .from('processes')
-      .select('*, clients(name, cpf_cnpj), process_clients(client_id, role, clients(name, cpf_cnpj))')
+      .select('*, clients(name, cpf_cnpj, status), process_clients(client_id, role, clients(name, cpf_cnpj, status))')
       .order('created_at', { ascending: false });
     setProcesses(data || []);
     setLoading(false);
@@ -71,9 +72,28 @@ export function ProcessList() {
   }
 
   const activeCount = processes.filter(p => p.status === 'Em Andamento').length;
+  const archivedCount = processes.filter(p => p.status === 'Arquivado').length;
+
+  // Helper: check if any client linked to a process is inactive
+  const isClientInactive = (proc: any) => {
+    if (proc.clients?.status === 'Inativo') return true;
+    if (proc.process_clients?.some((pc: any) => pc.clients?.status === 'Inativo')) return true;
+    return false;
+  };
+
+  const clienteInativoCount = processes.filter(p => isClientInactive(p)).length;
+
+  // Apply status filter first, then text filter
+  const statusFilteredProcesses = statusFilter === 'todos'
+    ? processes
+    : statusFilter === 'ativos'
+      ? processes.filter(p => p.status !== 'Arquivado' && !isClientInactive(p))
+      : statusFilter === 'arquivados'
+        ? processes.filter(p => p.status === 'Arquivado')
+        : processes.filter(p => isClientInactive(p));
 
   const filteredProcesses = filterText.trim()
-    ? processes.filter(p => {
+    ? statusFilteredProcesses.filter(p => {
         const term = filterText.toLowerCase();
         const number = p.number.toLowerCase();
         // Search across all linked clients
@@ -81,7 +101,7 @@ export function ProcessList() {
         const primaryClient = (p.clients?.name || '').toLowerCase();
         return number.includes(term) || primaryClient.includes(term) || linkedClients.some((n: string) => n.includes(term));
       })
-    : processes;
+    : statusFilteredProcesses;
 
   return (
     <div className="space-y-8">
@@ -143,7 +163,7 @@ export function ProcessList() {
 
 
 
-      <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <section className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="col-span-1 md:col-span-2 bg-surface-container-low p-6 rounded-2xl border-l-4 border-secondary flex flex-col justify-between">
           <span className="text-outline text-xs uppercase tracking-widest font-semibold">Total de Processos</span>
           <div className="mt-4">
@@ -157,11 +177,43 @@ export function ProcessList() {
         <div className="bg-surface-container-low p-6 rounded-2xl flex flex-col justify-between border border-outline-variant/5">
           <span className="text-outline text-xs uppercase tracking-widest font-semibold">Arquivados</span>
           <div className="mt-4">
-            <h3 className="text-3xl font-headline font-bold text-on-surface">{processes.filter(p => p.status === 'Arquivado').length}</h3>
+            <h3 className="text-3xl font-headline font-bold text-on-surface">{archivedCount}</h3>
             <p className="text-on-surface-variant text-sm mt-1">Processos encerrados</p>
           </div>
         </div>
+        <div className="bg-surface-container-low p-6 rounded-2xl flex flex-col justify-between border border-outline-variant/5">
+          <span className="text-outline text-xs uppercase tracking-widest font-semibold">Cliente Inativo</span>
+          <div className="mt-4">
+            <h3 className="text-3xl font-headline font-bold text-on-surface">{clienteInativoCount}</h3>
+            <p className="text-on-surface-variant text-sm mt-1">Fora do escritório</p>
+          </div>
+        </div>
       </section>
+
+      {/* Status Filter Tabs */}
+      <div className="flex flex-wrap gap-2">
+        {[
+          { id: 'todos' as const, label: 'Todos', count: processes.length },
+          { id: 'ativos' as const, label: 'Ativos', count: processes.filter(p => p.status !== 'Arquivado' && !isClientInactive(p)).length },
+          { id: 'arquivados' as const, label: 'Arquivados', count: archivedCount, icon: <Archive className="w-3 h-3" /> },
+          { id: 'cliente_inativo' as const, label: 'Cliente Inativo', count: clienteInativoCount, icon: <UserX className="w-3 h-3" /> },
+        ].map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setStatusFilter(tab.id)}
+            className={cn(
+              "flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all border",
+              statusFilter === tab.id
+                ? "bg-secondary text-on-secondary border-secondary shadow-sm"
+                : "bg-surface-container-low text-outline border-outline-variant/10 hover:text-on-surface hover:border-outline-variant/30"
+            )}
+          >
+            {'icon' in tab && tab.icon}
+            {tab.label}
+            <span className="ml-1 opacity-60">{tab.count}</span>
+          </button>
+        ))}
+      </div>
 
       <section className="bg-surface-container-lowest rounded-3xl overflow-hidden shadow-2xl">
         <div className="overflow-x-auto custom-scrollbar">
@@ -195,8 +247,12 @@ export function ProcessList() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-outline-variant/5">
-                {filteredProcesses.map((proc) => (
-                  <tr key={proc.id} className="hover:bg-surface-bright/20 transition-colors group">
+                {filteredProcesses.map((proc) => {
+                  const clientInactive = isClientInactive(proc);
+                  const isArchived = proc.status === 'Arquivado';
+                  const isDimmed = isArchived || clientInactive;
+                  return (
+                  <tr key={proc.id} className={cn("hover:bg-surface-bright/20 transition-colors group", isDimmed && "opacity-50")}>
                     <td className="px-8 py-6">
                       <span className="font-headline font-bold text-secondary block">{proc.number}</span>
                       <span className="text-[10px] text-outline uppercase tracking-tight">
@@ -222,7 +278,12 @@ export function ProcessList() {
                                 {allClients[0].name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
                               </div>
                               <div>
-                                <p className="text-sm font-semibold text-on-surface">{allClients[0].name}</p>
+                                <p className="text-sm font-semibold text-on-surface">
+                                  {allClients[0].name}
+                                  {clientInactive && (
+                                    <span className="ml-1.5 text-[8px] px-1.5 py-0.5 rounded bg-error/15 text-error border border-error/20 font-black uppercase tracking-wider align-middle">Inativo</span>
+                                  )}
+                                </p>
                                 <p className="text-[11px] text-outline">{allClients[0].cpf_cnpj}</p>
                               </div>
                             </div>
@@ -248,7 +309,12 @@ export function ProcessList() {
                               )}
                             </div>
                             <div>
-                              <p className="text-sm font-semibold text-on-surface">{allClients[0].name}</p>
+                              <p className="text-sm font-semibold text-on-surface">
+                                {allClients[0].name}
+                                {clientInactive && (
+                                  <span className="ml-1.5 text-[8px] px-1.5 py-0.5 rounded bg-error/15 text-error border border-error/20 font-black uppercase tracking-wider align-middle">Inativo</span>
+                                )}
+                              </p>
                               <p className="text-[10px] text-secondary font-bold">+{allClients.length - 1} outro{allClients.length > 2 ? 's' : ''}</p>
                             </div>
                           </div>
@@ -282,14 +348,26 @@ export function ProcessList() {
                       </div>
                     </td>
                     <td className="px-6 py-6">
-                      <span className={cn(
-                        "px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border",
-                        proc.status === 'Em Andamento' && "bg-secondary/10 text-secondary border-secondary/20",
-                        proc.status === 'Urgente' && "bg-error/10 text-error border-error/20",
-                        proc.status === 'Arquivado' && "bg-primary/10 text-primary border-primary/20"
-                      )}>
-                        {proc.status}
-                      </span>
+                      <div className="flex flex-col gap-1.5">
+                        <span className={cn(
+                          "px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border w-fit",
+                          proc.status === 'Em Andamento' && "bg-secondary/10 text-secondary border-secondary/20",
+                          proc.status === 'Urgente' && "bg-error/10 text-error border-error/20",
+                          proc.status === 'Suspenso' && "bg-amber-500/10 text-amber-400 border-amber-500/20",
+                          proc.status === 'Arquivado' && "bg-primary/10 text-primary border-primary/20",
+                          proc.status === 'Audiência Designada' && "bg-blue-500/10 text-blue-400 border-blue-500/20",
+                          proc.status === 'Petição Protocolada' && "bg-purple-500/10 text-purple-400 border-purple-500/20"
+                        )}>
+                          {proc.status === 'Arquivado' && <Archive className="w-3 h-3 inline mr-1 -mt-0.5" />}
+                          {proc.status}
+                        </span>
+                        {clientInactive && (
+                          <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-error/10 text-error border border-error/20 w-fit">
+                            <UserX className="w-3 h-3" />
+                            Cliente Inativo
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-6 text-center text-sm text-on-surface-variant">
                       {proc.created_at ? new Date(proc.created_at).toLocaleDateString('pt-BR') : '—'}
@@ -322,7 +400,8 @@ export function ProcessList() {
                       </div>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           )}
