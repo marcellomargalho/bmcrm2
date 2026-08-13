@@ -47,6 +47,10 @@
 }
 
 @layer base {
+  html {
+    font-size: 87.5%; /* 14px base — escala toda a UI proporcionalmente */
+  }
+
   body {
     @apply bg-surface text-on-surface font-body antialiased;
   }
