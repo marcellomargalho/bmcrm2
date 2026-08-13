@@ -684,7 +684,7 @@ export function Dashboard() {
               </div>
             </div>
           ) : (
-            <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 max-h-[280px]">
+            <div className="flex-1 overflow-y-auto custom-scrollbar pr-2">
               <div className="activities-container-modern">
                 {completedTasks.map((task, i) => {
                   const completedAt = new Date(task.updated_at);
