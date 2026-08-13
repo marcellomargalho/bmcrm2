@@ -9,7 +9,7 @@ import './RecentTasks.css';
 
 // ─── Widget IDs & localStorage key ────────────────────────────────
 const WIDGET_ORDER_KEY = 'dashboard_widget_order';
-const DEFAULT_ORDER = ['stats', 'deadlineTables', 'activities', 'deadlines'];
+const DEFAULT_ORDER = ['stats', 'deadlineTables', 'agenda_and_activities'];
 
 function getSavedOrder(): string[] {
   try {
@@ -566,24 +566,26 @@ export function Dashboard() {
     ),
 
 
-    deadlines: (
-        <div className="bg-surface-container-low p-6 rounded-3xl shadow-xl flex flex-col h-full border border-outline-variant/10">
+    agenda_and_activities: (
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* AGENDA / CALENDÁRIO */}
+        <div className="lg:col-span-5 bg-surface-container-low p-5 rounded-3xl shadow-xl flex flex-col border border-outline-variant/10">
           <div className="flex items-center justify-between mb-4">
-            <h4 className="font-headline font-bold text-on-surface">Calendário de Prazos</h4>
-            <div className="flex items-center gap-2">
+            <h4 className="font-headline font-bold text-sm text-on-surface">Calendário de Prazos</h4>
+            <div className="flex items-center gap-1">
               <button onClick={handlePrevMonth} className="p-1 hover:bg-surface-container-high rounded-lg text-on-surface-variant transition-colors"><ChevronLeft className="w-4 h-4" /></button>
-              <span className="text-[11px] font-bold w-20 text-center uppercase tracking-wide">{monthNames[currentMonth.getMonth()].substring(0,3)} {currentMonth.getFullYear()}</span>
+              <span className="text-[10px] font-bold w-20 text-center uppercase tracking-wide">{monthNames[currentMonth.getMonth()].substring(0,3)} {currentMonth.getFullYear()}</span>
               <button onClick={handleNextMonth} className="p-1 hover:bg-surface-container-high rounded-lg text-on-surface-variant transition-colors"><ChevronRight className="w-4 h-4" /></button>
             </div>
           </div>
           
-          <div className="grid grid-cols-7 gap-1 text-center mb-2">
+          <div className="grid grid-cols-7 gap-0.5 text-center mb-2">
             {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map(d => (
-              <span key={d} className="text-[9px] font-black text-outline uppercase tracking-widest">{d}</span>
+              <span key={d} className="text-[8px] font-black text-outline uppercase tracking-widest">{d}</span>
             ))}
           </div>
           
-          <div className="grid grid-cols-7 gap-1">
+          <div className="grid grid-cols-7 gap-0.5">
             {Array.from({ length: firstDay }).map((_, i) => (
               <div key={`empty-${i}`} className="aspect-square" />
             ))}
@@ -602,7 +604,7 @@ export function Dashboard() {
                   key={day}
                   onClick={() => setSelectedDate(isSelected ? null : dateStr)}
                   className={cn(
-                    "aspect-square rounded-xl flex flex-col items-center justify-center relative transition-all border",
+                    "aspect-square rounded-lg flex flex-col items-center justify-center relative transition-all border",
                     isSelected 
                       ? "bg-secondary text-on-secondary border-secondary scale-110 z-10 shadow-lg" 
                       : isToday 
@@ -611,90 +613,78 @@ export function Dashboard() {
                     dayTasks.length > 0 && !isSelected && "font-bold text-on-surface bg-surface-container-highest shadow-sm"
                   )}
                 >
-                  <span className="text-xs">{day}</span>
-                  <div className="flex gap-1 absolute bottom-1.5">
-                    {hasFatal && <span className={cn("w-1.5 h-1.5 rounded-full", isSelected ? "bg-white" : "bg-error")} />}
-                    {hasIdeal && !hasFatal && <span className={cn("w-1.5 h-1.5 rounded-full", isSelected ? "bg-white" : "bg-emerald-400")} />}
+                  <span className="text-[11px]">{day}</span>
+                  <div className="flex gap-0.5 absolute bottom-1">
+                    {hasFatal && <span className={cn("w-1 h-1 rounded-full", isSelected ? "bg-white" : "bg-error")} />}
+                    {hasIdeal && !hasFatal && <span className={cn("w-1 h-1 rounded-full", isSelected ? "bg-white" : "bg-emerald-400")} />}
                   </div>
                 </button>
               );
             })}
           </div>
 
-          <div className="mt-4 pt-4 border-t border-outline-variant/10 min-h-[140px] flex flex-col">
+          <div className="mt-3 pt-3 border-t border-outline-variant/10 min-h-[120px] flex flex-col">
           {selectedDate ? (
             <div className="animate-in fade-in flex-1 flex flex-col">
-              <span className="text-[10px] uppercase tracking-widest text-secondary font-black mb-3 block">
+              <span className="text-[9px] uppercase tracking-widest text-secondary font-black mb-2 block">
                 Prazos para {new Date(selectedDate + 'T00:00:00').toLocaleDateString('pt-BR')}
               </span>
-              <div className="space-y-2 overflow-y-auto custom-scrollbar pr-2 flex-1">
+              <div className="space-y-1.5 overflow-y-auto custom-scrollbar pr-1 max-h-[150px]">
                 {tasks.filter(t => t.fatal_date === selectedDate || t.ideal_date === selectedDate).map(t => {
                   const isFatal = t.fatal_date === selectedDate;
                   const isCompleted = t.status === 'Concluída';
                   return (
                     <div key={t.id} className={cn(
-                      "flex items-center justify-between p-2.5 rounded-xl border transition-all hover:shadow-sm",
+                      "flex items-center justify-between p-2 rounded-lg border transition-all hover:shadow-sm",
                       isCompleted ? "opacity-50 line-through bg-surface" : "bg-surface-container-highest",
                       isFatal ? "border-error/20" : "border-emerald-500/20"
                     )}>
                       <div className="min-w-0 pr-2">
-                        <p className="text-xs font-bold text-on-surface truncate">{t.description}</p>
+                        <p className="text-[11px] font-bold text-on-surface truncate">{t.description}</p>
                         <p className="text-[9px] text-on-surface-variant mt-0.5">{t.client_name || 'Sem cliente'}</p>
                       </div>
-                      <span className={cn(
-                        "text-[9px] font-black px-2 py-1 rounded-md shrink-0 uppercase tracking-widest",
-                        isFatal ? "bg-error/10 text-error" : "bg-emerald-500/10 text-emerald-500"
-                      )}>
-                        {isFatal ? 'Prazo Fatal' : 'Meta Ideal'}
-                      </span>
                     </div>
                   );
                 })}
                 {tasks.filter(t => t.fatal_date === selectedDate || t.ideal_date === selectedDate).length === 0 && (
-                  <div className="flex flex-col items-center justify-center py-4 text-outline opacity-60">
-                    <CheckCircle2 className="w-6 h-6 mb-2" />
-                    <p className="text-xs font-medium">Dia livre.</p>
+                  <div className="flex flex-col items-center justify-center py-2 text-outline opacity-60">
+                    <p className="text-[10px] font-medium">Dia livre.</p>
                   </div>
                 )}
               </div>
             </div>
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center opacity-50">
-               <CalendarClock className="w-8 h-8 mb-2 text-outline" />
-               <p className="text-xs font-medium text-on-surface-variant text-center px-4">Selecione uma data no calendário para ver as tarefas associadas.</p>
+               <CalendarClock className="w-6 h-6 mb-2 text-outline" />
+               <p className="text-[10px] font-medium text-on-surface-variant text-center px-2">Selecione uma data no calendário para ver as tarefas associadas.</p>
             </div>
           )}
           </div>
         </div>
-    ),
 
-
-    activities: (
-        <div className="bg-surface-container-low p-8 rounded-3xl shadow-2xl flex flex-col h-full border border-outline-variant/10">
-          <div className="flex items-center justify-between mb-8">
-            <div className="flex flex-col gap-1">
-              <h4 className="text-xl font-headline font-bold text-on-surface tracking-tight">Atividades Recentes</h4>
-              <p className="text-[11px] text-outline font-medium uppercase tracking-widest">Histórico de Conclusão</p>
+        {/* ATIVIDADES RECENTES */}
+        <div className="lg:col-span-7 bg-surface-container-low p-5 rounded-3xl shadow-xl flex flex-col h-full border border-outline-variant/10">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex flex-col gap-0.5">
+              <h4 className="text-sm font-headline font-bold text-on-surface tracking-tight">Atividades Recentes</h4>
+              <p className="text-[9px] text-outline font-medium uppercase tracking-widest">Histórico de Conclusão</p>
             </div>
             {totalCompletedCount > 0 && (
-              <span className="tasks-count">
+              <span className="text-[10px] font-bold text-secondary bg-secondary/10 px-2 py-1 rounded-lg">
                 {totalCompletedCount} concluída{totalCompletedCount > 1 ? 's' : ''}
               </span>
             )}
           </div>
 
           {completedTasks.length === 0 ? (
-            <div className="flex-1 flex items-center justify-center py-20 bg-surface-container-high/20 rounded-2xl border border-dashed border-outline-variant/10">
+            <div className="flex-1 flex items-center justify-center py-10 bg-surface-container-high/20 rounded-xl border border-dashed border-outline-variant/10">
               <div className="text-center">
-                <div className="w-16 h-16 bg-surface-container-high rounded-full flex items-center justify-center mx-auto mb-4 border border-outline-variant/10">
-                  <CheckCircle2 className="w-8 h-8 text-outline opacity-30" />
-                </div>
-                <p className="text-on-surface-variant text-sm font-medium">Nenhuma atividade registrada.</p>
-                <p className="text-outline text-[11px] mt-1">As tarefas concluídas aparecerão aqui.</p>
+                <CheckCircle2 className="w-6 h-6 text-outline opacity-30 mx-auto mb-2" />
+                <p className="text-on-surface-variant text-xs font-medium">Nenhuma atividade registrada.</p>
               </div>
             </div>
           ) : (
-            <div className="flex-1 overflow-y-auto custom-scrollbar pr-2">
+            <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 max-h-[280px]">
               <div className="activities-container-modern">
                 {completedTasks.map((task, i) => {
                   const completedAt = new Date(task.updated_at);
@@ -713,7 +703,7 @@ export function Dashboard() {
                   return (
                     <motion.div 
                       key={task.id} 
-                      initial={{ opacity: 0, x: -20 }}
+                      initial={{ opacity: 0, x: -10 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: i * 0.05 }}
                       className={cn("activity-item-modern", i === 0 && "recent")}
@@ -722,19 +712,19 @@ export function Dashboard() {
                         {i === 0 && <Check className="w-2.5 h-2.5 text-on-secondary" strokeWidth={4} />}
                       </div>
                       
-                      <div className="activity-card-modern">
-                        <div className="activity-header-modern">
-                          <span className="activity-tag-modern">Tarefa Concluída</span>
+                      <div className="activity-card-modern p-3">
+                        <div className="activity-header-modern mb-1">
+                          <span className="activity-tag-modern text-[9px] py-0.5 px-1.5">Tarefa Concluída</span>
                           
-                          <div className="flex items-center gap-3 ml-auto">
-                            <span className="activity-time-modern">{timeAgo}</span>
+                          <div className="flex items-center gap-2 ml-auto">
+                            <span className="activity-time-modern text-[10px]">{timeAgo}</span>
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
                                 toggleTaskComplete(task.id, task.status);
                               }}
                               disabled={localSubmitting === task.id}
-                              className={cn("activity-reopen-btn-inline", localSubmitting === task.id && "pulse")}
+                              className={cn("activity-reopen-btn-inline text-[10px]", localSubmitting === task.id && "pulse")}
                               title="Reabrir Tarefa"
                             >
                               {localSubmitting === task.id ? (
@@ -742,31 +732,25 @@ export function Dashboard() {
                               ) : (
                                 <RotateCcw className="w-3 h-3" />
                               )}
-                              <span>Restaurar</span>
+                              <span className="hidden sm:inline">Restaurar</span>
                             </button>
                           </div>
                         </div>
                         
-                        <p className="activity-desc-modern">{task.description}</p>
+                        <p className="activity-desc-modern text-[11px] mb-2">{task.description}</p>
                         
-                        <div className="activity-meta-modern">
-                          <div className="activity-meta-item">
-                            <div className="avatar-modern" style={{ width: '16px', height: '16px', fontSize: '8px' }}>
+                        <div className="activity-meta-modern mt-0">
+                          <div className="activity-meta-item text-[10px]">
+                            <div className="avatar-modern" style={{ width: '14px', height: '14px', fontSize: '7px' }}>
                               {task.responsible?.charAt(0).toUpperCase() || 'U'}
                             </div>
                             <span>{task.responsible?.split(',')[0].trim()}</span>
                           </div>
-                          <div className="activity-meta-item">
+                          <div className="activity-meta-item text-[10px]">
                             <Users className="w-3 h-3" />
                             <span>{task.client_name?.split(' ')[0]}</span>
                           </div>
-                          <div className="activity-meta-item ml-auto">
-                            <span className="text-[9px] font-bold text-outline uppercase tracking-tighter">
-                              {new Date(task.updated_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
-                            </span>
-                          </div>
                         </div>
-
                       </div>
                     </motion.div>
                   );
@@ -775,6 +759,7 @@ export function Dashboard() {
             </div>
           )}
         </div>
+      </div>
     ),
 
     deadlineTables: (
