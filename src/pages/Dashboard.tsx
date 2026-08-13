@@ -7,61 +7,25 @@ import { NewTaskModal } from '@/components/NewTaskModal';
 import { supabase } from '@/lib/supabase';
 import './RecentTasks.css';
 
-// ─── Drag-and-Drop Hook ──────────────────────────────────────────────
-function useDragAndDrop(initialOrder: string[]) {
-  const [order, setOrder] = useState<string[]>(initialOrder);
-  const [draggedId, setDraggedId] = useState<string | null>(null);
-  const [overId, setOverId] = useState<string | null>(null);
+// ─── Widget IDs & localStorage key ────────────────────────────────
+const WIDGET_ORDER_KEY = 'dashboard_widget_order';
+const DEFAULT_ORDER = ['stats', 'deadlineTables', 'activities', 'deadlines'];
 
-  const handleDragStart = useCallback((id: string) => {
-    setDraggedId(id);
-  }, []);
-
-  const handleDragOver = useCallback((e: React.DragEvent, id: string) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    setOverId(id);
-  }, []);
-
-  const handleDrop = useCallback((targetId: string) => {
-    if (!draggedId || draggedId === targetId) {
-      setDraggedId(null);
-      setOverId(null);
-      return;
+function getSavedOrder(): string[] {
+  try {
+    const saved = localStorage.getItem(WIDGET_ORDER_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved) as string[];
+      // ensure all widgets are present (handles new widgets added after save)
+      const merged = [...parsed.filter(id => DEFAULT_ORDER.includes(id)), ...DEFAULT_ORDER.filter(id => !parsed.includes(id))];
+      return merged;
     }
-    setOrder(prev => {
-      const newOrder = [...prev];
-      const dragIdx = newOrder.indexOf(draggedId);
-      const dropIdx = newOrder.indexOf(targetId);
-      newOrder.splice(dragIdx, 1);
-      newOrder.splice(dropIdx, 0, draggedId);
-      return newOrder;
-    });
-    setDraggedId(null);
-    setOverId(null);
-  }, [draggedId]);
-
-  const handleDragEnd = useCallback(() => {
-    setDraggedId(null);
-    setOverId(null);
-  }, []);
-
-  return { order, draggedId, overId, handleDragStart, handleDragOver, handleDrop, handleDragEnd };
+  } catch {}
+  return DEFAULT_ORDER;
 }
 
-// ─── Static Widget Wrapper ─────────────────────────────────────────
-function DraggableWidget({
-  className, children
-}: {
-  id: string; draggedId: string | null; overId: string | null; onDragStart: any; onDragOver: any; onDrop: any; onDragEnd: any;
-  className?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className={className}>
-      {children}
-    </div>
-  );
+function saveOrder(order: string[]) {
+  localStorage.setItem(WIDGET_ORDER_KEY, JSON.stringify(order));
 }
 
 // ─── Dashboard ────────────────────────────────────────────────────────
@@ -552,15 +516,24 @@ export function Dashboard() {
     );
   };
 
-  // Drag-and-drop
-  const { order, draggedId, overId, handleDragStart, handleDragOver, handleDrop, handleDragEnd } =
-    useDragAndDrop(['stats', 'deadlineTables', 'deadlines', 'activities']);
+  // ─── Widget order with localStorage persistence ───────────────────
+  const [widgetOrder, setWidgetOrder] = useState<string[]>(getSavedOrder);
+  const [isDragging, setIsDragging] = useState(false);
+
+  function handleReorder(newOrder: string[]) {
+    setWidgetOrder(newOrder);
+    saveOrder(newOrder);
+  }
+
+  function resetLayout() {
+    setWidgetOrder(DEFAULT_ORDER);
+    saveOrder(DEFAULT_ORDER);
+  }
 
   // ─── Widget renderers ───────────────────────────────────────────────
-  const widgets: Record<string, React.ReactNode> = {
+  const widgetContent: Record<string, React.ReactNode> = {
     stats: (
-      <DraggableWidget id="stats" draggedId={draggedId} overId={overId} onDragStart={handleDragStart} onDragOver={handleDragOver} onDrop={handleDrop} onDragEnd={handleDragEnd}>
-        <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="bg-surface-container-low p-6 rounded-2xl border-l-4 border-secondary flex flex-col justify-between">
             <span className="text-outline text-xs uppercase tracking-widest font-semibold">Em Monitoramento</span>
             <div className="mt-4">
@@ -590,12 +563,10 @@ export function Dashboard() {
             </div>
           </div>
         </section>
-      </DraggableWidget>
     ),
 
 
     deadlines: (
-      <DraggableWidget id="deadlines" draggedId={draggedId} overId={overId} onDragStart={handleDragStart} onDragOver={handleDragOver} onDrop={handleDrop} onDragEnd={handleDragEnd}>
         <div className="bg-surface-container-low p-6 rounded-3xl shadow-xl flex flex-col h-full border border-outline-variant/10">
           <div className="flex items-center justify-between mb-4">
             <h4 className="font-headline font-bold text-on-surface">Calendário de Prazos</h4>
@@ -695,12 +666,10 @@ export function Dashboard() {
           )}
           </div>
         </div>
-      </DraggableWidget>
     ),
 
 
     activities: (
-      <DraggableWidget id="activities" draggedId={draggedId} overId={overId} onDragStart={handleDragStart} onDragOver={handleDragOver} onDrop={handleDrop} onDragEnd={handleDragEnd}>
         <div className="bg-surface-container-low p-8 rounded-3xl shadow-2xl flex flex-col h-full border border-outline-variant/10">
           <div className="flex items-center justify-between mb-8">
             <div className="flex flex-col gap-1">
@@ -806,11 +775,9 @@ export function Dashboard() {
             </div>
           )}
         </div>
-      </DraggableWidget>
     ),
 
     deadlineTables: (
-      <DraggableWidget id="deadlineTables" draggedId={draggedId} overId={overId} onDragStart={handleDragStart} onDragOver={handleDragOver} onDrop={handleDrop} onDragEnd={handleDragEnd}>
         <div className="space-y-6">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-2">
             <div className="flex items-center gap-3">
@@ -1116,9 +1083,11 @@ export function Dashboard() {
             </div>
           )}
         </div>
-      </DraggableWidget>
     ),
   };
+
+  // Build ordered widgets list
+  const widgets = widgetOrder.map(id => ({ id, content: widgetContent[id] })).filter(w => w.content);
 
   // ─── Task Detail Modal ───────────────────────────────────────────────
   const TaskDetailModal = ({ task, onClose }: { task: any; onClose: () => void }) => {
@@ -1605,26 +1574,58 @@ export function Dashboard() {
         <TaskDetailModal task={selectedTaskDetail} onClose={() => setSelectedTaskDetail(null)} />
       )}
 
-      <section className="mb-10">
-        <h2 className="text-3xl font-headline font-extrabold tracking-tight text-on-surface mb-2">Visão Geral</h2>
-        <p className="text-on-surface-variant">Bem-vindo(a) de volta. Aqui está o resumo jurídico do seu dia.</p>
+      <section className="mb-6 flex items-start justify-between">
+        <div>
+          <h2 className="text-3xl font-headline font-extrabold tracking-tight text-on-surface mb-2">Visão Geral</h2>
+          <p className="text-on-surface-variant">Bem-vindo(a) de volta. Aqui está o resumo jurídico do seu dia.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] text-outline uppercase tracking-widest font-bold flex items-center gap-1">
+            <GripVertical className="w-3.5 h-3.5" />
+            Arraste para reorganizar
+          </span>
+          {widgetOrder.join(',') !== DEFAULT_ORDER.join(',') && (
+            <button
+              onClick={resetLayout}
+              className="text-[10px] text-outline hover:text-secondary transition-colors font-bold px-2 py-1 rounded-lg hover:bg-secondary/10 border border-transparent hover:border-secondary/20"
+            >
+              Restaurar padrão
+            </button>
+          )}
+        </div>
       </section>
 
-      {/* Fixed Cohesive Layout instead of loose items */}
-      <div className="space-y-8">
-        {widgets.stats}
-        
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-          <div className="lg:col-span-8 flex flex-col gap-8">
-            {widgets.deadlineTables}
-            {widgets.activities}
-          </div>
-          <div className="lg:col-span-4 flex flex-col gap-8">
-            {widgets.deadlines}
-            {widgets.billing}
-          </div>
-        </div>
-      </div>
+      {/* Drag-and-drop Reorder layout */}
+      <Reorder.Group
+        axis="y"
+        values={widgets.map(w => w.id)}
+        onReorder={handleReorder}
+        className="space-y-8"
+      >
+        {widgets.map(({ id, content }) => (
+          <Reorder.Item
+            key={id}
+            value={id}
+            className={cn(
+              "relative group/widget",
+              isDragging && "cursor-grabbing"
+            )}
+            onDragStart={() => setIsDragging(true)}
+            onDragEnd={() => setIsDragging(false)}
+            whileDrag={{ scale: 1.01, boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)', zIndex: 50 }}
+            transition={{ duration: 0.15 }}
+          >
+            {/* Drag handle */}
+            <div
+              className="absolute -left-6 top-1/2 -translate-y-1/2 opacity-0 group-hover/widget:opacity-100 transition-opacity cursor-grab active:cursor-grabbing z-10 p-1"
+              title="Arraste para mover"
+            >
+              <GripVertical className="w-4 h-4 text-outline/50 hover:text-secondary transition-colors" />
+            </div>
+            {content}
+          </Reorder.Item>
+        ))}
+      </Reorder.Group>
 
       <button
         onClick={() => setIsTaskModalOpen(true)}
