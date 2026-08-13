@@ -265,8 +265,6 @@ export function Dashboard() {
       }
     }
 
-    // Refresh data to keep sync with DB (but UI already looks updated)
-    if (userData) await fetchTasks(userData);
     setLocalSubmitting(null);
   }
 
