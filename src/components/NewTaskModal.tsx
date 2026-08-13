@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { X, Loader2, AlertCircle, ChevronDown, MessageSquare, Clock, CalendarDays } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { X, Loader2, AlertCircle, ChevronDown, MessageSquare, Clock, CalendarDays, Mail, Plus, Search } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 interface Client {
@@ -34,6 +34,12 @@ export function NewTaskModal({ isOpen, onClose, onSuccess, lockedProcessId, edit
   const [fatalDate, setFatalDate] = useState('');
   const [idealDate, setIdealDate] = useState('');
   const [sendEmail, setSendEmail] = useState(false);
+  const [customEmails, setCustomEmails] = useState<string[]>([]);
+  const [customEmailInput, setCustomEmailInput] = useState('');
+
+  const [clientSearch, setClientSearch] = useState('');
+  const [showClientSuggestions, setShowClientSuggestions] = useState(false);
+  const clientSearchRef = useRef<HTMLDivElement>(null);
 
   const [clientProcesses, setClientProcesses] = useState<any[]>([]);
 
@@ -43,6 +49,7 @@ export function NewTaskModal({ isOpen, onClose, onSuccess, lockedProcessId, edit
     
     if (editingTask) {
       setSelectedClientId(editingTask.client_id || '');
+      setClientSearch(editingTask.client_name || '');
       setSelectedProcessId(editingTask.process_id || '');
       setTaskType(editingTask.task_type || '');
       setDescription(editingTask.description || '');
@@ -76,6 +83,17 @@ export function NewTaskModal({ isOpen, onClose, onSuccess, lockedProcessId, edit
     });
   }, [isOpen, editingTask, lockedProcessId]);
 
+  // Click-outside to close client suggestions
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (clientSearchRef.current && !clientSearchRef.current.contains(event.target as Node)) {
+        setShowClientSuggestions(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   // Fetch processes for selected client
   useEffect(() => {
     if (!selectedClientId) {
@@ -103,10 +121,13 @@ export function NewTaskModal({ isOpen, onClose, onSuccess, lockedProcessId, edit
     setFatalDate('');
     setIdealDate('');
     setSendEmail(false);
+    setCustomEmails([]);
+    setCustomEmailInput('');
     setError('');
     // Only reset client/process selection if no locked process
     if (!lockedProcessId) {
       setSelectedClientId('');
+      setClientSearch('');
       setSelectedProcessId('');
     }
   }
@@ -199,14 +220,17 @@ export function NewTaskModal({ isOpen, onClose, onSuccess, lockedProcessId, edit
         }
 
         if (sendEmail) {
-          const recipientEmails = responsibles
+          const profileEmails = responsibles
             .map((name: string) => {
               const profile = (allProfiles || []).find(
                 (p: any) => p.name.toLowerCase().trim() === name.toLowerCase().trim()
               );
               return profile?.email;
             })
-            .filter(Boolean);
+            .filter(Boolean) as string[];
+
+          // Merge profile emails + custom emails (deduplicate)
+          const recipientEmails = Array.from(new Set([...profileEmails, ...customEmails]));
 
           if (recipientEmails.length > 0) {
             await supabase.functions.invoke('send-notification', {
@@ -275,20 +299,65 @@ export function NewTaskModal({ isOpen, onClose, onSuccess, lockedProcessId, edit
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1">
               <label className="text-xs font-bold text-on-surface-variant uppercase tracking-wider">Cliente</label>
-              <div className="relative">
-                <select
-                  required
-                  value={selectedClientId}
-                  onChange={e => { setSelectedClientId(e.target.value); setSelectedProcessId(''); }}
-                  disabled={loadingClients}
-                  className="w-full bg-surface-container-highest border-none rounded-xl px-4 py-3 text-on-surface focus:ring-2 focus:ring-secondary placeholder:text-outline/50 transition-all font-medium appearance-none pr-10"
-                >
-                  <option value="">Selecione um cliente</option>
-                  {clients.map(c => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
-                <ChevronDown className="w-4 h-4 text-outline absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <div className="relative" ref={clientSearchRef}>
+                {/* Hidden input for required validation */}
+                <input type="text" required readOnly value={selectedClientId} className="sr-only" tabIndex={-1} />
+                <div className="relative">
+                  <Search className="w-4 h-4 text-outline absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={clientSearch}
+                    onChange={e => {
+                      setClientSearch(e.target.value);
+                      setSelectedClientId('');
+                      setSelectedProcessId('');
+                      setShowClientSuggestions(true);
+                    }}
+                    onFocus={() => setShowClientSuggestions(true)}
+                    disabled={loadingClients}
+                    placeholder={loadingClients ? 'Carregando...' : 'Buscar cliente...'}
+                    className="w-full bg-surface-container-highest border-none rounded-xl pl-9 pr-4 py-3 text-on-surface focus:ring-2 focus:ring-secondary placeholder:text-outline/50 transition-all font-medium"
+                  />
+                  {clientSearch && (
+                    <button
+                      type="button"
+                      onClick={() => { setClientSearch(''); setSelectedClientId(''); setSelectedProcessId(''); setShowClientSuggestions(false); }}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-outline hover:text-on-surface transition-colors"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                {showClientSuggestions && clientSearch.trim() && (
+                  <div className="absolute z-50 top-full mt-1 w-full bg-surface-container-high rounded-xl shadow-xl border border-outline-variant/20 overflow-hidden max-h-48 overflow-y-auto custom-scrollbar">
+                    {clients
+                      .filter(c => c.name.toLowerCase().includes(clientSearch.toLowerCase()))
+                      .slice(0, 8)
+                      .map(c => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onMouseDown={() => {
+                            setClientSearch(c.name);
+                            setSelectedClientId(c.id);
+                            setSelectedProcessId('');
+                            setShowClientSuggestions(false);
+                          }}
+                          className={`w-full text-left px-4 py-2.5 text-sm font-medium hover:bg-secondary/10 hover:text-secondary transition-colors flex items-center gap-2 ${
+                            selectedClientId === c.id ? 'bg-secondary/10 text-secondary' : 'text-on-surface'
+                          }`}
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full bg-secondary/60 shrink-0" />
+                          {c.name}
+                        </button>
+                      ))
+                    }
+                    {clients.filter(c => c.name.toLowerCase().includes(clientSearch.toLowerCase())).length === 0 && (
+                      <div className="px-4 py-3 text-sm text-outline text-center">Nenhum cliente encontrado</div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -389,17 +458,92 @@ export function NewTaskModal({ isOpen, onClose, onSuccess, lockedProcessId, edit
                 <ChevronDown className="w-4 h-4 text-outline absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               </div>
               {!editingTask && (
-                <label className="flex items-center gap-2 mt-2 cursor-pointer group w-fit">
-                  <input
-                    type="checkbox"
-                    checked={sendEmail}
-                    onChange={(e) => setSendEmail(e.target.checked)}
-                    className="w-4 h-4 rounded border-outline-variant/30 bg-surface-container-lowest text-secondary focus:ring-secondary/20 transition-all cursor-pointer"
-                  />
-                  <span className="text-[11px] text-on-surface-variant group-hover:text-on-surface transition-colors">
-                    Avisar responsáveis por e-mail
-                  </span>
-                </label>
+                <div className="mt-2 space-y-2">
+                  <label className="flex items-center gap-2 cursor-pointer group w-fit">
+                    <input
+                      type="checkbox"
+                      checked={sendEmail}
+                      onChange={(e) => {
+                        setSendEmail(e.target.checked);
+                        if (!e.target.checked) {
+                          setCustomEmails([]);
+                          setCustomEmailInput('');
+                        }
+                      }}
+                      className="w-4 h-4 rounded border-outline-variant/30 bg-surface-container-lowest text-secondary focus:ring-secondary/20 transition-all cursor-pointer"
+                    />
+                    <span className="text-[11px] text-on-surface-variant group-hover:text-on-surface transition-colors flex items-center gap-1">
+                      <Mail className="w-3 h-3" />
+                      Avisar responsáveis por e-mail
+                    </span>
+                  </label>
+
+                  {sendEmail && (
+                    <div className="bg-surface-container-highest rounded-xl p-3 space-y-2 border border-secondary/20 animate-in fade-in slide-in-from-top-1 duration-150">
+                      <p className="text-[10px] text-on-surface-variant uppercase font-bold tracking-wider flex items-center gap-1">
+                        <Mail className="w-3 h-3" />
+                        E-mails adicionais (opcional)
+                      </p>
+
+                      {customEmails.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {customEmails.map((email, i) => (
+                            <span
+                              key={i}
+                              className="bg-secondary/10 text-secondary px-2 py-0.5 rounded-lg text-[11px] flex items-center gap-1 font-medium"
+                            >
+                              {email}
+                              <button
+                                type="button"
+                                onClick={() => setCustomEmails(customEmails.filter((_, idx) => idx !== i))}
+                                className="hover:text-secondary/60"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="flex gap-2">
+                        <input
+                          type="email"
+                          value={customEmailInput}
+                          onChange={(e) => setCustomEmailInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if ((e.key === 'Enter' || e.key === ',') && customEmailInput.trim()) {
+                              e.preventDefault();
+                              const email = customEmailInput.trim().replace(/,$/, '');
+                              if (email && !customEmails.includes(email)) {
+                                setCustomEmails([...customEmails, email]);
+                              }
+                              setCustomEmailInput('');
+                            }
+                          }}
+                          placeholder="email@exemplo.com"
+                          className="flex-1 bg-surface-container border-none rounded-lg px-3 py-1.5 text-xs text-on-surface focus:ring-2 focus:ring-secondary/40 transition-all placeholder:text-outline/40"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const email = customEmailInput.trim();
+                            if (email && !customEmails.includes(email)) {
+                              setCustomEmails([...customEmails, email]);
+                              setCustomEmailInput('');
+                            }
+                          }}
+                          className="px-2 py-1.5 bg-secondary/10 hover:bg-secondary/20 text-secondary rounded-lg text-xs font-bold transition-all flex items-center gap-1"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          Adicionar
+                        </button>
+                      </div>
+                      <p className="text-[10px] text-outline/60">
+                        Pressione Enter ou vírgula para adicionar. Os responsáveis cadastrados já serão notificados automaticamente.
+                      </p>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
 
