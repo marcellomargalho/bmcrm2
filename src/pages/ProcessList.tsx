@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useDebounce } from '@/hooks/useDebounce';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Edit2, Eye, History, Upload, Mail, Calendar as CalendarIcon, Calculator, TrendingUp, Clock, X, Loader2, Search, Trash2, Archive, UserX } from 'lucide-react';
@@ -7,28 +7,29 @@ import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { NewProcessModal, ProcessRow } from '@/components/NewProcessModal';
 
-
+const PAGE_SIZE = 25;
 
 export function ProcessList() {
   const navigate = useNavigate();
   const [processes, setProcesses] = useState<ProcessRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const [page, setPage] = useState(0);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProcess, setEditingProcess] = useState<ProcessRow | null>(null);
 
   const [filterText, setFilterText] = useState('');
-  const debouncedFilter = useDebounce(filterText, 300);
+  const debouncedFilter = useDebounce(filterText, 350);
   const [statusFilter, setStatusFilter] = useState<'todos' | 'ativos' | 'arquivados' | 'cliente_inativo'>('todos');
   const [recentMovements, setRecentMovements] = useState<any[]>([]);
   const [userRole, setUserRole] = useState<string | null>(null);
-  
-  // Pagination
-  const [visibleCount, setVisibleCount] = useState(50);
 
-  // Reset pagination when filter changes
-  useEffect(() => {
-    setVisibleCount(50);
-  }, [debouncedFilter, statusFilter]);
+  // Counts for summary cards — fetched via separate count queries, never all records
+  const [totalCount, setTotalCount] = useState(0);
+  const [activeCount, setActiveCount] = useState(0);
+  const [archivedCount, setArchivedCount] = useState(0);
+  const [clienteInativoCount, setClienteInativoCount] = useState(0);
 
   async function fetchMovements() {
     const { data } = await supabase
@@ -41,19 +42,84 @@ export function ProcessList() {
     setRecentMovements(data || []);
   }
 
-  async function fetchProcesses() {
-    setLoading(true);
-    const { data } = await supabase
+  async function fetchCounts() {
+    const [total, active, archived] = await Promise.all([
+      supabase.from('processes').select('id', { count: 'exact', head: true }),
+      supabase.from('processes').select('id', { count: 'exact', head: true }).eq('status', 'Em Andamento'),
+      supabase.from('processes').select('id', { count: 'exact', head: true }).eq('status', 'Arquivado'),
+    ]);
+    setTotalCount(total.count ?? 0);
+    setActiveCount(active.count ?? 0);
+    setArchivedCount(archived.count ?? 0);
+
+    // Cliente inativo count: fetch minimal data (only ids) to count
+    const { data: inactiveClientProcs } = await supabase
       .from('processes')
-      .select('*, clients(name, cpf_cnpj, status), process_clients(client_id, role, clients(name, cpf_cnpj, status))')
-      .order('created_at', { ascending: false });
-    setProcesses(data || []);
-    setLoading(false);
+      .select('id, clients(status), process_clients(clients(status))');
+    const inactiveCount = (inactiveClientProcs || []).filter((p: any) => {
+      if (p.clients?.status === 'Inativo') return true;
+      if (p.process_clients?.some((pc: any) => pc.clients?.status === 'Inativo')) return true;
+      return false;
+    }).length;
+    setClienteInativoCount(inactiveCount);
   }
 
+  const fetchProcesses = useCallback(async (reset = true) => {
+    if (reset) {
+      setLoading(true);
+      setPage(0);
+    } else {
+      setLoadingMore(true);
+    }
+
+    const currentPage = reset ? 0 : page + 1;
+    const from = currentPage * PAGE_SIZE;
+    const to = from + PAGE_SIZE - 1;
+
+    let query = supabase
+      .from('processes')
+      .select('*, clients(name, cpf_cnpj, status), process_clients(client_id, role, clients(name, cpf_cnpj, status))', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(from, to);
+
+    // Server-side text search
+    if (debouncedFilter.trim()) {
+      query = query.ilike('number', `%${debouncedFilter.trim()}%`);
+    }
+
+    // Server-side status filter
+    if (statusFilter === 'ativos') {
+      query = query.neq('status', 'Arquivado');
+    } else if (statusFilter === 'arquivados') {
+      query = query.eq('status', 'Arquivado');
+    }
+
+    const { data, count } = await query;
+
+    if (reset) {
+      setProcesses(data || []);
+      setPage(0);
+    } else {
+      setProcesses(prev => [...prev, ...(data || [])]);
+      setPage(currentPage);
+    }
+
+    const loaded = reset ? (data?.length ?? 0) : processes.length + (data?.length ?? 0);
+    setHasMore(loaded < (count ?? 0));
+
+    setLoading(false);
+    setLoadingMore(false);
+  }, [debouncedFilter, statusFilter, page, processes.length]);
+
+  // Reset and refetch whenever filter or status changes
   useEffect(() => {
-    fetchProcesses();
+    fetchProcesses(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedFilter, statusFilter]);
+
+  useEffect(() => {
     fetchMovements();
+    fetchCounts();
     async function fetchUserRole() {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
@@ -62,9 +128,7 @@ export function ProcessList() {
           .select('role')
           .eq('id', user.id)
           .single();
-        if (profileData) {
-          setUserRole(profileData.role);
-        }
+        if (profileData) setUserRole(profileData.role);
       }
     }
     fetchUserRole();
@@ -77,12 +141,10 @@ export function ProcessList() {
     }
     if (window.confirm('Tem certeza que deseja excluir este processo? Essa ação não pode ser desfeita.')) {
       await supabase.from('processes').delete().eq('id', id);
-      fetchProcesses();
+      fetchProcesses(true);
+      fetchCounts();
     }
   }
-
-  const activeCount = processes.filter(p => p.status === 'Em Andamento').length;
-  const archivedCount = processes.filter(p => p.status === 'Arquivado').length;
 
   // Helper: check if any client linked to a process is inactive
   const isClientInactive = (proc: any) => {
@@ -91,29 +153,10 @@ export function ProcessList() {
     return false;
   };
 
-  const clienteInativoCount = processes.filter(p => isClientInactive(p)).length;
-
-  // Apply status filter first, then text filter
-  const statusFilteredProcesses = statusFilter === 'todos'
-    ? processes
-    : statusFilter === 'ativos'
-      ? processes.filter(p => p.status !== 'Arquivado' && !isClientInactive(p))
-      : statusFilter === 'arquivados'
-        ? processes.filter(p => p.status === 'Arquivado')
-        : processes.filter(p => isClientInactive(p));
-
-  const filteredProcesses = debouncedFilter.trim()
-    ? statusFilteredProcesses.filter(p => {
-        const term = debouncedFilter.toLowerCase();
-        const number = p.number.toLowerCase();
-        // Search across all linked clients
-        const linkedClients: string[] = (p.process_clients || []).map((pc: any) => (pc.clients?.name || '').toLowerCase());
-        const primaryClient = (p.clients?.name || '').toLowerCase();
-        return number.includes(term) || primaryClient.includes(term) || linkedClients.some((n: string) => n.includes(term));
-      })
-    : statusFilteredProcesses;
-
-  const paginatedProcesses = filteredProcesses.slice(0, visibleCount);
+  // For 'cliente_inativo' filter we still filter client-side on the loaded batch
+  const displayedProcesses = statusFilter === 'cliente_inativo'
+    ? processes.filter(p => isClientInactive(p))
+    : processes;
 
   return (
     <div className="space-y-8">
@@ -124,8 +167,9 @@ export function ProcessList() {
           setEditingProcess(null);
         }}
         onSuccess={() => {
-          fetchProcesses();
+          fetchProcesses(true);
           fetchMovements();
+          fetchCounts();
         }}
         editingProcess={editingProcess}
       />
@@ -147,14 +191,14 @@ export function ProcessList() {
           </div>
         </div>
 
-        {/* Barra de pesquisa sempre visível */}
+        {/* Barra de pesquisa */}
         <div className="relative">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-outline" />
           <input
             type="text"
             value={filterText}
             onChange={e => setFilterText(e.target.value)}
-            placeholder="Buscar por nome do cliente ou número do processo..."
+            placeholder="Buscar por número do processo..."
             className="w-full bg-surface-container-low border border-outline-variant/10 rounded-xl pl-11 pr-10 py-3 text-on-surface focus:ring-2 focus:ring-secondary focus:border-secondary placeholder:text-outline/50 transition-all font-medium text-sm"
           />
           {filterText && (
@@ -165,21 +209,14 @@ export function ProcessList() {
               <X className="w-3.5 h-3.5" />
             </button>
           )}
-          {filterText && (
-            <span className="absolute right-10 top-1/2 -translate-y-1/2 text-xs text-on-surface-variant whitespace-nowrap">
-              {filteredProcesses.length} resultado{filteredProcesses.length !== 1 ? 's' : ''}
-            </span>
-          )}
         </div>
       </section>
-
-
 
       <section className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="col-span-1 md:col-span-2 bg-surface-container-low p-6 rounded-2xl border-l-4 border-secondary flex flex-col justify-between">
           <span className="text-outline text-xs uppercase tracking-widest font-semibold">Total de Processos</span>
           <div className="mt-4">
-            <h3 className="text-5xl font-headline font-black text-on-surface">{processes.length}</h3>
+            <h3 className="text-5xl font-headline font-black text-on-surface">{totalCount}</h3>
             <p className="text-secondary text-sm font-medium mt-1 flex items-center gap-1">
               <TrendingUp className="w-4 h-4" />
               {activeCount} em andamento
@@ -205,8 +242,8 @@ export function ProcessList() {
       {/* Status Filter Tabs */}
       <div className="flex flex-wrap gap-2">
         {[
-          { id: 'todos' as const, label: 'Todos', count: processes.length },
-          { id: 'ativos' as const, label: 'Ativos', count: processes.filter(p => p.status !== 'Arquivado' && !isClientInactive(p)).length },
+          { id: 'todos' as const, label: 'Todos', count: totalCount },
+          { id: 'ativos' as const, label: 'Ativos', count: activeCount },
           { id: 'arquivados' as const, label: 'Arquivados', count: archivedCount, icon: <Archive className="w-3 h-3" /> },
           { id: 'cliente_inativo' as const, label: 'Cliente Inativo', count: clienteInativoCount, icon: <UserX className="w-3 h-3" /> },
         ].map(tab => (
@@ -230,65 +267,101 @@ export function ProcessList() {
       <section className="bg-surface-container-lowest rounded-3xl overflow-hidden shadow-2xl">
         <div className="overflow-x-auto custom-scrollbar">
           {loading ? (
-            <div className="flex justify-center py-16">
+            <div className="flex flex-col items-center justify-center py-16 gap-3">
               <Loader2 className="w-8 h-8 animate-spin text-secondary" />
+              <p className="text-sm text-on-surface-variant">Carregando processos...</p>
             </div>
-          ) : processes.length === 0 ? (
+          ) : displayedProcesses.length === 0 ? (
             <div className="p-16 text-center">
-              <p className="text-on-surface-variant font-medium mb-2">Nenhum processo cadastrado.</p>
-              <button onClick={() => setIsModalOpen(true)} className="text-secondary font-bold hover:underline">
-                Cadastrar o primeiro processo
-              </button>
-            </div>
-          ) : filteredProcesses.length === 0 ? (
-            <div className="p-16 text-center">
-              <Search className="w-10 h-10 text-outline mx-auto mb-3" />
-              <p className="text-on-surface-variant font-medium">Nenhum processo encontrado para "{filterText}"</p>
-              <button onClick={() => setFilterText('')} className="mt-2 text-secondary font-bold hover:underline text-sm">Limpar filtro</button>
+              {filterText ? (
+                <>
+                  <Search className="w-10 h-10 text-outline mx-auto mb-3" />
+                  <p className="text-on-surface-variant font-medium">Nenhum processo encontrado para "{filterText}"</p>
+                  <button onClick={() => setFilterText('')} className="mt-2 text-secondary font-bold hover:underline text-sm">Limpar filtro</button>
+                </>
+              ) : (
+                <>
+                  <p className="text-on-surface-variant font-medium mb-2">Nenhum processo cadastrado.</p>
+                  <button onClick={() => setIsModalOpen(true)} className="text-secondary font-bold hover:underline">
+                    Cadastrar o primeiro processo
+                  </button>
+                </>
+              )}
             </div>
           ) : (
             <>
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-surface-container-low/50">
-                  <th className="px-8 py-5 text-xs uppercase tracking-widest text-outline font-bold">Número do Processo</th>
-                  <th className="px-6 py-5 text-xs uppercase tracking-widest text-outline font-bold">Cliente</th>
-                  <th className="px-6 py-5 text-xs uppercase tracking-widest text-outline font-bold">Partes</th>
-                  <th className="px-6 py-5 text-xs uppercase tracking-widest text-outline font-bold">Status</th>
-                  <th className="px-6 py-5 text-xs uppercase tracking-widest text-outline font-bold text-center">Data</th>
-                  <th className="px-8 py-5 text-xs uppercase tracking-widest text-outline font-bold text-right">Ações</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-outline-variant/5">
-                {paginatedProcesses.map((proc) => {
-                  const clientInactive = isClientInactive(proc);
-                  const isArchived = proc.status === 'Arquivado';
-                  const isDimmed = isArchived || clientInactive;
-                  return (
-                  <tr key={proc.id} className={cn("hover:bg-surface-bright/20 transition-colors group", isDimmed && "opacity-50")}>
-                    <td className="px-8 py-6">
-                      <span className="font-headline font-bold text-secondary block">{proc.number}</span>
-                      <span className="text-[10px] text-outline uppercase tracking-tight">
-                        {[proc.court, proc.comarca, proc.vara].filter(Boolean).join(' · ')}
-                        {proc.area && ` · ${proc.area}`}
-                      </span>
-                    </td>
-                    <td className="px-6 py-6">
-                      {(() => {
-                        const allClients: { name: string; cpf_cnpj: string; role: string }[] =
-                          proc.process_clients && proc.process_clients.length > 0
-                            ? proc.process_clients.filter((pc: any) => pc.clients).map((pc: any) => ({ name: pc.clients.name, cpf_cnpj: pc.clients.cpf_cnpj, role: pc.role }))
-                            : proc.clients ? [{ name: proc.clients.name, cpf_cnpj: proc.clients.cpf_cnpj, role: 'Principal' }] : [];
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-surface-container-low/50">
+                    <th className="px-8 py-5 text-xs uppercase tracking-widest text-outline font-bold">Número do Processo</th>
+                    <th className="px-6 py-5 text-xs uppercase tracking-widest text-outline font-bold">Cliente</th>
+                    <th className="px-6 py-5 text-xs uppercase tracking-widest text-outline font-bold">Partes</th>
+                    <th className="px-6 py-5 text-xs uppercase tracking-widest text-outline font-bold">Status</th>
+                    <th className="px-6 py-5 text-xs uppercase tracking-widest text-outline font-bold text-center">Data</th>
+                    <th className="px-8 py-5 text-xs uppercase tracking-widest text-outline font-bold text-right">Ações</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-outline-variant/5">
+                  {displayedProcesses.map((proc) => {
+                    const clientInactive = isClientInactive(proc);
+                    const isArchived = proc.status === 'Arquivado';
+                    const isDimmed = isArchived || clientInactive;
+                    return (
+                    <tr key={proc.id} className={cn("hover:bg-surface-bright/20 transition-colors group", isDimmed && "opacity-50")}>
+                      <td className="px-8 py-6">
+                        <span className="font-headline font-bold text-secondary block">{proc.number}</span>
+                        <span className="text-[10px] text-outline uppercase tracking-tight">
+                          {[proc.court, proc.comarca, proc.vara].filter(Boolean).join(' · ')}
+                          {proc.area && ` · ${proc.area}`}
+                        </span>
+                      </td>
+                      <td className="px-6 py-6">
+                        {(() => {
+                          const allClients: { name: string; cpf_cnpj: string; role: string }[] =
+                            proc.process_clients && proc.process_clients.length > 0
+                              ? proc.process_clients.filter((pc: any) => pc.clients).map((pc: any) => ({ name: pc.clients.name, cpf_cnpj: pc.clients.cpf_cnpj, role: pc.role }))
+                              : proc.clients ? [{ name: proc.clients.name, cpf_cnpj: proc.clients.cpf_cnpj, role: 'Principal' }] : [];
 
-                        if (allClients.length === 0) {
-                          return <span className="text-outline text-sm">—</span>;
-                        }
+                          if (allClients.length === 0) {
+                            return <span className="text-outline text-sm">—</span>;
+                          }
 
-                        if (allClients.length === 1) {
+                          if (allClients.length === 1) {
+                            return (
+                              <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center text-[10px] font-bold text-primary shrink-0">
+                                  {allClients[0].name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
+                                </div>
+                                <div>
+                                  <p className="text-sm font-semibold text-on-surface">
+                                    {allClients[0].name}
+                                    {clientInactive && (
+                                      <span className="ml-1.5 text-[8px] px-1.5 py-0.5 rounded bg-error/15 text-error border border-error/20 font-black uppercase tracking-wider align-middle">Inativo</span>
+                                    )}
+                                  </p>
+                                  <p className="text-[11px] text-outline">{allClients[0].cpf_cnpj}</p>
+                                </div>
+                              </div>
+                            );
+                          }
+
                           return (
-                            <div className="flex items-center gap-3">
-                              <div className="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center text-[10px] font-bold text-primary shrink-0">
-                                {allClients[0].name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
+                            <div className="flex items-center gap-2">
+                              <div className="flex -space-x-2">
+                                {allClients.slice(0, 3).map((c, i) => (
+                                  <div
+                                    key={i}
+                                    title={`${c.name} (${c.role})`}
+                                    className="w-8 h-8 rounded-full bg-surface-container-high border-2 border-surface-container-lowest flex items-center justify-center text-[9px] font-bold text-primary"
+                                  >
+                                    {c.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
+                                  </div>
+                                ))}
+                                {allClients.length > 3 && (
+                                  <div className="w-8 h-8 rounded-full bg-secondary/10 border-2 border-surface-container-lowest flex items-center justify-center text-[9px] font-bold text-secondary">
+                                    +{allClients.length - 3}
+                                  </div>
+                                )}
                               </div>
                               <div>
                                 <p className="text-sm font-semibold text-on-surface">
@@ -297,137 +370,109 @@ export function ProcessList() {
                                     <span className="ml-1.5 text-[8px] px-1.5 py-0.5 rounded bg-error/15 text-error border border-error/20 font-black uppercase tracking-wider align-middle">Inativo</span>
                                   )}
                                 </p>
-                                <p className="text-[11px] text-outline">{allClients[0].cpf_cnpj}</p>
+                                <p className="text-[10px] text-secondary font-bold">+{allClients.length - 1} outro{allClients.length > 2 ? 's' : ''}</p>
                               </div>
                             </div>
                           );
-                        }
-
-                        return (
-                          <div className="flex items-center gap-2">
-                            <div className="flex -space-x-2">
-                              {allClients.slice(0, 3).map((c, i) => (
-                                <div
-                                  key={i}
-                                  title={`${c.name} (${c.role})`}
-                                  className="w-8 h-8 rounded-full bg-surface-container-high border-2 border-surface-container-lowest flex items-center justify-center text-[9px] font-bold text-primary"
-                                >
-                                  {c.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
-                                </div>
-                              ))}
-                              {allClients.length > 3 && (
-                                <div className="w-8 h-8 rounded-full bg-secondary/10 border-2 border-surface-container-lowest flex items-center justify-center text-[9px] font-bold text-secondary">
-                                  +{allClients.length - 3}
-                                </div>
-                              )}
-                            </div>
-                            <div>
-                              <p className="text-sm font-semibold text-on-surface">
-                                {allClients[0].name}
-                                {clientInactive && (
-                                  <span className="ml-1.5 text-[8px] px-1.5 py-0.5 rounded bg-error/15 text-error border border-error/20 font-black uppercase tracking-wider align-middle">Inativo</span>
-                                )}
+                        })()}
+                      </td>
+                      <td className="px-6 py-6">
+                        <div className="space-y-2">
+                          <div>
+                            {proc.autor && (
+                              <p className="text-xs text-on-surface">
+                                <span className="text-[10px] text-outline font-bold">Autor: </span>{proc.autor}
                               </p>
-                              <p className="text-[10px] text-secondary font-bold">+{allClients.length - 1} outro{allClients.length > 2 ? 's' : ''}</p>
+                            )}
+                            {proc.reu && (
+                              <p className="text-xs text-on-surface-variant">
+                                <span className="text-[10px] text-outline font-bold">Réu: </span>{proc.reu}
+                              </p>
+                            )}
+                            {!proc.autor && !proc.reu && <span className="text-xs text-outline">—</span>}
+                          </div>
+                          {proc.responsible && (
+                            <div className="flex flex-wrap gap-1">
+                              {proc.responsible.split(',').map((r, i) => (
+                                <span key={i} className="text-[9px] bg-secondary/10 text-secondary border border-secondary/10 px-2 py-0.5 rounded-full font-bold uppercase tracking-wide">
+                                  {r.trim()}
+                                </span>
+                              ))}
                             </div>
-                          </div>
-                        );
-                      })()}
-                    </td>
-                    <td className="px-6 py-6">
-                      <div className="space-y-2">
-                        <div>
-                          {proc.autor && (
-                            <p className="text-xs text-on-surface">
-                              <span className="text-[10px] text-outline font-bold">Autor: </span>{proc.autor}
-                            </p>
                           )}
-                          {proc.reu && (
-                            <p className="text-xs text-on-surface-variant">
-                              <span className="text-[10px] text-outline font-bold">Réu: </span>{proc.reu}
-                            </p>
-                          )}
-                          {!proc.autor && !proc.reu && <span className="text-xs text-outline">—</span>}
                         </div>
-                        {proc.responsible && (
-                          <div className="flex flex-wrap gap-1">
-                            {proc.responsible.split(',').map((r, i) => (
-                              <span key={i} className="text-[9px] bg-secondary/10 text-secondary border border-secondary/10 px-2 py-0.5 rounded-full font-bold uppercase tracking-wide">
-                                {r.trim()}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-6 py-6">
-                      <div className="flex flex-col gap-1.5">
-                        <span className={cn(
-                          "px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border w-fit",
-                          proc.status === 'Em Andamento' && "bg-secondary/10 text-secondary border-secondary/20",
-                          proc.status === 'Urgente' && "bg-error/10 text-error border-error/20",
-                          proc.status === 'Suspenso' && "bg-amber-500/10 text-amber-400 border-amber-500/20",
-                          proc.status === 'Arquivado' && "bg-primary/10 text-primary border-primary/20",
-                          proc.status === 'Audiência Designada' && "bg-blue-500/10 text-blue-400 border-blue-500/20",
-                          proc.status === 'Petição Protocolada' && "bg-purple-500/10 text-purple-400 border-purple-500/20"
-                        )}>
-                          {proc.status === 'Arquivado' && <Archive className="w-3 h-3 inline mr-1 -mt-0.5" />}
-                          {proc.status}
-                        </span>
-                        {clientInactive && (
-                          <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-error/10 text-error border border-error/20 w-fit">
-                            <UserX className="w-3 h-3" />
-                            Cliente Inativo
+                      </td>
+                      <td className="px-6 py-6">
+                        <div className="flex flex-col gap-1.5">
+                          <span className={cn(
+                            "px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border w-fit",
+                            proc.status === 'Em Andamento' && "bg-secondary/10 text-secondary border-secondary/20",
+                            proc.status === 'Urgente' && "bg-error/10 text-error border-error/20",
+                            proc.status === 'Suspenso' && "bg-amber-500/10 text-amber-400 border-amber-500/20",
+                            proc.status === 'Arquivado' && "bg-primary/10 text-primary border-primary/20",
+                            proc.status === 'Audiência Designada' && "bg-blue-500/10 text-blue-400 border-blue-500/20",
+                            proc.status === 'Petição Protocolada' && "bg-purple-500/10 text-purple-400 border-purple-500/20"
+                          )}>
+                            {proc.status === 'Arquivado' && <Archive className="w-3 h-3 inline mr-1 -mt-0.5" />}
+                            {proc.status}
                           </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-6 py-6 text-center text-sm text-on-surface-variant">
-                      {proc.created_at ? new Date(proc.created_at).toLocaleDateString('pt-BR') : '—'}
-                    </td>
-                    <td className="px-8 py-6 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <button 
-                          onClick={() => {
-                            setEditingProcess(proc);
-                            setIsModalOpen(true);
-                          }}
-                          className="w-8 h-8 rounded-lg flex items-center justify-center text-outline hover:text-secondary hover:bg-secondary/10 transition-all">
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => navigate(`/processos/${proc.id}`)}
-                          className="w-8 h-8 rounded-lg flex items-center justify-center text-outline hover:text-on-surface hover:bg-surface-container-high transition-all"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </button>
-                        {userRole === 'Administrador' && (
-                          <button
-                            onClick={() => handleDeleteProcess(proc.id)}
-                            className="w-8 h-8 rounded-lg flex items-center justify-center text-outline hover:text-error hover:bg-error/10 transition-all"
-                            title="Excluir Processo"
-                          >
-                            <Trash2 className="w-4 h-4" />
+                          {clientInactive && (
+                            <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-error/10 text-error border border-error/20 w-fit">
+                              <UserX className="w-3 h-3" />
+                              Cliente Inativo
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-6 py-6 text-center text-sm text-on-surface-variant">
+                        {proc.created_at ? new Date(proc.created_at).toLocaleDateString('pt-BR') : '—'}
+                      </td>
+                      <td className="px-8 py-6 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <button 
+                            onClick={() => {
+                              setEditingProcess(proc);
+                              setIsModalOpen(true);
+                            }}
+                            className="w-8 h-8 rounded-lg flex items-center justify-center text-outline hover:text-secondary hover:bg-secondary/10 transition-all">
+                            <Edit2 className="w-4 h-4" />
                           </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-            
-            {visibleCount < filteredProcesses.length && (
-              <div className="p-6 border-t border-outline-variant/5 flex justify-center">
-                <button
-                  onClick={() => setVisibleCount(prev => prev + 50)}
-                  className="px-6 py-2.5 rounded-xl bg-surface-container-high text-on-surface font-semibold hover:bg-secondary/10 hover:text-secondary transition-all text-sm"
-                >
-                  Carregar mais processos ({filteredProcesses.length - visibleCount} restantes)
-                </button>
-              </div>
-            )}
+                          <button
+                            onClick={() => navigate(`/processos/${proc.id}`)}
+                            className="w-8 h-8 rounded-lg flex items-center justify-center text-outline hover:text-on-surface hover:bg-surface-container-high transition-all"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                          {userRole === 'Administrador' && (
+                            <button
+                              onClick={() => handleDeleteProcess(proc.id)}
+                              className="w-8 h-8 rounded-lg flex items-center justify-center text-outline hover:text-error hover:bg-error/10 transition-all"
+                              title="Excluir Processo"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+
+              {/* Load more */}
+              {hasMore && (
+                <div className="p-6 border-t border-outline-variant/5 flex justify-center">
+                  <button
+                    onClick={() => fetchProcesses(false)}
+                    disabled={loadingMore}
+                    className="px-6 py-2.5 rounded-xl bg-surface-container-high text-on-surface font-semibold hover:bg-secondary/10 hover:text-secondary transition-all text-sm flex items-center gap-2 disabled:opacity-50"
+                  >
+                    {loadingMore ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                    {loadingMore ? 'Carregando...' : 'Carregar mais processos'}
+                  </button>
+                </div>
+              )}
             </>
           )}
         </div>
