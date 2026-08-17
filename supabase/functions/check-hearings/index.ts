@@ -6,10 +6,35 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// Valida que o link da audiência usa somente protocolo https
+function safeMeetingLink(link: unknown): string | null {
+  if (!link || typeof link !== 'string') return null
+  try {
+    const url = new URL(link)
+    if (url.protocol !== 'https:') return null
+    return link
+  } catch {
+    return null
+  }
+}
+
 serve(async (req) => {
   // CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
+  }
+
+  // ─── Aceitar somente POST ─────────────────────────────────────────
+  if (req.method !== 'POST') {
+    return new Response('Method Not Allowed', { status: 405 })
+  }
+
+  // ─── Validar CRON_SECRET ──────────────────────────────────────────
+  const providedSecret = req.headers.get('x-cron-secret')
+  const expectedSecret = Deno.env.get('CRON_SECRET')
+
+  if (!expectedSecret || providedSecret !== expectedSecret) {
+    return new Response('Unauthorized', { status: 401 })
   }
 
   try {
@@ -25,16 +50,17 @@ serve(async (req) => {
       .limit(1)
       .maybeSingle()
 
-    const apiKey = settings?.api_key || Deno.env.get('RESEND_API_KEY')
+    // ─── RESEND_API_KEY somente do ambiente (nunca da tabela) ────────
+    const apiKey = Deno.env.get('RESEND_API_KEY')
     const seniorEmail = settings?.senior_email || 'brendamargalho.adv@gmail.com'
     const teamEmails = settings?.team_emails || []
     const fromEmail = settings?.from_email || 'sistema@escritorio.com.br'
     const fromName = settings?.from_name || 'CRM Advocacia'
 
     if (!apiKey) {
-      return new Response(JSON.stringify({ error: 'API Key do Resend não configurada.' }), {
+      return new Response(JSON.stringify({ error: 'RESEND_API_KEY não configurada no ambiente.' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 400,
+        status: 500,
       })
     }
 
@@ -286,10 +312,10 @@ async function sendEmail({
     <div class="row"><div class="label">Tipo de audiência</div><div class="value">${typeLabelName}</div></div>
     <div class="row"><div class="label">Data</div><div class="value">${formattedDate}</div></div>
     <div class="row"><div class="label">Horário</div><div class="value">${formattedTime}</div></div>
-    ${hearing.link ? `<div class="row"><div class="label">Link da audiência</div><div class="value"><a href="${hearing.link}" style="color: #caa871; text-decoration: underline;">Acessar Sala Virtual</a></div></div>` : ''}
-    ${hearing.observations ? `<div class="row"><div class="label">Observações</div><div class="value">${hearing.observations}</div></div>` : ''}
+    ${safeMeetingLink(hearing.link) ? `<div class="row"><div class="label">Link da audiência</div><div class="value"><a href="${safeMeetingLink(hearing.link)}" style="color: #caa871; text-decoration: underline;">Acessar Sala Virtual</a></div></div>` : ''}
+    ${hearing.observations ? `<div class="row"><div class="label">Observações</div><div class="value">${String(hearing.observations).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div></div>` : ''}
     
-    ${hearing.link ? `<a href="${hearing.link}" class="btn">Participar da Audiência →</a>` : ''}
+    ${safeMeetingLink(hearing.link) ? `<a href="${safeMeetingLink(hearing.link)}" class="btn">Participar da Audiência →</a>` : ''}
   </div>
   <div class="footer">CRM Advocacia — Mensagem automática. Não responda este e-mail.</div>
 </div>

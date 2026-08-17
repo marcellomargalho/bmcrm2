@@ -6,11 +6,22 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// Escapa caracteres HTML para evitar injeção no corpo do e-mail
+function escapeHtml(value: unknown): string {
+  if (value === null || value === undefined) return ''
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 interface NotificationPayload {
   type: 'task_created' | 'task_assigned' | 'status_change' | 'deadline_approaching' | 'overdue' | 'needs_review'
   processId?: string
   taskId?: string
-  recipients: string[]
+  // recipients e systemUrl não são mais aceitos do cliente — carregados no servidor
   data: {
     processNumber?: string
     clientName?: string
@@ -21,7 +32,6 @@ interface NotificationPayload {
     nextAction?: string
     deadline?: string
     observations?: string
-    systemUrl?: string
     taskType?: string
   }
 }
@@ -31,30 +41,82 @@ serve(async (req) => {
     return new Response('ok', { headers: corsHeaders })
   }
 
-  try {
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    )
+  // ─── 1. Validar JWT ────────────────────────────────────────────────
+  const authHeader = req.headers.get('Authorization')
+  if (!authHeader) {
+    return new Response('Unauthorized', { status: 401 })
+  }
 
-    // Load email settings
-    const { data: settings } = await supabase
+  const userClient = createClient(
+    Deno.env.get('SUPABASE_URL')!,
+    Deno.env.get('SUPABASE_ANON_KEY')!,
+    {
+      global: {
+        headers: { Authorization: authHeader },
+      },
+    }
+  )
+
+  const { data: { user }, error: userError } = await userClient.auth.getUser()
+
+  if (userError || !user) {
+    return new Response('Unauthorized', { status: 401 })
+  }
+
+  // ─── 2. Verificar perfil aprovado + role admin ─────────────────────
+  const adminClient = createClient(
+    Deno.env.get('SUPABASE_URL')!,
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+  )
+
+  const { data: profile } = await adminClient
+    .from('profiles')
+    .select('is_approved, role')
+    .eq('id', user.id)
+    .single()
+
+  if (
+    !profile?.is_approved ||
+    !['Administrador', 'Advogado com Controladoria'].includes(profile.role)
+  ) {
+    return new Response('Forbidden', { status: 403 })
+  }
+
+  try {
+    // ─── 3. Carregar chave do Resend e configurações no servidor ───────
+    const apiKey = Deno.env.get('RESEND_API_KEY')
+
+    if (!apiKey) {
+      return new Response(
+        JSON.stringify({ error: 'RESEND_API_KEY não configurada no ambiente' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+      )
+    }
+
+    const { data: settings } = await adminClient
       .from('email_notification_settings')
-      .select('*')
+      .select('from_name, from_email, team_emails, senior_email, notify_on_task_created, notify_on_task_assigned, notify_on_status_change, notify_on_deadline_approaching, notify_on_overdue, notify_on_needs_review')
       .limit(1)
       .maybeSingle()
 
-    const apiKey = settings?.api_key || Deno.env.get('RESEND_API_KEY')
+    // ─── 4. URL do sistema sempre do ambiente ─────────────────────────
+    const systemUrl = Deno.env.get('SYSTEM_URL') || 'https://crm.bmjuris.com.br'
 
-    if (!apiKey) {
-      return new Response(JSON.stringify({ error: 'API Key do Resend não configurada' }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 400,
-      })
-    }
-
+    // ─── 5. Ler payload (sem recipients ou systemUrl) ──────────────────
     const payload: NotificationPayload = await req.json()
-    const { type, data, recipients } = payload
+    const { type, data } = payload
+
+    // ─── 6. Carregar destinatários no servidor ─────────────────────────
+    const seniorEmail: string = settings?.senior_email || ''
+    const teamEmails: string[] = settings?.team_emails || []
+    const recipients = [...new Set([seniorEmail, ...teamEmails].filter(e => e.includes('@')))]
+
+    if (recipients.length === 0) {
+      return new Response(
+        JSON.stringify({ error: 'Nenhum destinatário configurado' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+      )
+    }
 
     const typeLabels: Record<string, string> = {
       task_created: 'Nova Tarefa Criada',
@@ -65,11 +127,24 @@ serve(async (req) => {
       needs_review: '⭐ Revisão Necessária',
     }
 
-    const subjectPrefix = data.taskType ? `[${data.taskType}] ` : `${typeLabels[type] || type} - `
-    const subject = `${subjectPrefix}${data.clientName || data.processNumber || 'Sistema'}`
+    // Escapar todos os valores antes de inserir no HTML
+    const safeClientName  = escapeHtml(data.clientName)
+    const safeProcessNum  = escapeHtml(data.processNumber)
+    const safeResponsible = escapeHtml(data.responsible)
+    const safeOldStatus   = escapeHtml(data.oldStatus)
+    const safeNewStatus   = escapeHtml(data.newStatus)
+    const safeLastMove    = escapeHtml(data.lastMovement)
+    const safeNextAction  = escapeHtml(data.nextAction)
+    const safeDeadline    = escapeHtml(data.deadline)
+    const safeTaskType    = escapeHtml(data.taskType)
+    const safeObs         = escapeHtml(data.observations)
 
-    const systemUrl = data.systemUrl || Deno.env.get('SYSTEM_URL') || 'https://crm.bmjuris.com.br'
-    const processUrl = payload.processId ? `${systemUrl}/processos/${payload.processId}` : systemUrl
+    const subjectPrefix = safeTaskType ? `[${safeTaskType}] ` : `${typeLabels[type] || type} - `
+    const subject = `${subjectPrefix}${safeClientName || safeProcessNum || 'Sistema'}`
+
+    const processUrl = payload.processId
+      ? `${systemUrl}/processos/${encodeURIComponent(payload.processId)}`
+      : systemUrl
 
     const htmlBody = `
 <!DOCTYPE html>
@@ -95,21 +170,21 @@ serve(async (req) => {
 <body>
 <div class="container">
   <div class="header">
-    <span class="badge">${typeLabels[type] || type}</span>
-    <h1>${data.clientName || 'Sistema CRM'}</h1>
+    <span class="badge">${escapeHtml(typeLabels[type] || type)}</span>
+    <h1>${safeClientName || 'Sistema CRM'}</h1>
     <p>Notificação automática do CRM Advocacia</p>
   </div>
   <div class="body">
-    ${data.processNumber ? `<div class="row"><div class="label">Processo</div><div class="value">${data.processNumber}</div></div>` : ''}
-    ${data.clientName ? `<div class="row"><div class="label">Cliente</div><div class="value">${data.clientName}</div></div>` : ''}
-    ${data.responsible ? `<div class="row"><div class="label">Responsável</div><div class="value">${data.responsible}</div></div>` : ''}
-    ${data.oldStatus ? `<div class="row"><div class="label">Status Anterior</div><div class="value">${data.oldStatus}</div></div>` : ''}
-    ${data.newStatus ? `<div class="row"><div class="label">Novo Status</div><div class="value">${data.newStatus}</div></div>` : ''}
-    ${data.lastMovement ? `<div class="row"><div class="label">Últ. Movimentação</div><div class="value">${data.lastMovement}</div></div>` : ''}
-    ${data.nextAction ? `<div class="row"><div class="label">Próxima Providência</div><div class="value">${data.nextAction}</div></div>` : ''}
-    ${data.deadline ? `<div class="row"><div class="label">Prazo</div><div class="value">${data.deadline}</div></div>` : ''}
-    ${data.taskType ? `<div class="row"><div class="label">Tipo de Tarefa</div><div class="value">${data.taskType}</div></div>` : ''}
-    ${data.observations ? `<div class="row"><div class="label">Observações</div><div class="value">${data.observations}</div></div>` : ''}
+    ${safeProcessNum  ? `<div class="row"><div class="label">Processo</div><div class="value">${safeProcessNum}</div></div>`         : ''}
+    ${safeClientName  ? `<div class="row"><div class="label">Cliente</div><div class="value">${safeClientName}</div></div>`          : ''}
+    ${safeResponsible ? `<div class="row"><div class="label">Responsável</div><div class="value">${safeResponsible}</div></div>`      : ''}
+    ${safeOldStatus   ? `<div class="row"><div class="label">Status Anterior</div><div class="value">${safeOldStatus}</div></div>`    : ''}
+    ${safeNewStatus   ? `<div class="row"><div class="label">Novo Status</div><div class="value">${safeNewStatus}</div></div>`        : ''}
+    ${safeLastMove    ? `<div class="row"><div class="label">Últ. Movimentação</div><div class="value">${safeLastMove}</div></div>`   : ''}
+    ${safeNextAction  ? `<div class="row"><div class="label">Próxima Providência</div><div class="value">${safeNextAction}</div></div>` : ''}
+    ${safeDeadline    ? `<div class="row"><div class="label">Prazo</div><div class="value">${safeDeadline}</div></div>`              : ''}
+    ${safeTaskType    ? `<div class="row"><div class="label">Tipo de Tarefa</div><div class="value">${safeTaskType}</div></div>`      : ''}
+    ${safeObs         ? `<div class="row"><div class="label">Observações</div><div class="value">${safeObs}</div></div>`             : ''}
     <a href="${processUrl}" class="btn">Abrir no Sistema →</a>
   </div>
   <div class="footer">CRM Advocacia — Mensagem automática. Não responda este e-mail.</div>
@@ -117,7 +192,7 @@ serve(async (req) => {
 </body>
 </html>`
 
-    // Send via Resend
+    // ─── 7. Enviar via Resend ──────────────────────────────────────────
     const resendRes = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
@@ -125,7 +200,7 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: `${settings.from_name} <${settings.from_email}>`,
+        from: `${settings?.from_name || 'CRM Advocacia'} <${settings?.from_email || 'sistema@escritorio.com.br'}>`,
         to: recipients,
         subject,
         html: htmlBody,
@@ -134,13 +209,13 @@ serve(async (req) => {
 
     const resendData = await resendRes.json()
 
-    // Log to audit
+    // ─── 8. Log de auditoria — registra ID do usuário autenticado ──────
     if (payload.processId) {
-      await supabase.from('process_audit_log').insert([{
+      await adminClient.from('process_audit_log').insert([{
         process_id: payload.processId,
         task_id: payload.taskId,
         action: type,
-        new_value: `E-mail enviado para: ${recipients.join(', ')}`,
+        new_value: `E-mail enviado por ${user.id} para: ${recipients.join(', ')}`,
         email_sent: resendRes.ok,
       }])
     }
