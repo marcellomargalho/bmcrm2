@@ -341,172 +341,149 @@ export function Dashboard() {
 
   const renderDeadlineTable = (tasksList: any[], title: string, color: string, icon: React.ReactNode, sectionKey: string) => {
     const isCollapsed = collapsedSections.has(sectionKey);
-    const shouldAutoCollapse = tasksList.length > AUTO_COLLAPSE_THRESHOLD;
+    const hasMany = tasksList.length > AUTO_COLLAPSE_THRESHOLD;
+    const displayedTasks = isCollapsed ? tasksList.slice(0, AUTO_COLLAPSE_THRESHOLD) : tasksList;
 
     return (
-      <div className="bg-surface-container-low rounded-3xl border border-outline-variant/10 overflow-hidden mb-6">
-        <div className="px-6 py-4 border-b border-outline-variant/10 flex items-center justify-between bg-surface-container-high/30">
-          <div className="flex items-center gap-3">
-            <div className={cn("p-2 rounded-xl", color)}>
+      <div className="bg-surface-container-low rounded-2xl border border-outline-variant/10 overflow-hidden mb-6 shadow-sm">
+        {/* Clean Header */}
+        <div className="px-6 py-3.5 border-b border-outline-variant/10 flex items-center justify-between bg-surface-container-high/20">
+          <div className="flex items-center gap-2.5">
+            <div className={cn("p-1.5 rounded-lg", color)}>
               {icon}
             </div>
             <h3 className="font-headline font-bold text-sm text-on-surface">{title}</h3>
-            <span className="px-2 py-0.5 bg-surface-container-highest rounded-full text-[10px] font-black text-outline">
+            <span className="px-2 py-0.5 bg-surface-container-highest text-outline rounded-full text-[11px] font-semibold">
               {tasksList.length}
             </span>
-            {shouldAutoCollapse && !isCollapsed && (
-              <span className="px-2 py-0.5 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-full text-[9px] font-black">
-                +{tasksList.length - AUTO_COLLAPSE_THRESHOLD} ocultas
-              </span>
-            )}
           </div>
-          {shouldAutoCollapse && (
+          {hasMany && (
             <button
               onClick={() => toggleSectionCollapse(sectionKey)}
-              className={cn(
-                "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-bold transition-all border",
-                isCollapsed
-                  ? "bg-secondary/10 text-secondary border-secondary/20 hover:bg-secondary/20"
-                  : "bg-surface-container-highest text-outline border-outline-variant/20 hover:text-on-surface"
-              )}
+              className="text-xs font-semibold text-outline hover:text-secondary flex items-center gap-1 transition-colors px-2 py-1 rounded-lg hover:bg-secondary/5"
             >
               {isCollapsed ? (
-                <><ChevronDown className="w-3.5 h-3.5" /> Mostrar todas ({tasksList.length})</>
+                <><ChevronDown className="w-3.5 h-3.5" /> Ver todas ({tasksList.length})</>
               ) : (
-                <><ChevronUp className="w-3.5 h-3.5" /> Ocultar ({tasksList.length - AUTO_COLLAPSE_THRESHOLD} a menos)</>
+                <><ChevronUp className="w-3.5 h-3.5" /> Mostrar menos</>
               )}
             </button>
           )}
         </div>
-        {!isCollapsed && (
+
+        {/* Table Body */}
         <div className="overflow-x-auto custom-scrollbar">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="text-[9px] uppercase tracking-widest text-outline font-black border-b border-outline-variant/5">
-                <th className="px-6 py-3">Prazo</th>
+              <tr className="text-[10px] uppercase tracking-wider text-outline font-semibold border-b border-outline-variant/5">
+                <th className="px-6 py-3 w-[160px]">Prazo</th>
                 <th className="px-6 py-3">Descrição</th>
                 <th className="px-6 py-3">Cliente</th>
-                <th className="px-6 py-3">Processo / Origem</th>
+                <th className="px-6 py-3">Processo</th>
                 <th className="px-6 py-3">Tipo</th>
                 <th className="px-6 py-3">Responsável</th>
-                <th className="px-6 py-3 text-right">Ações</th>
+                <th className="px-6 py-3 text-right w-[60px]"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-outline-variant/5">
-              {tasksList.length === 0 ? (
+              {displayedTasks.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-6 py-8 text-center text-outline text-xs italic">
                     Nenhuma demanda nesta categoria.
                   </td>
                 </tr>
               ) : (
-                tasksList.map((task) => {
-                  const daysUntilFatal = task.fatal_date ? getDaysUntil(task.fatal_date) : null;
-                  const daysUntilIdeal = task.ideal_date ? getDaysUntil(task.ideal_date) : null;
+                displayedTasks.map((task) => {
+                  const mainDate = task.ideal_date || task.fatal_date;
+                  const daysUntil = mainDate ? getDaysUntil(mainDate) : null;
+                  const isOverdue = daysUntil !== null && daysUntil < 0;
+                  const isToday = daysUntil === 0;
                   const proc = task.processes;
+
                   return (
                     <tr 
                       key={task.id} 
                       onClick={() => setSelectedTaskDetail(task)}
-                      className="hover:bg-surface-container-high/50 transition-colors group cursor-pointer"
+                      className="hover:bg-surface-container-high/40 transition-colors group cursor-pointer text-xs"
                     >
+                      {/* Prazo Minimalista */}
                       <td className="px-6 py-3">
-                        <div className="flex flex-col gap-1.5">
-                          {/* Prazo Ideal — destaque principal */}
+                        <div className="flex flex-col gap-0.5">
                           <div className="flex items-center gap-1.5">
-                            <span className="text-[8px] uppercase tracking-wider font-black text-secondary/70 leading-none">Ideal</span>
                             <span className={cn(
-                              "text-xs font-bold",
-                              daysUntilIdeal !== null && daysUntilIdeal < 0 ? "text-error" :
-                              daysUntilIdeal === 0 ? "text-secondary" :
-                              daysUntilIdeal !== null && daysUntilIdeal <= 3 ? "text-orange-400" :
-                              "text-on-surface"
+                              "font-bold text-xs",
+                              isOverdue ? "text-error" : isToday ? "text-amber-400" : "text-on-surface"
                             )}>
-                              {task.ideal_date ? new Date(task.ideal_date + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : '—'}
+                              {mainDate ? new Date(mainDate + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : '—'}
                             </span>
-                          </div>
-                          {/* Prazo Fatal — secundário */}
-                          {task.fatal_date && (
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-[8px] uppercase tracking-wider font-black text-error/60 leading-none">Fatal</span>
+                            {daysUntil !== null && (
                               <span className={cn(
-                                "text-[11px] font-semibold",
-                                daysUntilFatal !== null && daysUntilFatal < 0 ? "text-error" :
-                                daysUntilFatal === 0 ? "text-error" :
-                                "text-on-surface-variant"
+                                "text-[10px] font-medium",
+                                isOverdue ? "text-error" : isToday ? "text-amber-400 font-semibold" : "text-outline"
                               )}>
-                                {new Date(task.fatal_date + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+                                • {isOverdue ? `${Math.abs(daysUntil)}d atraso` : isToday ? 'Hoje' : `${daysUntil}d`}
                               </span>
-                            </div>
-                          )}
-                          {/* Badges de urgência baseados no prazo ideal */}
-                          {daysUntilIdeal !== null && daysUntilIdeal < 0 && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-error/15 text-error text-[9px] font-black border border-error/25 animate-pulse w-fit">
-                              ⚠ {Math.abs(daysUntilIdeal)}d atraso
-                            </span>
-                          )}
-                          {daysUntilIdeal === 0 && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary/15 text-secondary text-[9px] font-black border border-secondary/25 w-fit">
-                              🔔 Vence hoje
-                            </span>
-                          )}
-                          {daysUntilIdeal !== null && daysUntilIdeal > 0 && daysUntilIdeal <= 3 && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-orange-500/15 text-orange-400 text-[9px] font-black border border-orange-500/25 w-fit">
-                              ⏳ {daysUntilIdeal}d restantes
-                            </span>
-                          )}
-                          {daysUntilIdeal !== null && daysUntilIdeal > 3 && daysUntilIdeal <= 7 && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 text-[9px] font-bold border border-amber-500/20 w-fit">
-                              {daysUntilIdeal}d restantes
-                            </span>
-                          )}
-                          {daysUntilIdeal !== null && daysUntilIdeal > 7 && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 text-[9px] font-bold border border-emerald-500/20 w-fit">
-                              {daysUntilIdeal}d restantes
+                            )}
+                          </div>
+                          {task.fatal_date && task.ideal_date && task.fatal_date !== task.ideal_date && (
+                            <span className="text-[10px] text-outline">
+                              Fatal: {new Date(task.fatal_date + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
                             </span>
                           )}
                         </div>
                       </td>
-                      <td className="px-6 py-3 max-w-[200px]">
-                        <p className="text-xs text-on-surface font-medium line-clamp-2">{task.description}</p>
+
+                      {/* Descrição */}
+                      <td className="px-6 py-3 max-w-[220px]">
+                        <p className="text-xs text-on-surface font-medium line-clamp-2 leading-relaxed">{task.description}</p>
                       </td>
+
+                      {/* Cliente */}
                       <td className="px-6 py-3">
                         <span className="text-xs text-on-surface-variant font-medium truncate block max-w-[140px]">
                           {task.client_name || proc?.clients?.name || '—'}
                         </span>
                       </td>
+
+                      {/* Processo */}
                       <td className="px-6 py-3">
                         <div className="flex flex-col">
-                          <span className="text-[10px] text-on-surface font-mono font-medium truncate max-w-[150px]">
+                          <span className="text-[11px] text-on-surface font-mono font-medium truncate max-w-[150px]">
                             {task.process_number || proc?.number || '—'}
                           </span>
                           {(proc?.vara || proc?.comarca) && (
-                            <span className="text-[9px] text-outline truncate max-w-[150px]">
+                            <span className="text-[10px] text-outline truncate max-w-[150px]">
                               {[proc?.vara, proc?.comarca].filter(Boolean).join(' · ')}
                             </span>
                           )}
                         </div>
                       </td>
+
+                      {/* Tipo */}
                       <td className="px-6 py-3">
                         {task.task_type && (
-                          <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-secondary/10 text-secondary border border-secondary/15">
+                          <span className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-surface-container-highest text-on-surface-variant/90 border border-outline-variant/10">
                             {task.task_type}
                           </span>
                         )}
                       </td>
+
+                      {/* Responsável */}
                       <td className="px-6 py-3">
-                        <span className="text-[10px] text-on-surface-variant font-medium truncate block max-w-[100px]">
+                        <span className="text-xs text-on-surface-variant font-medium truncate block max-w-[110px]">
                           {task.responsible?.split(',')[0]?.trim() || '—'}
                         </span>
                       </td>
+
+                      {/* Ações */}
                       <td className="px-6 py-3 text-right">
-                        <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="flex items-center justify-end opacity-0 group-hover:opacity-100 transition-opacity">
                           <button 
                             onClick={(e) => { e.stopPropagation(); toggleTaskComplete(task.id, task.status); }}
                             className="p-1.5 hover:bg-emerald-500/10 text-outline hover:text-emerald-500 rounded-lg transition-all"
-                            title="Concluir tarefa"
+                            title="Concluir Demanda"
                           >
-                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <CheckCircle2 className="w-4 h-4" />
                           </button>
                         </div>
                       </td>
@@ -517,24 +494,6 @@ export function Dashboard() {
             </tbody>
           </table>
         </div>
-        )}
-        {isCollapsed && tasksList.length > 0 && (
-          <div className="px-6 py-4 flex items-center gap-3 flex-wrap">
-            {tasksList.slice(0, 3).map(task => (
-              <button
-                key={task.id}
-                onClick={() => setSelectedTaskDetail(task)}
-                className="flex items-center gap-2 px-3 py-1.5 bg-surface-container-highest rounded-xl text-[10px] font-medium text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-all border border-outline-variant/10"
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-outline shrink-0" />
-                <span className="truncate max-w-[160px]">{task.description}</span>
-              </button>
-            ))}
-            {tasksList.length > 3 && (
-              <span className="text-[10px] text-outline font-bold">+{tasksList.length - 3} demandas ocultas</span>
-            )}
-          </div>
-        )}
       </div>
     );
   };
@@ -932,47 +891,47 @@ export function Dashboard() {
             </div>
           )}
 
-          {/* Summary cards - always visible */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          {/* Summary cards - Minimalist & Clean */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
             {[
-              { key: 'atrasados', label: 'Atrasados', count: filteredCategorizedTasks.atrasados.length, color: 'from-error/10', border: 'border-error/10', textColor: 'text-error', icon: <AlertTriangle className="w-4 h-4 text-error" /> },
-              { key: 'hoje', label: 'Para Hoje', count: filteredCategorizedTasks.hoje.length, color: 'from-secondary/10', border: 'border-secondary/10', textColor: 'text-secondary', icon: <Clock className="w-4 h-4 text-secondary" /> },
-              { key: 'em_dia', label: 'Em Dia', count: filteredCategorizedTasks.em_dia.length, color: 'from-emerald-500/10', border: 'border-emerald-500/10', textColor: 'text-emerald-500', icon: <CheckCircle2 className="w-4 h-4 text-emerald-500" /> },
-              { key: 'revisoes', label: 'Acompanhamentos', count: filteredCategorizedTasks.revisoes_pendentes.length, color: 'from-amber-500/10', border: 'border-amber-500/10', textColor: 'text-amber-500', icon: <RotateCcw className="w-4 h-4 text-amber-500" /> },
-            ].map(({ key, label, count, color, border, textColor, icon }) => (
-              <button
-                key={key}
-                onClick={() => {
-                  setDeadlineFilter(key as any);
-                  if (deadlineViewMode === 'tabela') {
-                    setTableExpandedCategory(tableExpandedCategory === key ? null : key);
-                  }
-                }}
-                className={cn(
-                  "bg-gradient-to-br to-surface-container-low p-4 rounded-2xl border flex flex-col gap-2 text-left transition-all hover:scale-[1.02] hover:shadow-lg",
-                  color, border,
-                  deadlineFilter === key && "ring-2 ring-offset-1 ring-offset-transparent",
-                  key === 'atrasados' && deadlineFilter === key && "ring-error/40",
-                  key === 'hoje' && deadlineFilter === key && "ring-secondary/40",
-                  key === 'em_dia' && deadlineFilter === key && "ring-emerald-500/40",
-                  key === 'revisoes' && deadlineFilter === key && "ring-amber-500/40",
-                )}
-              >
-                <div className="flex items-center justify-between">
-                  <span className={cn("text-[9px] font-black uppercase tracking-widest opacity-80", textColor)}>{label}</span>
-                  {icon}
-                </div>
-                <div className="flex items-end justify-between">
-                  <h3 className={cn("text-3xl font-headline font-black", textColor)}>{count}</h3>
-                  {deadlineViewMode === 'tabela' && count > 0 && (
-                    <span className={cn("text-[9px] font-bold flex items-center gap-1", textColor)}>
-                      {tableExpandedCategory === key ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                      {tableExpandedCategory === key ? 'Fechar' : 'Ver'}
-                    </span>
+              { key: 'atrasados', label: 'Atrasados', count: filteredCategorizedTasks.atrasados.length, activeBorder: 'border-error/50 bg-error/5', dotColor: 'bg-error', textColor: 'text-error', icon: <AlertTriangle className="w-3.5 h-3.5 text-error" /> },
+              { key: 'hoje', label: 'Para Hoje', count: filteredCategorizedTasks.hoje.length, activeBorder: 'border-secondary/50 bg-secondary/5', dotColor: 'bg-secondary', textColor: 'text-secondary', icon: <Clock className="w-3.5 h-3.5 text-secondary" /> },
+              { key: 'em_dia', label: 'Em Dia', count: filteredCategorizedTasks.em_dia.length, activeBorder: 'border-emerald-500/50 bg-emerald-500/5', dotColor: 'bg-emerald-500', textColor: 'text-emerald-500', icon: <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> },
+              { key: 'revisoes', label: 'Acompanhamentos', count: filteredCategorizedTasks.revisoes_pendentes.length, activeBorder: 'border-amber-500/50 bg-amber-500/5', dotColor: 'bg-amber-500', textColor: 'text-amber-500', icon: <RotateCcw className="w-3.5 h-3.5 text-amber-500" /> },
+            ].map(({ key, label, count, activeBorder, dotColor, textColor, icon }) => {
+              const isSelected = deadlineFilter === key;
+              return (
+                <button
+                  key={key}
+                  onClick={() => {
+                    setDeadlineFilter(deadlineFilter === key ? 'all' : (key as any));
+                    if (deadlineViewMode === 'tabela') {
+                      setTableExpandedCategory(tableExpandedCategory === key ? null : key);
+                    }
+                  }}
+                  className={cn(
+                    "bg-surface-container-low p-4 rounded-2xl border transition-all text-left flex flex-col justify-between hover:bg-surface-container-high/30",
+                    isSelected ? activeBorder : "border-outline-variant/10"
                   )}
-                </div>
-              </button>
-            ))}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-semibold text-outline flex items-center gap-1.5">
+                      <span className={cn("w-1.5 h-1.5 rounded-full", dotColor)} />
+                      {label}
+                    </span>
+                    {icon}
+                  </div>
+                  <div className="flex items-baseline justify-between">
+                    <span className={cn("text-2xl font-headline font-bold", isSelected ? textColor : "text-on-surface")}>
+                      {count}
+                    </span>
+                    {isSelected && (
+                      <span className="text-[10px] text-outline font-medium">Filtrado</span>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
           </div>
 
           {/* TABLE MODE: compact expandable panels per category */}
@@ -987,15 +946,15 @@ export function Dashboard() {
                .map(({ key, label, tasks, color, icon }) => {
                 const isExpanded = tableExpandedCategory === key;
                 return (
-                  <div key={key} className="bg-surface-container-low rounded-2xl border border-outline-variant/10 overflow-hidden">
+                  <div key={key} className="bg-surface-container-low rounded-2xl border border-outline-variant/10 overflow-hidden shadow-sm">
                     <button
                       onClick={() => setTableExpandedCategory(isExpanded ? null : key)}
-                      className="w-full px-6 py-4 flex items-center justify-between hover:bg-surface-container-high/30 transition-colors"
+                      className="w-full px-6 py-3.5 flex items-center justify-between hover:bg-surface-container-high/30 transition-colors"
                     >
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2.5">
                         <div className={cn("p-1.5 rounded-lg", color)}>{icon}</div>
                         <span className="font-headline font-bold text-sm text-on-surface">{label}</span>
-                        <span className="px-2 py-0.5 bg-surface-container-highest rounded-full text-[10px] font-black text-outline">{tasks.length}</span>
+                        <span className="px-2 py-0.5 bg-surface-container-highest rounded-full text-[11px] font-semibold text-outline">{tasks.length}</span>
                       </div>
                       <ChevronDown className={cn("w-4 h-4 text-outline transition-transform duration-200", isExpanded && "rotate-180")} />
                     </button>
@@ -1003,56 +962,58 @@ export function Dashboard() {
                       <div className="border-t border-outline-variant/10 overflow-x-auto custom-scrollbar">
                         <table className="w-full text-left border-collapse">
                           <thead>
-                            <tr className="text-[9px] uppercase tracking-widest text-outline font-black border-b border-outline-variant/5">
-                              <th className="px-6 py-3">Prazo</th>
+                            <tr className="text-[10px] uppercase tracking-wider text-outline font-semibold border-b border-outline-variant/5">
+                              <th className="px-6 py-3 w-[160px]">Prazo</th>
                               <th className="px-6 py-3">Descrição</th>
                               <th className="px-6 py-3">Cliente</th>
                               <th className="px-6 py-3">Processo</th>
                               <th className="px-6 py-3">Responsável</th>
-                              <th className="px-6 py-3 text-right">Ações</th>
+                              <th className="px-6 py-3 text-right w-[60px]"></th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-outline-variant/5">
                             {tasks.map(task => {
-                              const daysUntilFatal = task.fatal_date ? getDaysUntil(task.fatal_date) : null;
-                              const daysUntilIdeal = task.ideal_date ? getDaysUntil(task.ideal_date) : null;
+                              const mainDate = task.ideal_date || task.fatal_date;
+                              const daysUntil = mainDate ? getDaysUntil(mainDate) : null;
+                              const isOverdue = daysUntil !== null && daysUntil < 0;
+                              const isToday = daysUntil === 0;
                               const proc = task.processes;
+
                               return (
-                                <tr key={task.id} onClick={() => setSelectedTaskDetail(task)} className="hover:bg-surface-container-high/50 transition-colors group cursor-pointer">
+                                <tr key={task.id} onClick={() => setSelectedTaskDetail(task)} className="hover:bg-surface-container-high/40 transition-colors group cursor-pointer text-xs">
                                   <td className="px-6 py-3">
-                                    <div className="flex flex-col gap-1">
+                                    <div className="flex flex-col gap-0.5">
                                       <div className="flex items-center gap-1.5">
-                                        <span className="text-[8px] uppercase tracking-wider font-black text-secondary/70 leading-none">Ideal</span>
-                                        <span className={cn("text-xs font-bold",
-                                          daysUntilIdeal !== null && daysUntilIdeal < 0 ? "text-error" :
-                                          daysUntilIdeal === 0 ? "text-secondary" :
-                                          "text-on-surface"
+                                        <span className={cn(
+                                          "font-bold text-xs",
+                                          isOverdue ? "text-error" : isToday ? "text-amber-400" : "text-on-surface"
                                         )}>
-                                          {task.ideal_date ? new Date(task.ideal_date + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : '—'}
+                                          {mainDate ? new Date(mainDate + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : '—'}
                                         </span>
-                                      </div>
-                                      {task.fatal_date && (
-                                        <div className="flex items-center gap-1.5">
-                                          <span className="text-[8px] uppercase tracking-wider font-black text-error/60 leading-none">Fatal</span>
-                                          <span className={cn("text-[11px] font-semibold",
-                                            daysUntilFatal !== null && daysUntilFatal < 0 ? "text-error" :
-                                            daysUntilFatal === 0 ? "text-error" :
-                                            "text-on-surface-variant"
+                                        {daysUntil !== null && (
+                                          <span className={cn(
+                                            "text-[10px] font-medium",
+                                            isOverdue ? "text-error" : isToday ? "text-amber-400 font-semibold" : "text-outline"
                                           )}>
-                                            {new Date(task.fatal_date + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+                                            • {isOverdue ? `${Math.abs(daysUntil)}d atraso` : isToday ? 'Hoje' : `${daysUntil}d`}
                                           </span>
-                                        </div>
+                                        )}
+                                      </div>
+                                      {task.fatal_date && task.ideal_date && task.fatal_date !== task.ideal_date && (
+                                        <span className="text-[10px] text-outline">
+                                          Fatal: {new Date(task.fatal_date + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+                                        </span>
                                       )}
                                     </div>
                                   </td>
-                                  <td className="px-6 py-3 max-w-[220px]"><p className="text-xs text-on-surface font-medium line-clamp-2">{task.description}</p></td>
+                                  <td className="px-6 py-3 max-w-[220px]"><p className="text-xs text-on-surface font-medium line-clamp-2 leading-relaxed">{task.description}</p></td>
                                   <td className="px-6 py-3"><span className="text-xs text-on-surface-variant font-medium truncate block max-w-[140px]">{task.client_name || proc?.clients?.name || '—'}</span></td>
-                                  <td className="px-6 py-3"><span className="text-[10px] text-on-surface font-mono font-medium truncate block max-w-[150px]">{task.process_number || proc?.number || '—'}</span></td>
-                                  <td className="px-6 py-3"><span className="text-[10px] text-on-surface-variant font-medium truncate block max-w-[100px]">{task.responsible?.split(',')[0]?.trim() || '—'}</span></td>
+                                  <td className="px-6 py-3"><span className="text-[11px] text-on-surface font-mono font-medium truncate block max-w-[150px]">{task.process_number || proc?.number || '—'}</span></td>
+                                  <td className="px-6 py-3"><span className="text-xs text-on-surface-variant font-medium truncate block max-w-[110px]">{task.responsible?.split(',')[0]?.trim() || '—'}</span></td>
                                   <td className="px-6 py-3 text-right">
-                                    <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <div className="flex items-center justify-end opacity-0 group-hover:opacity-100 transition-opacity">
                                       <button onClick={(e) => { e.stopPropagation(); toggleTaskComplete(task.id, task.status); }} className="p-1.5 hover:bg-emerald-500/10 text-outline hover:text-emerald-500 rounded-lg transition-all" title="Concluir">
-                                        <CheckCircle2 className="w-3.5 h-3.5" />
+                                        <CheckCircle2 className="w-4 h-4" />
                                       </button>
                                     </div>
                                   </td>
