@@ -396,7 +396,8 @@ export function Dashboard() {
                 </tr>
               ) : (
                 tasksList.map((task) => {
-                  const daysUntil = task.fatal_date ? getDaysUntil(task.fatal_date) : null;
+                  const daysUntilFatal = task.fatal_date ? getDaysUntil(task.fatal_date) : null;
+                  const daysUntilIdeal = task.ideal_date ? getDaysUntil(task.ideal_date) : null;
                   const proc = task.processes;
                   return (
                     <tr 
@@ -406,38 +407,57 @@ export function Dashboard() {
                     >
                       <td className="px-6 py-3">
                         <div className="flex flex-col gap-1.5">
-                          <span className={cn(
-                            "text-xs font-bold",
-                            daysUntil !== null && daysUntil < 0 ? "text-error" :
-                            daysUntil === 0 ? "text-secondary" :
-                            daysUntil !== null && daysUntil <= 3 ? "text-orange-400" :
-                            "text-on-surface"
-                          )}>
-                            {task.fatal_date ? new Date(task.fatal_date + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : 'S/D'}
-                          </span>
-                          {daysUntil !== null && daysUntil < 0 && (
+                          {/* Prazo Ideal — destaque principal */}
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[8px] uppercase tracking-wider font-black text-secondary/70 leading-none">Ideal</span>
+                            <span className={cn(
+                              "text-xs font-bold",
+                              daysUntilIdeal !== null && daysUntilIdeal < 0 ? "text-error" :
+                              daysUntilIdeal === 0 ? "text-secondary" :
+                              daysUntilIdeal !== null && daysUntilIdeal <= 3 ? "text-orange-400" :
+                              "text-on-surface"
+                            )}>
+                              {task.ideal_date ? new Date(task.ideal_date + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : '—'}
+                            </span>
+                          </div>
+                          {/* Prazo Fatal — secundário */}
+                          {task.fatal_date && (
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[8px] uppercase tracking-wider font-black text-error/60 leading-none">Fatal</span>
+                              <span className={cn(
+                                "text-[11px] font-semibold",
+                                daysUntilFatal !== null && daysUntilFatal < 0 ? "text-error" :
+                                daysUntilFatal === 0 ? "text-error" :
+                                "text-on-surface-variant"
+                              )}>
+                                {new Date(task.fatal_date + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+                              </span>
+                            </div>
+                          )}
+                          {/* Badges de urgência baseados no prazo ideal */}
+                          {daysUntilIdeal !== null && daysUntilIdeal < 0 && (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-error/15 text-error text-[9px] font-black border border-error/25 animate-pulse w-fit">
-                              ⚠ {Math.abs(daysUntil)}d atraso
+                              ⚠ {Math.abs(daysUntilIdeal)}d atraso
                             </span>
                           )}
-                          {daysUntil === 0 && (
+                          {daysUntilIdeal === 0 && (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary/15 text-secondary text-[9px] font-black border border-secondary/25 w-fit">
                               🔔 Vence hoje
                             </span>
                           )}
-                          {daysUntil !== null && daysUntil > 0 && daysUntil <= 3 && (
+                          {daysUntilIdeal !== null && daysUntilIdeal > 0 && daysUntilIdeal <= 3 && (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-orange-500/15 text-orange-400 text-[9px] font-black border border-orange-500/25 w-fit">
-                              ⏳ {daysUntil}d restantes
+                              ⏳ {daysUntilIdeal}d restantes
                             </span>
                           )}
-                          {daysUntil !== null && daysUntil > 3 && daysUntil <= 7 && (
+                          {daysUntilIdeal !== null && daysUntilIdeal > 3 && daysUntilIdeal <= 7 && (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 text-[9px] font-bold border border-amber-500/20 w-fit">
-                              {daysUntil}d restantes
+                              {daysUntilIdeal}d restantes
                             </span>
                           )}
-                          {daysUntil !== null && daysUntil > 7 && (
+                          {daysUntilIdeal !== null && daysUntilIdeal > 7 && (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 text-[9px] font-bold border border-emerald-500/20 w-fit">
-                              {daysUntil}d restantes
+                              {daysUntilIdeal}d restantes
                             </span>
                           )}
                         </div>
@@ -989,18 +1009,36 @@ export function Dashboard() {
                           </thead>
                           <tbody className="divide-y divide-outline-variant/5">
                             {tasks.map(task => {
-                              const daysUntil = task.fatal_date ? getDaysUntil(task.fatal_date) : null;
+                              const daysUntilFatal = task.fatal_date ? getDaysUntil(task.fatal_date) : null;
+                              const daysUntilIdeal = task.ideal_date ? getDaysUntil(task.ideal_date) : null;
                               const proc = task.processes;
                               return (
                                 <tr key={task.id} onClick={() => setSelectedTaskDetail(task)} className="hover:bg-surface-container-high/50 transition-colors group cursor-pointer">
                                   <td className="px-6 py-3">
-                                    <span className={cn("text-xs font-bold",
-                                      daysUntil !== null && daysUntil < 0 ? "text-error" :
-                                      daysUntil === 0 ? "text-secondary" :
-                                      "text-on-surface"
-                                    )}>
-                                      {task.fatal_date ? new Date(task.fatal_date + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : 'S/D'}
-                                    </span>
+                                    <div className="flex flex-col gap-1">
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="text-[8px] uppercase tracking-wider font-black text-secondary/70 leading-none">Ideal</span>
+                                        <span className={cn("text-xs font-bold",
+                                          daysUntilIdeal !== null && daysUntilIdeal < 0 ? "text-error" :
+                                          daysUntilIdeal === 0 ? "text-secondary" :
+                                          "text-on-surface"
+                                        )}>
+                                          {task.ideal_date ? new Date(task.ideal_date + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : '—'}
+                                        </span>
+                                      </div>
+                                      {task.fatal_date && (
+                                        <div className="flex items-center gap-1.5">
+                                          <span className="text-[8px] uppercase tracking-wider font-black text-error/60 leading-none">Fatal</span>
+                                          <span className={cn("text-[11px] font-semibold",
+                                            daysUntilFatal !== null && daysUntilFatal < 0 ? "text-error" :
+                                            daysUntilFatal === 0 ? "text-error" :
+                                            "text-on-surface-variant"
+                                          )}>
+                                            {new Date(task.fatal_date + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+                                          </span>
+                                        </div>
+                                      )}
+                                    </div>
                                   </td>
                                   <td className="px-6 py-3 max-w-[220px]"><p className="text-xs text-on-surface font-medium line-clamp-2">{task.description}</p></td>
                                   <td className="px-6 py-3"><span className="text-xs text-on-surface-variant font-medium truncate block max-w-[140px]">{task.client_name || proc?.clients?.name || '—'}</span></td>
