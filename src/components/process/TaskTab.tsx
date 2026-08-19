@@ -75,7 +75,11 @@ export function TaskTab({ processId }: { processId: string }) {
 
   async function handleDelete(id: string) {
     if (!window.confirm('Excluir esta tarefa?')) return;
-    await supabase.from('tasks').delete().eq('id', id);
+    const { error } = await supabase.from('tasks').delete().eq('id', id);
+    if (error) {
+      alert("Erro ao excluir tarefa: " + (error.message || "Erro desconhecido"));
+      return;
+    }
     fetchTasks();
   }
 
@@ -157,7 +161,7 @@ export function TaskTab({ processId }: { processId: string }) {
                       "font-bold text-sm cursor-pointer hover:text-secondary transition-colors",
                       isCompleted ? "line-through text-on-surface-variant" : "text-on-surface"
                     )}>
-                      {task.title}
+                      {task.title || task.description}
                     </h4>
                   </div>
 

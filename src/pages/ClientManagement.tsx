@@ -9,6 +9,7 @@ type ProcessEntry = { number: string; court: string; responsible: string; type: 
 const emptyProcess = (): ProcessEntry => ({ number: '', court: '', responsible: '', type: '' });
 
 function ProcessForm({ proc, index, onChange, onRemove, showRemove }: {
+  key?: React.Key;
   proc: ProcessEntry; index: number;
   onChange: (index: number, field: keyof ProcessEntry, value: string) => void;
   onRemove: (index: number) => void;
@@ -307,13 +308,26 @@ function ClientProcesses({ clientId, userRole }: { clientId: string; userRole: s
   }, [clientId]);
 
   async function handleDeleteProcess(id: string) {
-    if (userRole !== 'Administrador') {
+    const isAdmin = userRole === 'Administrador' || userRole === 'Advogado com Controladoria';
+    if (!isAdmin) {
       alert('Apenas administradores podem excluir processos.');
       return;
     }
-    if (window.confirm('Tem certeza que deseja excluir este processo? Essa ação não pode ser desfeita.')) {
-      await supabase.from('processes').delete().eq('id', id);
-      fetchProcesses();
+    if (window.confirm('Tem certeza que deseja excluir este processo? Essa ação não pode ser desfeita e todas as tarefas e movimentações serão excluídas permanentemente.')) {
+      try {
+        await supabase.from('tasks').delete().eq('process_id', id);
+        await supabase.from('process_movements').delete().eq('process_id', id);
+        await supabase.from('process_clients').delete().eq('process_id', id);
+        await supabase.from('process_documents').delete().eq('process_id', id);
+        await supabase.from('process_notes').delete().eq('process_id', id);
+        await supabase.from('hearings').delete().eq('process_id', id);
+
+        const { error } = await supabase.from('processes').delete().eq('id', id);
+        if (error) throw error;
+        fetchProcesses();
+      } catch (err: any) {
+        alert("Erro ao excluir processo: " + (err.message || "Erro desconhecido"));
+      }
     }
   }
 

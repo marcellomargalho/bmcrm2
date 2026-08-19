@@ -64,12 +64,21 @@ export function NewTaskModal({ isOpen, onClose, onSuccess, lockedProcessId, edit
     }
 
     if (lockedProcessId) {
-      supabase.from('processes').select('id, client_id').eq('id', lockedProcessId).single().then(({ data }) => {
-        if (data) {
-          setSelectedClientId(data.client_id || '');
-          setSelectedProcessId(data.id || '');
-        }
-      });
+      supabase
+        .from('processes')
+        .select('id, client_id, clients(name), process_clients(client_id, clients(name))')
+        .eq('id', lockedProcessId)
+        .maybeSingle()
+        .then(({ data }) => {
+          if (data) {
+            const d = data as any;
+            setSelectedProcessId(d.id || '');
+            const cId = d.client_id || (d.process_clients && d.process_clients[0] ? d.process_clients[0].client_id : '');
+            const cName = (d.clients && d.clients.name) || (d.process_clients && d.process_clients[0] && d.process_clients[0].clients ? d.process_clients[0].clients.name : '');
+            if (cId) setSelectedClientId(cId);
+            if (cName) setClientSearch(prev => prev || cName);
+          }
+        });
     }
 
     setLoadingClients(true);
@@ -146,9 +155,14 @@ export function NewTaskModal({ isOpen, onClose, onSuccess, lockedProcessId, edit
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Sessão inválida. Faça login novamente.');
 
-      const clientName = clients.find(c => c.id === selectedClientId)?.name || '';
+      const clientName = clients.find(c => c.id === selectedClientId)?.name 
+        || (editingTask ? editingTask.client_name : '') 
+        || clientSearch 
+        || '';
       const resolvedProcessId = lockedProcessId || selectedProcessId || (editingTask ? editingTask.process_id : null);
-      const processNumber = clientProcesses.find(p => p.id === resolvedProcessId)?.number || (editingTask ? editingTask.process_number : null);
+      const processNumber = clientProcesses.find(p => p.id === resolvedProcessId)?.number 
+        || (editingTask ? editingTask.process_number : null) 
+        || null;
 
       const payload: any = {
         client_id: selectedClientId || null,
@@ -167,15 +181,20 @@ export function NewTaskModal({ isOpen, onClose, onSuccess, lockedProcessId, edit
       if (editingTask) {
         payload.updated_at = new Date().toISOString();
         const { data, error: updateError } = await supabase
-          .from('tasks').update(payload).eq('id', editingTask.id).select().single();
+          .from('tasks')
+          .update(payload)
+          .eq('id', editingTask.id)
+          .select();
         if (updateError) throw updateError;
-        task = data;
+        task = (data && data.length > 0) ? data[0] : { ...editingTask, ...payload };
       } else {
         payload.user_id = user.id;
         const { data, error: insertError } = await supabase
-          .from('tasks').insert([payload]).select().single();
+          .from('tasks')
+          .insert([payload])
+          .select();
         if (insertError) throw insertError;
-        task = data;
+        task = (data && data.length > 0) ? data[0] : payload;
 
         if (task && task.process_id) {
           const allowedTypes = ['Petição', 'Despacho', 'Audiência', 'Julgamento', 'Outros'];

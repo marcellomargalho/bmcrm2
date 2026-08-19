@@ -278,7 +278,7 @@ function SectionLabel({ icon: Icon, children }: { icon?: React.ElementType; chil
   );
 }
 
-function ParteRow({ parte, polo }: { parte: ParteProceso; polo: 'ativo' | 'passivo' }) {
+function ParteRow({ parte, polo }: { key?: React.Key; parte: ParteProceso; polo: 'ativo' | 'passivo' }) {
   return (
     <div className={cn(
       'flex items-center gap-2 rounded-xl px-4 py-3 border',

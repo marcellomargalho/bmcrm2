@@ -52,14 +52,40 @@ export function ProcessDetails() {
     fetchUserRole();
   }, []);
 
+  async function handleStatusChange(newStatus: string) {
+    if (!id) return;
+    const { error } = await supabase.from('processes').update({ status: newStatus }).eq('id', id);
+    if (error) {
+      alert("Erro ao atualizar status do processo: " + (error.message || "Erro desconhecido"));
+      return;
+    }
+    fetchProcess();
+  }
+
   async function handleDelete() {
-    if (userRole !== 'Administrador') {
+    const isAdmin = userRole === 'Administrador' || userRole === 'Advogado com Controladoria';
+    if (!isAdmin) {
       alert('Apenas administradores podem excluir processos.');
       return;
     }
-    if (window.confirm('Tem certeza que deseja excluir este processo? Essa ação não pode ser desfeita e todas as movimentações, tarefas e documentos associados podem ser perdidos.')) {
-      await supabase.from('processes').delete().eq('id', id);
-      navigate('/processos');
+    if (window.confirm('Tem certeza que deseja excluir este processo? Essa ação não pode ser desfeita e todas as tarefas, movimentações e documentos associados serão excluídos permanentemente.')) {
+      setLoading(true);
+      try {
+        await supabase.from('tasks').delete().eq('process_id', id);
+        await supabase.from('process_movements').delete().eq('process_id', id);
+        await supabase.from('process_clients').delete().eq('process_id', id);
+        await supabase.from('process_documents').delete().eq('process_id', id);
+        await supabase.from('process_notes').delete().eq('process_id', id);
+        await supabase.from('hearings').delete().eq('process_id', id);
+
+        const { error } = await supabase.from('processes').delete().eq('id', id);
+        if (error) throw error;
+
+        navigate('/processos');
+      } catch (err: any) {
+        alert("Erro ao excluir processo: " + (err.message || "Erro desconhecido"));
+        setLoading(false);
+      }
     }
   }
 
@@ -123,7 +149,20 @@ export function ProcessDetails() {
                   </div>
                 </div>
               </div>
-              <div className="flex gap-2 shrink-0">
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                <select
+                  value={process.status || 'Em Andamento'}
+                  onChange={(e) => handleStatusChange(e.target.value)}
+                  className="px-3 py-2 bg-surface-container-high text-on-surface text-xs font-bold rounded-xl border border-outline-variant/10 cursor-pointer focus:ring-2 focus:ring-secondary/20 transition-all outline-none"
+                  title="Alterar status do processo"
+                >
+                  <option value="Em Andamento">Em Andamento</option>
+                  <option value="Urgente">Urgente</option>
+                  <option value="Arquivado">Arquivado (Concluído)</option>
+                  <option value="Suspenso">Suspenso</option>
+                  <option value="Audiência Designada">Audiência Designada</option>
+                  <option value="Petição Protocolada">Petição Protocolada</option>
+                </select>
                 <button 
                   onClick={() => setIsEditingOpen(true)}
                   className="px-4 py-2 bg-surface-container-high text-on-surface text-xs font-bold rounded-xl hover:bg-surface-bright transition-all h-fit border border-outline-variant/10"

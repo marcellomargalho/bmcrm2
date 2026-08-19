@@ -1389,6 +1389,7 @@ function SeniorSection({
 function SeniorItem({
   title, subtitle, badge, badgeColor, action
 }: {
+  key?: React.Key;
   title: string; subtitle: string; badge: string;
   badgeColor: 'red' | 'amber' | 'violet' | 'yellow';
   action?: () => void;
