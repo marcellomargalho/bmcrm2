@@ -224,7 +224,7 @@ export function Dashboard() {
     };
   }, []); // Explicitly empty to init once and use realtime for updates
 
-  async function toggleTaskComplete(taskId: string, currentStatus: string) {
+  async function toggleTaskComplete(taskId: string, currentStatus: string, triggerFollowUp: boolean = true) {
     if (localSubmitting === taskId) return;
     const newStatus = currentStatus === 'Concluída' ? 'Pendente' : 'Concluída';
     
@@ -238,6 +238,7 @@ export function Dashboard() {
     
     if (error) {
       console.error("Erro ao atualizar tarefa:", error);
+      alert(`Não foi possível salvar o status da tarefa no banco de dados (${error.message || 'Erro de permissão'}). A alteração foi revertida.`);
       setAllTasks(originalAllTasks); // Rollback on error
       setLocalSubmitting(null);
       return;
@@ -259,9 +260,13 @@ export function Dashboard() {
            user_id: user?.id
         }]);
 
-        // Trigger follow-up prompt
-        setFollowUpProcessId(task.process_id);
-        setShowFollowUpPrompt(true);
+        // Só exibe o prompt de novo acompanhamento se:
+        // 1. triggerFollowUp for true
+        // 2. A própria tarefa NÃO for um 'Acompanhamento de Processo' (evita loop infinito)
+        if (triggerFollowUp && task.task_type !== 'Acompanhamento de Processo') {
+          setFollowUpProcessId(task.process_id);
+          setShowFollowUpPrompt(true);
+        }
       }
     }
 
@@ -1521,23 +1526,50 @@ export function Dashboard() {
           </div>
 
           {/* Footer */}
-          <div className="px-8 py-4 border-t border-outline-variant/10 bg-surface-container-high/20 flex items-center justify-between">
+          <div className="px-8 py-4 border-t border-outline-variant/10 bg-surface-container-high/20 flex flex-wrap items-center justify-between gap-3">
             <span className="text-[9px] text-outline uppercase tracking-widest font-bold">
               Criada em {new Date(task.created_at).toLocaleDateString('pt-BR')}
             </span>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => { toggleTaskComplete(task.id, task.status); onClose(); }}
-                className={cn(
-                  "flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all",
-                  task.status === 'Concluída' 
-                    ? "bg-secondary/10 text-secondary hover:bg-secondary/20" 
-                    : "bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20"
-                )}
-              >
-                <CheckCircle2 className="w-4 h-4" />
-                {task.status === 'Concluída' ? 'Reabrir' : 'Concluir'}
-              </button>
+            <div className="flex items-center gap-2 flex-wrap">
+              {task.status !== 'Concluída' && task.process_id ? (
+                <>
+                  <button
+                    onClick={() => { toggleTaskComplete(task.id, task.status, false); onClose(); }}
+                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 transition-all"
+                    title="Conclui definitivamente esta demanda sem agendar novo acompanhamento"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    Finalizar Demanda
+                  </button>
+                  <button
+                    onClick={() => {
+                      toggleTaskComplete(task.id, task.status, false);
+                      onClose();
+                      setModalLockedProcessId(task.process_id);
+                      setModalInitialTaskType('Acompanhamento de Processo');
+                      setIsTaskModalOpen(true);
+                    }}
+                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-amber-500/10 text-amber-500 hover:bg-amber-500/20 transition-all"
+                    title="Conclui a demanda atual e abre para agendar o próximo acompanhamento"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                    Concluir e Agendar Próximo
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => { toggleTaskComplete(task.id, task.status); onClose(); }}
+                  className={cn(
+                    "flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all",
+                    task.status === 'Concluída' 
+                      ? "bg-secondary/10 text-secondary hover:bg-secondary/20" 
+                      : "bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20"
+                  )}
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  {task.status === 'Concluída' ? 'Reabrir Demanda' : 'Concluir'}
+                </button>
+              )}
               <button onClick={onClose} className="px-4 py-2 bg-surface-container-highest text-on-surface-variant text-xs font-bold rounded-xl hover:bg-surface-container-high transition-colors">
                 Fechar
               </button>
@@ -1564,16 +1596,20 @@ export function Dashboard() {
 
       {showFollowUpPrompt && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[110] flex items-center justify-center p-6">
-          <div className="bg-surface-container-low w-full max-w-sm rounded-3xl p-6 shadow-2xl flex flex-col items-center text-center border border-outline-variant/10">
-            <RotateCcw className="w-12 h-12 text-amber-500 mb-4" />
-            <h3 className="font-headline font-bold text-lg text-on-surface mb-2">Acompanhamento de Processo</h3>
-            <p className="text-sm text-on-surface-variant mb-6">Deseja criar um acompanhamento (Revisão Pendente) para o processo desta demanda?</p>
-            <div className="flex gap-3 w-full">
+          <div className="bg-surface-container-low w-full max-w-sm rounded-3xl p-6 shadow-2xl flex flex-col items-center text-center border border-outline-variant/10 animate-in fade-in zoom-in duration-200">
+            <div className="w-12 h-12 rounded-2xl bg-amber-500/10 text-amber-500 flex items-center justify-center mb-4">
+              <RotateCcw className="w-6 h-6" />
+            </div>
+            <h3 className="font-headline font-bold text-lg text-on-surface mb-1.5">Demanda Concluída!</h3>
+            <p className="text-sm text-on-surface-variant mb-6 leading-relaxed">
+              Deseja agendar um novo acompanhamento para este processo ou prefere apenas finalizar?
+            </p>
+            <div className="flex flex-col sm:flex-row gap-2.5 w-full">
               <button 
                 onClick={() => setShowFollowUpPrompt(false)} 
-                className="flex-1 py-3 bg-surface-container-highest text-on-surface-variant font-bold rounded-xl hover:bg-surface-container-high transition-all"
+                className="flex-1 py-3 px-4 bg-surface-container-highest text-on-surface-variant font-bold text-xs rounded-xl hover:bg-surface-container-high transition-all"
               >
-                Não agora
+                Apenas Finalizar
               </button>
               <button 
                 onClick={() => {
@@ -1582,9 +1618,10 @@ export function Dashboard() {
                   setModalInitialTaskType('Acompanhamento de Processo');
                   setIsTaskModalOpen(true);
                 }} 
-                className="flex-1 py-3 bg-amber-500 text-white font-bold rounded-xl hover:bg-amber-600 transition-all shadow-md shadow-amber-500/20"
+                className="flex-1 py-3 px-4 bg-amber-500 text-white font-bold text-xs rounded-xl hover:bg-amber-600 transition-all shadow-md shadow-amber-500/20 flex items-center justify-center gap-1.5"
               >
-                Criar
+                <RotateCcw className="w-3.5 h-3.5" />
+                Agendar Novo
               </button>
             </div>
           </div>
