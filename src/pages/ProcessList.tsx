@@ -76,16 +76,17 @@ export function ProcessList() {
     const from = currentPage * PAGE_SIZE;
     const to = from + PAGE_SIZE - 1;
 
+    // Quando há texto de busca, carregamos todos os processos e filtramos client-side
+    // (por número E por nome do cliente). Sem busca, usamos paginação normal.
+    const isSearching = debouncedFilter.trim().length > 0;
+
     let query = supabase
       .from('processes')
       .select('*, clients(name, cpf_cnpj, status), process_clients(client_id, role, clients(name, cpf_cnpj, status))', { count: 'exact' })
-      .order('created_at', { ascending: false })
-      .range(from, to);
+      .order('created_at', { ascending: false });
 
-    // Server-side text search — busca por número de processo
-    // A busca por nome do cliente é feita client-side após o fetch
-    if (debouncedFilter.trim()) {
-      query = query.ilike('number', `%${debouncedFilter.trim()}%`);
+    if (!isSearching) {
+      query = query.range(from, to);
     }
 
     // Server-side status filter
@@ -106,7 +107,8 @@ export function ProcessList() {
     }
 
     const loaded = reset ? (data?.length ?? 0) : processes.length + (data?.length ?? 0);
-    setHasMore(loaded < (count ?? 0));
+    // Quando há busca ativa, todos os dados já foram carregados de uma vez (sem paginação)
+    setHasMore(!isSearching && loaded < (count ?? 0));
 
     setLoading(false);
     setLoadingMore(false);
