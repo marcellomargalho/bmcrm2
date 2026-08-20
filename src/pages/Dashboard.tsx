@@ -1121,6 +1121,18 @@ export function Dashboard() {
       setSavingAcompanhamento(true);
       
       const { data: { user } } = await supabase.auth.getUser();
+
+      // Busca o nome do usuário logado para usar como responsável pelo registro
+      // (não o responsável pela tarefa, que pode ser outro usuário)
+      let registradoPor = userData?.name || null;
+      if (!registradoPor && user?.id) {
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('name')
+          .eq('id', user.id)
+          .single();
+        registradoPor = profileData?.name || user?.email || 'Sistema';
+      }
       
       // 1. Log the movement if process is linked
       if (proc?.id) {
@@ -1129,7 +1141,7 @@ export function Dashboard() {
            type: 'Andamento',
            description: `[ACOMPANHAMENTO]: ${acompanhamentoRelato}`,
            date: new Date().toISOString(),
-           responsible: task.responsible || 'Sistema',
+           responsible: registradoPor || 'Sistema',
            user_id: user?.id
         }]);
       }

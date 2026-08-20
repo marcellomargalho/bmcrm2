@@ -82,7 +82,8 @@ export function ProcessList() {
       .order('created_at', { ascending: false })
       .range(from, to);
 
-    // Server-side text search
+    // Server-side text search — busca por número de processo
+    // A busca por nome do cliente é feita client-side após o fetch
     if (debouncedFilter.trim()) {
       query = query.ilike('number', `%${debouncedFilter.trim()}%`);
     }
@@ -166,10 +167,35 @@ export function ProcessList() {
     return false;
   };
 
+  // Helper: get all client names linked to a process
+  const getClientNames = (proc: any): string[] => {
+    const names: string[] = [];
+    if (proc.clients?.name) names.push(proc.clients.name);
+    if (proc.process_clients) {
+      proc.process_clients.forEach((pc: any) => {
+        if (pc.clients?.name) names.push(pc.clients.name);
+      });
+    }
+    return names;
+  };
+
   // For 'cliente_inativo' filter we still filter client-side on the loaded batch
-  const displayedProcesses = statusFilter === 'cliente_inativo'
-    ? processes.filter(p => isClientInactive(p))
-    : processes;
+  // Also apply client-name filter client-side (complementa a busca server-side por número)
+  const displayedProcesses = (() => {
+    let result = processes;
+    if (statusFilter === 'cliente_inativo') {
+      result = result.filter(p => isClientInactive(p));
+    }
+    if (debouncedFilter.trim()) {
+      const search = debouncedFilter.trim().toLowerCase();
+      result = result.filter(p => {
+        const numberMatch = (p.number ?? '').toLowerCase().includes(search);
+        const nameMatch = getClientNames(p).some(n => n.toLowerCase().includes(search));
+        return numberMatch || nameMatch;
+      });
+    }
+    return result;
+  })();
 
   return (
     <div className="space-y-8">
@@ -211,7 +237,7 @@ export function ProcessList() {
             type="text"
             value={filterText}
             onChange={e => setFilterText(e.target.value)}
-            placeholder="Buscar por número do processo..."
+            placeholder="Buscar por número ou nome do cliente..."
             className="w-full bg-surface-container-low border border-outline-variant/10 rounded-xl pl-11 pr-10 py-3 text-on-surface focus:ring-2 focus:ring-secondary focus:border-secondary placeholder:text-outline/50 transition-all font-medium text-sm"
           />
           {filterText && (
