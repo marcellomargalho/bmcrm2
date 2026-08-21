@@ -138,23 +138,43 @@ export function Dashboard() {
     const isAdminOrAdv = u.role === 'Administrador' || u.role === 'Advogado';
 
     if (isAdminOrAdv) {
-      // Fetch ALL tasks for admin/adv (to enable person filter)
-      const { data } = await supabase
+      // Fetch ALL non-concluded tasks + recently concluded ones
+      // Order: tarefas com prazo (mais urgentes primeiro), depois sem prazo
+      const { data: pendingData } = await supabase
         .from('tasks')
         .select('*, processes(id, number, vara, comarca, court, area, status, responsible, autor, reu, clients(name, cpf_cnpj))')
-        .order('created_at', { ascending: false })
-        .limit(100);
-      setAllTasks(data || []);
+        .neq('status', 'Concluída')
+        .order('fatal_date', { ascending: true, nullsFirst: false });
+
+      // Also fetch recently concluded (last 50) for history
+      const { data: concludedData } = await supabase
+        .from('tasks')
+        .select('*, processes(id, number, vara, comarca, court, area, status, responsible, autor, reu, clients(name, cpf_cnpj))')
+        .eq('status', 'Concluída')
+        .order('updated_at', { ascending: false })
+        .limit(50);
+
+      setAllTasks([...(pendingData || []), ...(concludedData || [])]);
     } else {
       // Estagiário: only their own tasks
       const orQuery = `user_id.eq.${u.id}${u.name ? `,responsible.ilike.%${u.name}%` : ''}`;
-      const { data } = await supabase
+
+      const { data: pendingData } = await supabase
         .from('tasks')
         .select('*, processes(id, number, vara, comarca, court, area, status, responsible, autor, reu, clients(name, cpf_cnpj))')
         .or(orQuery)
-        .order('created_at', { ascending: false })
-        .limit(100);
-      setAllTasks(data || []);
+        .neq('status', 'Concluída')
+        .order('fatal_date', { ascending: true, nullsFirst: false });
+
+      const { data: concludedData } = await supabase
+        .from('tasks')
+        .select('*, processes(id, number, vara, comarca, court, area, status, responsible, autor, reu, clients(name, cpf_cnpj))')
+        .or(orQuery)
+        .eq('status', 'Concluída')
+        .order('updated_at', { ascending: false })
+        .limit(50);
+
+      setAllTasks([...(pendingData || []), ...(concludedData || [])]);
     }
     setLoadingTasks(false);
   }, []);
