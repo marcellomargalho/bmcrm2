@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Loader2, AlertCircle, ChevronDown, MessageSquare, Clock, CalendarDays, Mail, Plus, Search } from 'lucide-react';
+import { X, Loader2, AlertCircle, ChevronDown, MessageSquare, Clock, CalendarDays, Mail, Plus, Search, Users } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 interface Client {
@@ -42,6 +42,8 @@ export function NewTaskModal({ isOpen, onClose, onSuccess, lockedProcessId, edit
   const clientSearchRef = useRef<HTMLDivElement>(null);
 
   const [clientProcesses, setClientProcesses] = useState<any[]>([]);
+  const [relatedParty, setRelatedParty] = useState('');
+  const [processParties, setProcessParties] = useState<{ label: string; value: string; clientId?: string }[]>([]);
 
   // Pre-fill form and fetch data
   useEffect(() => {
@@ -57,6 +59,7 @@ export function NewTaskModal({ isOpen, onClose, onSuccess, lockedProcessId, edit
       setPriority(editingTask.priority || 'Média');
       setFatalDate(editingTask.fatal_date ? editingTask.fatal_date.split('T')[0] : '');
       setIdealDate(editingTask.ideal_date ? editingTask.ideal_date.split('T')[0] : '');
+      setRelatedParty(editingTask.related_party || '');
     } else {
       resetForm();
       if (initialDescription) setDescription(initialDescription);
@@ -66,7 +69,7 @@ export function NewTaskModal({ isOpen, onClose, onSuccess, lockedProcessId, edit
     if (lockedProcessId) {
       supabase
         .from('processes')
-        .select('id, client_id, clients(name), process_clients(client_id, clients(name))')
+        .select('id, client_id, autor, reu, clients(name), process_clients(client_id, role, clients(name, cpf_cnpj))')
         .eq('id', lockedProcessId)
         .maybeSingle()
         .then(({ data }) => {
@@ -77,6 +80,35 @@ export function NewTaskModal({ isOpen, onClose, onSuccess, lockedProcessId, edit
             const cName = (d.clients && d.clients.name) || (d.process_clients && d.process_clients[0] && d.process_clients[0].clients ? d.process_clients[0].clients.name : '');
             if (cId) setSelectedClientId(cId);
             if (cName) setClientSearch(prev => prev || cName);
+
+            // Build the list of parties for this process
+            const parties: { label: string; value: string; clientId?: string }[] = [];
+
+            // Add process_clients (registered clients linked to process)
+            if (d.process_clients && d.process_clients.length > 0) {
+              d.process_clients.forEach((pc: any) => {
+                if (pc.clients?.name) {
+                  const roleLabel = pc.role ? ` (${pc.role})` : '';
+                  parties.push({
+                    label: `${pc.clients.name}${roleLabel}`,
+                    value: pc.clients.name,
+                    clientId: pc.client_id,
+                  });
+                }
+              });
+            }
+
+            // Add autor / reu text fields if filled and not already included
+            if (d.autor && d.autor.trim()) {
+              const alreadyIn = parties.some(p => p.value.toLowerCase() === d.autor.trim().toLowerCase());
+              if (!alreadyIn) parties.push({ label: `${d.autor.trim()} (Autor/Requerente)`, value: d.autor.trim() });
+            }
+            if (d.reu && d.reu.trim()) {
+              const alreadyIn = parties.some(p => p.value.toLowerCase() === d.reu.trim().toLowerCase());
+              if (!alreadyIn) parties.push({ label: `${d.reu.trim()} (Réu/Requerido)`, value: d.reu.trim() });
+            }
+
+            setProcessParties(parties);
           }
         });
     }
@@ -133,6 +165,8 @@ export function NewTaskModal({ isOpen, onClose, onSuccess, lockedProcessId, edit
     setCustomEmails([]);
     setCustomEmailInput('');
     setError('');
+    setRelatedParty('');
+    if (!lockedProcessId) setProcessParties([]);
     // Only reset client/process selection if no locked process
     if (!lockedProcessId) {
       setSelectedClientId('');
@@ -164,8 +198,12 @@ export function NewTaskModal({ isOpen, onClose, onSuccess, lockedProcessId, edit
         || (editingTask ? editingTask.process_number : null) 
         || null;
 
+      // If a specific party was selected and it has a clientId, use it; otherwise keep existing selectedClientId
+      const selectedPartyObj = processParties.find(p => p.value === relatedParty);
+      const resolvedClientId = selectedPartyObj?.clientId || selectedClientId || null;
+
       const payload: any = {
-        client_id: selectedClientId || null,
+        client_id: resolvedClientId,
         client_name: clientName,
         process_number: processNumber,
         process_id: resolvedProcessId,
@@ -175,6 +213,7 @@ export function NewTaskModal({ isOpen, onClose, onSuccess, lockedProcessId, edit
         priority,
         fatal_date: fatalDate || null,
         ideal_date: idealDate || null,
+        related_party: relatedParty || null,
       };
 
       let task;
@@ -398,6 +437,46 @@ export function NewTaskModal({ isOpen, onClose, onSuccess, lockedProcessId, edit
               </div>
             </div>
           </div>
+          )}
+
+          {/* Parte Relacionada — só aparece quando há processo vinculado e há partes cadastradas */}
+          {lockedProcessId && processParties.length > 0 && (
+            <div className="space-y-1 pt-1 pb-1 border border-secondary/20 bg-secondary/5 rounded-2xl px-4 py-3">
+              <label className="text-xs font-bold text-secondary uppercase tracking-wider flex items-center gap-2">
+                <Users className="w-3.5 h-3.5" />
+                Parte Relacionada
+                <span className="font-normal text-on-surface-variant normal-case tracking-normal">(opcional)</span>
+              </label>
+              <p className="text-[10px] text-on-surface-variant mb-2">Selecione a qual parte deste processo esta tarefa se refere.</p>
+              <div className="relative">
+                <select
+                  value={relatedParty}
+                  onChange={e => setRelatedParty(e.target.value)}
+                  className="w-full bg-surface-container-highest border border-secondary/20 rounded-xl px-4 py-3 text-on-surface focus:ring-2 focus:ring-secondary transition-all font-medium appearance-none pr-10"
+                >
+                  <option value="">— Todas as partes / Nenhuma específica —</option>
+                  {processParties.map((party, i) => (
+                    <option key={i} value={party.value}>{party.label}</option>
+                  ))}
+                </select>
+                <ChevronDown className="w-4 h-4 text-outline absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              </div>
+              {relatedParty && (
+                <div className="mt-2 flex items-center gap-2">
+                  <span className="text-[10px] text-secondary bg-secondary/10 border border-secondary/20 px-3 py-1 rounded-full font-bold flex items-center gap-1.5">
+                    <Users className="w-3 h-3" />
+                    {relatedParty}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setRelatedParty('')}
+                    className="text-[10px] text-outline hover:text-on-surface transition-colors"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              )}
+            </div>
           )}
 
           {/* Task Type */}

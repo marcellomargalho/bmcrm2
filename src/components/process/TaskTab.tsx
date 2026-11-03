@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Loader2, Plus, CheckCircle2, CalendarClock, ChevronDown, ChevronUp, Trash2, Edit2 } from 'lucide-react';
+import { Loader2, Plus, CheckCircle2, CalendarClock, ChevronDown, ChevronUp, Trash2, Edit2, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { NewTaskModal } from '@/components/NewTaskModal';
 export interface Task {
@@ -14,6 +14,7 @@ export interface Task {
   status: string;
   responsible: string | null;
   process_id: string | null;
+  related_party: string | null;
   created_at: string;
 }
 export function TaskTab({ processId }: { processId: string }) {
@@ -154,6 +155,12 @@ export function TaskTab({ processId }: { processId: string }) {
                       {task.task_type && (
                         <span className="px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded-md bg-surface-container-highest text-on-surface-variant">
                           {task.task_type}
+                        </span>
+                      )}
+                      {task.related_party && (
+                        <span className="px-2 py-0.5 text-[9px] font-bold tracking-wider rounded-md bg-secondary/10 text-secondary border border-secondary/20 flex items-center gap-1">
+                          <Users className="w-2.5 h-2.5" />
+                          {task.related_party}
                         </span>
                       )}
                     </div>

@@ -339,6 +339,7 @@ export function Intimacoes() {
 
   const [lidasIds,   setLidasIds]   = useState<Set<number>>(new Set());
   const [markingId,  setMarkingId]  = useState<number | null>(null);
+  const [filterNew,  setFilterNew]  = useState(false);
 
   const [isTaskModalOpen,   setIsTaskModalOpen]   = useState(false);
   const [selectedIntimacao, setSelectedIntimacao] = useState<IntimacaoNormalizada | null>(null);
@@ -447,6 +448,10 @@ export function Intimacoes() {
   const todayItems = intimacoes.filter(i => i.dataDisponibilizacao?.startsWith(today));
   const todayCount = todayItems.filter(i => !lidasIds.has(i.id)).length;
 
+  const displayedIntimacoes = filterNew
+    ? intimacoes.filter(i => i.dataDisponibilizacao?.startsWith(today) && !lidasIds.has(i.id))
+    : intimacoes;
+
   return (
     <div className="max-w-7xl mx-auto space-y-10 print:space-y-6">
 
@@ -514,11 +519,22 @@ export function Intimacoes() {
           <motion.div
             initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.08 }}
+            onClick={() => todayCount > 0 && setFilterNew(prev => !prev)}
             className={cn(
-              'p-6 rounded-3xl border flex items-center gap-5',
-              todayCount > 0 ? 'bg-secondary/5 border-secondary/20' : 'bg-surface-container-low border-outline-variant/5'
+              'p-6 rounded-3xl border flex items-center gap-5 relative',
+              todayCount > 0 ? 'cursor-pointer' : '',
+              filterNew
+                ? 'bg-secondary/10 border-secondary/40 ring-2 ring-secondary/30'
+                : todayCount > 0
+                  ? 'bg-secondary/5 border-secondary/20 hover:bg-secondary/10 hover:border-secondary/30 transition-all'
+                  : 'bg-surface-container-low border-outline-variant/5'
             )}
           >
+            {filterNew && (
+              <span className="absolute top-3 right-3 text-[9px] font-black uppercase tracking-widest bg-secondary text-on-secondary px-2 py-0.5 rounded-full">
+                Filtrando
+              </span>
+            )}
             <div className={cn(
               'w-12 h-12 rounded-2xl flex items-center justify-center shrink-0',
               todayCount > 0 ? 'bg-secondary/15' : 'bg-surface-container-high'
@@ -584,7 +600,21 @@ export function Intimacoes() {
 
           /* ── Lista de cards ──────────────────────────────── */
           <div className="grid grid-cols-1 gap-5 print:gap-3">
-            {intimacoes.map((item, idx) => {
+            {filterNew && (
+              <div className="flex items-center justify-between px-1">
+                <p className="text-xs font-bold text-secondary flex items-center gap-2">
+                  <Bell className="w-3.5 h-3.5" />
+                  Exibindo apenas notificações novas não lidas
+                </p>
+                <button
+                  onClick={() => setFilterNew(false)}
+                  className="text-[10px] font-black uppercase tracking-widest text-outline hover:text-on-surface transition-colors flex items-center gap-1"
+                >
+                  <X className="w-3 h-3" /> Limpar filtro
+                </button>
+              </div>
+            )}
+            {displayedIntimacoes.map((item, idx) => {
               const isExpanded     = expandedItems.has(item.id);
               const isLida         = lidasIds.has(item.id);
               const isNewAndUnread = item.dataDisponibilizacao?.startsWith(today) && !isLida;
