@@ -641,7 +641,7 @@ export function NewTaskModal({ isOpen, onClose, onSuccess, lockedProcessId, edit
                         </button>
                       </div>
                       <p className="text-[10px] text-outline/70">
-                        Pressione Enter ou vírgula para adicionar. Apenas os responsáveis selecionados nesta tarefa e e-mails extras listados aqui receberão o aviso (disparo via notificacoes@brendamargalho.com).
+                        Pressione Enter ou vírgula para adicionar. Apenas os responsáveis selecionados nesta tarefa e e-mails extras listados aqui receberão o aviso (disparo via notificacao@brendamargalho.com).
                       </p>
                     </div>
                   )}

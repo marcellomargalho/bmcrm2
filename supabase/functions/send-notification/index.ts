@@ -205,7 +205,7 @@ serve(async (req) => {
 </body>
 </html>`
 
-    const fromEmail = 'notificacoes@brendamargalho.com'
+    const fromEmail = 'notificacao@brendamargalho.com'
     const fromName = settings?.from_name || 'Brenda Margalho Advocacia'
 
     // ─── 7. Enviar via Resend ──────────────────────────────────────────

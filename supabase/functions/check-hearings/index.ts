@@ -54,7 +54,7 @@ serve(async (req) => {
     const apiKey = Deno.env.get('RESEND_API_KEY')
     const seniorEmail = settings?.senior_email || 'brendamargalho.adv@gmail.com'
     const teamEmails = settings?.team_emails || []
-    const fromEmail = settings?.from_email || 'notificacoes@brendamargalho.com'
+    const fromEmail = settings?.from_email || 'notificacao@brendamargalho.com'
     const fromName = settings?.from_name || 'Brenda Margalho Advocacia'
 
     if (!apiKey) {

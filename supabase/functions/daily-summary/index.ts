@@ -174,7 +174,7 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: `${settings.from_name || 'Brenda Margalho Advocacia'} <${settings.from_email || 'notificacoes@brendamargalho.com'}>`,
+        from: `${settings.from_name || 'Brenda Margalho Advocacia'} <${settings.from_email || 'notificacao@brendamargalho.com'}>`,
         to: [settings.senior_email],
         subject: `📋 Resumo Diário — ${today.toLocaleDateString('pt-BR')}`,
         html,

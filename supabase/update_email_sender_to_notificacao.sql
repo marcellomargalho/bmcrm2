@@ -1,11 +1,11 @@
 -- =====================================================================
 -- ATUALIZAÇÃO DO E-MAIL REMETENTE PADRÃO (DISPARO DE NOTIFICAÇÕES)
--- Define notificacoes@brendamargalho.com como remetente oficial do CRM
+-- Define notificacao@brendamargalho.com como remetente oficial do CRM
 -- =====================================================================
 
 UPDATE public.email_notification_settings
 SET 
-  from_email = 'notificacoes@brendamargalho.com',
+  from_email = 'notificacao@brendamargalho.com',
   from_name = 'Brenda Margalho Advocacia',
   updated_at = NOW()
 WHERE id IS NOT NULL;
@@ -32,7 +32,7 @@ SELECT
   true,
   true,
   true,
-  'notificacoes@brendamargalho.com',
+  'notificacao@brendamargalho.com',
   'Brenda Margalho Advocacia'
 WHERE NOT EXISTS (
   SELECT 1 FROM public.email_notification_settings LIMIT 1
