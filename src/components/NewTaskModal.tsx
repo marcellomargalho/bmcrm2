@@ -33,7 +33,7 @@ export function NewTaskModal({ isOpen, onClose, onSuccess, lockedProcessId, edit
   const [priority, setPriority] = useState('Média');
   const [fatalDate, setFatalDate] = useState('');
   const [idealDate, setIdealDate] = useState('');
-  const [sendEmail, setSendEmail] = useState(false);
+  const [sendEmail, setSendEmail] = useState(true);
   const [customEmails, setCustomEmails] = useState<string[]>([]);
   const [customEmailInput, setCustomEmailInput] = useState('');
 
@@ -161,7 +161,7 @@ export function NewTaskModal({ isOpen, onClose, onSuccess, lockedProcessId, edit
     setPriority('Média');
     setFatalDate('');
     setIdealDate('');
-    setSendEmail(false);
+    setSendEmail(true);
     setCustomEmails([]);
     setCustomEmailInput('');
     setError('');
@@ -278,17 +278,21 @@ export function NewTaskModal({ isOpen, onClose, onSuccess, lockedProcessId, edit
         }
 
         if (sendEmail) {
+          const availableProfiles = (allProfiles && allProfiles.length > 0) ? allProfiles : profiles;
           const profileEmails = responsibles
             .map((name: string) => {
-              const profile = (allProfiles || []).find(
-                (p: any) => p.name.toLowerCase().trim() === name.toLowerCase().trim()
+              const profile = (availableProfiles || []).find(
+                (p: any) => p.name?.toLowerCase().trim() === name.toLowerCase().trim()
               );
               return profile?.email;
             })
-            .filter(Boolean) as string[];
+            .filter((e): e is string => typeof e === 'string' && e.includes('@'));
 
           // Merge profile emails + custom emails (deduplicate)
-          const recipientEmails = Array.from(new Set([...profileEmails, ...customEmails]));
+          const recipientEmails = Array.from(new Set([
+            ...profileEmails, 
+            ...customEmails
+          ].map(e => e.trim().toLowerCase())));
 
           if (recipientEmails.length > 0) {
             await supabase.functions.invoke('send-notification', {
@@ -570,9 +574,9 @@ export function NewTaskModal({ isOpen, onClose, onSuccess, lockedProcessId, edit
                       }}
                       className="w-4 h-4 rounded border-outline-variant/30 bg-surface-container-lowest text-secondary focus:ring-secondary/20 transition-all cursor-pointer"
                     />
-                    <span className="text-[11px] text-on-surface-variant group-hover:text-on-surface transition-colors flex items-center gap-1">
-                      <Mail className="w-3 h-3" />
-                      Avisar responsáveis por e-mail
+                    <span className="text-[11px] text-on-surface-variant group-hover:text-on-surface transition-colors flex items-center gap-1 font-semibold">
+                      <Mail className="w-3 h-3 text-secondary" />
+                      Avisar apenas os responsáveis selecionados por e-mail
                     </span>
                   </label>
 
@@ -636,8 +640,8 @@ export function NewTaskModal({ isOpen, onClose, onSuccess, lockedProcessId, edit
                           Adicionar
                         </button>
                       </div>
-                      <p className="text-[10px] text-outline/60">
-                        Pressione Enter ou vírgula para adicionar. Os responsáveis cadastrados já serão notificados automaticamente.
+                      <p className="text-[10px] text-outline/70">
+                        Pressione Enter ou vírgula para adicionar. Apenas os responsáveis selecionados nesta tarefa e e-mails extras listados aqui receberão o aviso (disparo via notificacoes@brendamargalho.com).
                       </p>
                     </div>
                   )}

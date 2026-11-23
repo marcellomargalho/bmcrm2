@@ -21,7 +21,7 @@ interface NotificationPayload {
   type: 'task_created' | 'task_assigned' | 'status_change' | 'deadline_approaching' | 'overdue' | 'needs_review'
   processId?: string
   taskId?: string
-  // recipients e systemUrl não são mais aceitos do cliente — carregados no servidor
+  recipients?: string[] // Destinatários específicos selecionados na criação da tarefa
   data: {
     processNumber?: string
     clientName?: string
@@ -75,10 +75,7 @@ serve(async (req) => {
     .eq('id', user.id)
     .single()
 
-  if (
-    !profile?.is_approved ||
-    !['Administrador', 'Advogado com Controladoria'].includes(profile.role)
-  ) {
+  if (!profile?.is_approved) {
     return new Response('Forbidden', { status: 403 })
   }
 
@@ -102,18 +99,34 @@ serve(async (req) => {
     // ─── 4. URL do sistema sempre do ambiente ─────────────────────────
     const systemUrl = Deno.env.get('SYSTEM_URL') || 'https://crm.bmjuris.com.br'
 
-    // ─── 5. Ler payload (sem recipients ou systemUrl) ──────────────────
+    // ─── 5. Ler payload ────────────────────────────────────────────────
     const payload: NotificationPayload = await req.json()
-    const { type, data } = payload
+    const { type, data, recipients: requestedRecipients } = payload
 
-    // ─── 6. Carregar destinatários no servidor ─────────────────────────
-    const seniorEmail: string = settings?.senior_email || ''
-    const teamEmails: string[] = settings?.team_emails || []
-    const recipients = [...new Set([seniorEmail, ...teamEmails].filter(e => e.includes('@')))]
+    // ─── 6. Carregar destinatários ─────────────────────────────────────
+    // Se foram informados destinatários específicos (ex: responsáveis selecionados na criação da tarefa),
+    // o e-mail será enviado ESTRITAMENTE para eles (não para toda a equipe).
+    let recipients: string[] = []
+
+    if (requestedRecipients && Array.isArray(requestedRecipients) && requestedRecipients.length > 0) {
+      recipients = [...new Set(
+        requestedRecipients
+          .filter(e => typeof e === 'string' && e.includes('@'))
+          .map(e => e.trim().toLowerCase())
+      )]
+    }
+
+    // Apenas se NENHUM destinatário foi passado (ex: alertas globais de sistema / rotinas automáticas)
+    // usa a lista global de configurações como fallback.
+    if (recipients.length === 0) {
+      const seniorEmail: string = settings?.senior_email || ''
+      const teamEmails: string[] = settings?.team_emails || []
+      recipients = [...new Set([seniorEmail, ...teamEmails].filter(e => typeof e === 'string' && e.includes('@')).map(e => e.trim().toLowerCase()))]
+    }
 
     if (recipients.length === 0) {
       return new Response(
-        JSON.stringify({ error: 'Nenhum destinatário configurado' }),
+        JSON.stringify({ error: 'Nenhum destinatário configurado ou selecionado' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
       )
     }
@@ -192,6 +205,9 @@ serve(async (req) => {
 </body>
 </html>`
 
+    const fromEmail = 'notificacoes@brendamargalho.com'
+    const fromName = settings?.from_name || 'Brenda Margalho Advocacia'
+
     // ─── 7. Enviar via Resend ──────────────────────────────────────────
     const resendRes = await fetch('https://api.resend.com/emails', {
       method: 'POST',
@@ -200,7 +216,7 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: `${settings?.from_name || 'CRM Advocacia'} <${settings?.from_email || 'sistema@escritorio.com.br'}>`,
+        from: `${fromName} <${fromEmail}>`,
         to: recipients,
         subject,
         html: htmlBody,
