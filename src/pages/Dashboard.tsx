@@ -1137,6 +1137,15 @@ export function Dashboard() {
       setLoadingTimeline(false);
     }
 
+    // Bloquear scroll do body enquanto o modal estiver aberto
+    useEffect(() => {
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = originalOverflow;
+      };
+    }, []);
+
     // Load timeline on mount if applicable
     useEffect(() => {
       if (task.task_type === 'Acompanhamento de Processo') {
@@ -1208,17 +1217,17 @@ export function Dashboard() {
     }
 
     return (
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-6" onClick={onClose}>
+      <div className="fixed inset-0 bg-surface/85 backdrop-blur-md z-[100] flex items-center justify-center p-4 sm:p-6" onClick={onClose}>
         <motion.div 
           initial={{ opacity: 0, scale: 0.95, y: 20 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 20 }}
           transition={{ duration: 0.2 }}
-          className="bg-surface-container-low w-full max-w-[600px] rounded-3xl border border-outline-variant/10 shadow-2xl overflow-hidden"
+          className="bg-surface-container-low w-full max-w-2xl rounded-3xl border border-outline-variant/20 shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
-          <div className="px-8 py-6 border-b border-outline-variant/10 bg-surface-container-high/30 flex items-start justify-between">
+          <div className="px-6 sm:px-8 py-5 border-b border-outline-variant/10 bg-surface-container-high/30 flex items-start justify-between shrink-0">
             <div className="flex items-center gap-4">
               <div className={cn(
                 "w-12 h-12 rounded-2xl flex items-center justify-center shrink-0",
@@ -1243,7 +1252,7 @@ export function Dashboard() {
           </div>
 
           {/* Body */}
-          <div className="px-8 py-6 space-y-6 max-h-[65vh] overflow-y-auto custom-scrollbar">
+          <div className="px-6 sm:px-8 py-6 space-y-6 overflow-y-auto flex-1 custom-scrollbar">
             {/* Description */}
             <div>
               <label className="text-[9px] uppercase tracking-widest text-outline font-black block mb-1.5">Descrição</label>
@@ -1530,8 +1539,8 @@ export function Dashboard() {
           </div>
 
           {/* Footer */}
-          <div className="px-8 py-4 border-t border-outline-variant/10 bg-surface-container-high/20 flex flex-wrap items-center justify-between gap-3">
-            <span className="text-[9px] text-outline uppercase tracking-widest font-bold">
+          <div className="px-6 sm:px-8 py-4 border-t border-outline-variant/10 bg-surface-container-high/30 flex flex-wrap items-center justify-between gap-3 shrink-0">
+            <span className="text-[10px] text-outline uppercase tracking-widest font-bold">
               Criada em {new Date(task.created_at).toLocaleDateString('pt-BR')}
             </span>
             <div className="flex items-center gap-2 flex-wrap">
@@ -1539,7 +1548,7 @@ export function Dashboard() {
                 <>
                   <button
                     onClick={() => { toggleTaskComplete(task.id, task.status, false); onClose(); }}
-                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 transition-all"
+                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 transition-all shrink-0"
                     title="Conclui definitivamente esta demanda sem agendar novo acompanhamento"
                   >
                     <CheckCircle2 className="w-4 h-4" />
@@ -1553,7 +1562,7 @@ export function Dashboard() {
                       setModalInitialTaskType('Acompanhamento de Processo');
                       setIsTaskModalOpen(true);
                     }}
-                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-amber-500/10 text-amber-500 hover:bg-amber-500/20 transition-all"
+                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-amber-500/10 text-amber-500 hover:bg-amber-500/20 transition-all shrink-0"
                     title="Conclui a demanda atual e abre para agendar o próximo acompanhamento"
                   >
                     <RotateCcw className="w-4 h-4" />
@@ -1564,7 +1573,7 @@ export function Dashboard() {
                 <button
                   onClick={() => { toggleTaskComplete(task.id, task.status); onClose(); }}
                   className={cn(
-                    "flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all",
+                    "flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all shrink-0",
                     task.status === 'Concluída' 
                       ? "bg-secondary/10 text-secondary hover:bg-secondary/20" 
                       : "bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20"
@@ -1574,7 +1583,7 @@ export function Dashboard() {
                   {task.status === 'Concluída' ? 'Reabrir Demanda' : 'Concluir'}
                 </button>
               )}
-              <button onClick={onClose} className="px-4 py-2 bg-surface-container-highest text-on-surface-variant text-xs font-bold rounded-xl hover:bg-surface-container-high transition-colors">
+              <button onClick={onClose} className="px-4 py-2 bg-surface-container-highest text-on-surface-variant text-xs font-bold rounded-xl hover:bg-surface-container-high transition-colors shrink-0">
                 Fechar
               </button>
             </div>
@@ -1585,7 +1594,7 @@ export function Dashboard() {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 pb-20">
       <NewTaskModal
         isOpen={isTaskModalOpen}
         onClose={() => {
@@ -1599,7 +1608,7 @@ export function Dashboard() {
       />
 
       {showFollowUpPrompt && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[110] flex items-center justify-center p-6">
+        <div className="fixed inset-0 bg-surface/85 backdrop-blur-md z-[110] flex items-center justify-center p-6">
           <div className="bg-surface-container-low w-full max-w-sm rounded-3xl p-6 shadow-2xl flex flex-col items-center text-center border border-outline-variant/10 animate-in fade-in zoom-in duration-200">
             <div className="w-12 h-12 rounded-2xl bg-amber-500/10 text-amber-500 flex items-center justify-center mb-4">
               <RotateCcw className="w-6 h-6" />
