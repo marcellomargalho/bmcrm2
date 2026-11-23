@@ -21,14 +21,18 @@ export function ProcessDetails() {
 
   const fetchProcess = useCallback(async () => {
     if (!id) return;
-    const { data } = await supabase
-      .from('processes')
-      .select(`*, clients(name, cpf_cnpj, status), process_clients(client_id, role, clients(name, cpf_cnpj, status))`)
-      .eq('id', id)
-      .single();
-
-    setProcess(data);
-    setLoading(false);
+    try {
+      const { data } = await supabase
+        .from('processes')
+        .select(`*, clients(name, cpf_cnpj, status), process_clients(client_id, role, clients(name, cpf_cnpj, status))`)
+        .eq('id', id)
+        .single();
+      setProcess(data);
+    } catch (err) {
+      console.error('Erro ao carregar processo:', err);
+    } finally {
+      setLoading(false);
+    }
   }, [id]);
 
   useEffect(() => {

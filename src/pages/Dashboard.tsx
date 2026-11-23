@@ -137,46 +137,51 @@ export function Dashboard() {
     setLoadingTasks(true);
     const isAdminOrAdv = u.role === 'Administrador' || u.role === 'Advogado';
 
-    if (isAdminOrAdv) {
-      // Fetch ALL non-concluded tasks + recently concluded ones
-      // Order: tarefas com prazo (mais urgentes primeiro), depois sem prazo
-      const { data: pendingData } = await supabase
-        .from('tasks')
-        .select('*, processes(id, number, vara, comarca, court, area, status, responsible, autor, reu, clients(name, cpf_cnpj))')
-        .neq('status', 'Concluída')
-        .order('fatal_date', { ascending: true, nullsFirst: false });
+    try {
+      if (isAdminOrAdv) {
+        // Fetch ALL non-concluded tasks + recently concluded ones
+        // Order: tarefas com prazo (mais urgentes primeiro), depois sem prazo
+        const { data: pendingData } = await supabase
+          .from('tasks')
+          .select('*, processes(id, number, vara, comarca, court, area, status, responsible, autor, reu, clients(name, cpf_cnpj))')
+          .neq('status', 'Concluída')
+          .order('fatal_date', { ascending: true, nullsFirst: false });
 
-      // Also fetch recently concluded (last 50) for history
-      const { data: concludedData } = await supabase
-        .from('tasks')
-        .select('*, processes(id, number, vara, comarca, court, area, status, responsible, autor, reu, clients(name, cpf_cnpj))')
-        .eq('status', 'Concluída')
-        .order('updated_at', { ascending: false })
-        .limit(50);
+        // Also fetch recently concluded (last 50) for history
+        const { data: concludedData } = await supabase
+          .from('tasks')
+          .select('*, processes(id, number, vara, comarca, court, area, status, responsible, autor, reu, clients(name, cpf_cnpj))')
+          .eq('status', 'Concluída')
+          .order('updated_at', { ascending: false })
+          .limit(50);
 
-      setAllTasks([...(pendingData || []), ...(concludedData || [])]);
-    } else {
-      // Estagiário: only their own tasks
-      const orQuery = `user_id.eq.${u.id}${u.name ? `,responsible.ilike.%${u.name}%` : ''}`;
+        setAllTasks([...(pendingData || []), ...(concludedData || [])]);
+      } else {
+        // Estagiário: only their own tasks
+        const orQuery = `user_id.eq.${u.id}${u.name ? `,responsible.ilike.%${u.name}%` : ''}`;
 
-      const { data: pendingData } = await supabase
-        .from('tasks')
-        .select('*, processes(id, number, vara, comarca, court, area, status, responsible, autor, reu, clients(name, cpf_cnpj))')
-        .or(orQuery)
-        .neq('status', 'Concluída')
-        .order('fatal_date', { ascending: true, nullsFirst: false });
+        const { data: pendingData } = await supabase
+          .from('tasks')
+          .select('*, processes(id, number, vara, comarca, court, area, status, responsible, autor, reu, clients(name, cpf_cnpj))')
+          .or(orQuery)
+          .neq('status', 'Concluída')
+          .order('fatal_date', { ascending: true, nullsFirst: false });
 
-      const { data: concludedData } = await supabase
-        .from('tasks')
-        .select('*, processes(id, number, vara, comarca, court, area, status, responsible, autor, reu, clients(name, cpf_cnpj))')
-        .or(orQuery)
-        .eq('status', 'Concluída')
-        .order('updated_at', { ascending: false })
-        .limit(50);
+        const { data: concludedData } = await supabase
+          .from('tasks')
+          .select('*, processes(id, number, vara, comarca, court, area, status, responsible, autor, reu, clients(name, cpf_cnpj))')
+          .or(orQuery)
+          .eq('status', 'Concluída')
+          .order('updated_at', { ascending: false })
+          .limit(50);
 
-      setAllTasks([...(pendingData || []), ...(concludedData || [])]);
+        setAllTasks([...(pendingData || []), ...(concludedData || [])]);
+      }
+    } catch (err) {
+      console.error('Erro ao carregar tarefas:', err);
+    } finally {
+      setLoadingTasks(false);
     }
-    setLoadingTasks(false);
   }, []);
 
   useEffect(() => {
@@ -185,53 +190,59 @@ export function Dashboard() {
     let appointmentsChannel: any;
 
     const init = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('role, name')
-          .eq('id', user.id)
-          .single();
-
-        const u = {
-          id: user.id,
-          name: profile?.name || user.user_metadata?.full_name || '',
-          role: profile?.role || ''
-        };
-        setUserData(u);
-        fetchTasks(u);
-        fetchStats(u);
-
-        // Fetch all profiles for person filter (admin/adv only)
-        if (u.role === 'Administrador' || u.role === 'Advogado') {
-          const { data: profilesData } = await supabase
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data: profile } = await supabase
             .from('profiles')
-            .select('id, name, role')
-            .eq('is_approved', true)
-            .order('name', { ascending: true });
-          setAllProfiles(profilesData || []);
+            .select('role, name')
+            .eq('id', user.id)
+            .single();
+
+          const u = {
+            id: user.id,
+            name: profile?.name || user.user_metadata?.full_name || '',
+            role: profile?.role || ''
+          };
+          setUserData(u);
+          fetchTasks(u);
+          fetchStats(u);
+
+          // Fetch all profiles for person filter (admin/adv only)
+          if (u.role === 'Administrador' || u.role === 'Advogado') {
+            const { data: profilesData } = await supabase
+              .from('profiles')
+              .select('id, name, role')
+              .eq('is_approved', true)
+              .order('name', { ascending: true });
+            setAllProfiles(profilesData || []);
+          }
+
+          // Realtime Tasks
+          tasksChannel = supabase.channel('tasks_dashboard_changes')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, (payload) => {
+              if (payload.eventType === 'UPDATE') {
+                setAllTasks(prev => prev.map(t => t.id === payload.new.id ? { ...t, ...payload.new } : t));
+              } else {
+                fetchTasks(u);
+              }
+            })
+            .subscribe();
+
+          // Realtime Processes Stats
+          processesChannel = supabase.channel('processes_dashboard_stats')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'processes' }, () => fetchStats(u))
+            .subscribe();
+
+          // Realtime Appointments
+          appointmentsChannel = supabase.channel('appointments_dashboard')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, () => fetchStats(u))
+            .subscribe();
         }
-
-        // Realtime Tasks
-        tasksChannel = supabase.channel('tasks_dashboard_changes')
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, (payload) => {
-            if (payload.eventType === 'UPDATE') {
-              setAllTasks(prev => prev.map(t => t.id === payload.new.id ? { ...t, ...payload.new } : t));
-            } else {
-              fetchTasks(u);
-            }
-          })
-          .subscribe();
-
-        // Realtime Processes Stats
-        processesChannel = supabase.channel('processes_dashboard_stats')
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'processes' }, () => fetchStats(u))
-          .subscribe();
-
-        // Realtime Appointments
-        appointmentsChannel = supabase.channel('appointments_dashboard')
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, () => fetchStats(u))
-          .subscribe();
+      } catch (err) {
+        console.error('Erro ao inicializar dashboard:', err);
+        // Garante que loadingTasks não fique preso se init falhar
+        setLoadingTasks(false);
       }
     };
 

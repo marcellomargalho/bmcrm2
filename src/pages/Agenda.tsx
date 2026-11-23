@@ -52,14 +52,19 @@ function SiteRequestsPanel() {
 
   const fetchRequests = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase
-      .from('appointments')
-      .select('*')
-      .eq('source', 'site')
-      .in('status', ['pendente', 'confirmado'])
-      .order('created_at', { ascending: false });
-    setRequests((data || []) as SiteRequest[]);
-    setLoading(false);
+    try {
+      const { data } = await supabase
+        .from('appointments')
+        .select('*')
+        .eq('source', 'site')
+        .in('status', ['pendente', 'confirmado'])
+        .order('created_at', { ascending: false });
+      setRequests((data || []) as SiteRequest[]);
+    } catch (err) {
+      console.error('Erro ao carregar solicitações:', err);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {

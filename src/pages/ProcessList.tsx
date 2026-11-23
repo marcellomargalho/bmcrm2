@@ -80,38 +80,42 @@ export function ProcessList() {
     // (por número E por nome do cliente). Sem busca, usamos paginação normal.
     const isSearching = debouncedFilter.trim().length > 0;
 
-    let query = supabase
-      .from('processes')
-      .select('*, clients(name, cpf_cnpj, status), process_clients(client_id, role, clients(name, cpf_cnpj, status))', { count: 'exact' })
-      .order('created_at', { ascending: false });
+    try {
+      let query = supabase
+        .from('processes')
+        .select('*, clients(name, cpf_cnpj, status), process_clients(client_id, role, clients(name, cpf_cnpj, status))', { count: 'exact' })
+        .order('created_at', { ascending: false });
 
-    if (!isSearching) {
-      query = query.range(from, to);
+      if (!isSearching) {
+        query = query.range(from, to);
+      }
+
+      // Server-side status filter
+      if (statusFilter === 'ativos') {
+        query = query.neq('status', 'Arquivado');
+      } else if (statusFilter === 'arquivados') {
+        query = query.eq('status', 'Arquivado');
+      }
+
+      const { data, count } = await query;
+
+      if (reset) {
+        setProcesses(data || []);
+        setPage(0);
+      } else {
+        setProcesses(prev => [...prev, ...(data || [])]);
+        setPage(currentPage);
+      }
+
+      const loaded = reset ? (data?.length ?? 0) : processes.length + (data?.length ?? 0);
+      // Quando há busca ativa, todos os dados já foram carregados de uma vez (sem paginação)
+      setHasMore(!isSearching && loaded < (count ?? 0));
+    } catch (err) {
+      console.error('Erro ao carregar processos:', err);
+    } finally {
+      setLoading(false);
+      setLoadingMore(false);
     }
-
-    // Server-side status filter
-    if (statusFilter === 'ativos') {
-      query = query.neq('status', 'Arquivado');
-    } else if (statusFilter === 'arquivados') {
-      query = query.eq('status', 'Arquivado');
-    }
-
-    const { data, count } = await query;
-
-    if (reset) {
-      setProcesses(data || []);
-      setPage(0);
-    } else {
-      setProcesses(prev => [...prev, ...(data || [])]);
-      setPage(currentPage);
-    }
-
-    const loaded = reset ? (data?.length ?? 0) : processes.length + (data?.length ?? 0);
-    // Quando há busca ativa, todos os dados já foram carregados de uma vez (sem paginação)
-    setHasMore(!isSearching && loaded < (count ?? 0));
-
-    setLoading(false);
-    setLoadingMore(false);
   }, [debouncedFilter, statusFilter, page, processes.length]);
 
   // Reset and refetch whenever filter or status changes

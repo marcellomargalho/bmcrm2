@@ -45,8 +45,14 @@ export function Login({ initialError }: { initialError?: string | null }) {
     if (signInError) {
       setError(signInError.message);
       setLoading(false);
-    } else {
-      setTimeout(() => setLoading(false), 5000);
+    }
+    // Após login bem-sucedido, o App.tsx detecta via onAuthStateChange e redireciona.
+    // Mantemos loading=true brevemente para feedback visual, mas garantimos reset em 3s.
+    // Isso evita tela presa caso o onAuthStateChange demore ou falhe.
+    else {
+      const fallback = setTimeout(() => setLoading(false), 3000);
+      // Limpa o fallback se o componente for desmontado (redirecionamento ocorreu)
+      return () => clearTimeout(fallback);
     }
   };
 

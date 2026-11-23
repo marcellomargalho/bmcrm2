@@ -28,14 +28,18 @@ export function TaskTab({ processId }: { processId: string }) {
 
   async function fetchTasks() {
     setLoading(true);
-    const { data } = await supabase
-      .from('tasks')
-      .select('*')
-      .eq('process_id', processId)
-      .order('created_at', { ascending: false });
-    
-    setTasks(data || []);
-    setLoading(false);
+    try {
+      const { data } = await supabase
+        .from('tasks')
+        .select('*')
+        .eq('process_id', processId)
+        .order('created_at', { ascending: false });
+      setTasks(data || []);
+    } catch (err) {
+      console.error('Erro ao carregar tarefas:', err);
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {

@@ -64,6 +64,12 @@ export default function App() {
   const [sessionUserId, setSessionUserId] = useState<string | null>(null);
 
   const fetchProfile = async (userId: string) => {
+    // Timeout independente para garantir que isLoading sempre seja resolvido
+    const profileTimeout = setTimeout(() => {
+      console.warn('fetchProfile timeout: forçando isLoading = false');
+      setIsLoading(false);
+    }, 8000);
+
     try {
       const { data, error } = await supabase
         .from('profiles')
@@ -94,18 +100,19 @@ export default function App() {
       setIsApproved(false);
       return false;
     } finally {
+      clearTimeout(profileTimeout);
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    // Safety timeout to ensure the app always resolves loading
+    // Safety timeout: garante que isLoading sempre resolve, mesmo se onAuthStateChange não disparar
     const safetyTimer = setTimeout(() => {
       setIsLoading(prev => {
         if (prev) console.warn('Auth initialization reached safety timeout');
         return false;
       });
-    }, 5000);
+    }, 10000);
 
     // Escuta as mudanças de autenticação (de forma não bloqueante para a trava de rede)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
@@ -119,7 +126,7 @@ export default function App() {
         setUserRole(null);
         setIsLoading(false);
       }
-      clearTimeout(safetyTimer);
+      // Não cancelamos o safetyTimer aqui — cancelamos só após o fetchProfile completar
     });
 
     return () => {

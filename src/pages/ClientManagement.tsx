@@ -269,38 +269,42 @@ function ClientProcesses({ clientId, userRole }: { clientId: string; userRole: s
 
   async function fetchProcesses() {
     setLoading(true);
+    try {
+      // 1. Processos onde este cliente é o "Principal" (client_id direto)
+      const { data: directProcesses } = await supabase
+        .from('processes')
+        .select('*')
+        .eq('client_id', clientId)
+        .order('created_at', { ascending: false });
 
-    // 1. Processos onde este cliente é o "Principal" (client_id direto)
-    const { data: directProcesses } = await supabase
-      .from('processes')
-      .select('*')
-      .eq('client_id', clientId)
-      .order('created_at', { ascending: false });
+      // 2. Processos vinculados posteriormente via process_clients
+      const { data: linkedProcesses } = await supabase
+        .from('processes')
+        .select('*, process_clients!inner(client_id, role)')
+        .eq('process_clients.client_id', clientId);
 
-    // 2. Processos vinculados posteriormente via process_clients
-    const { data: linkedProcesses } = await supabase
-      .from('processes')
-      .select('*, process_clients!inner(client_id, role)')
-      .eq('process_clients.client_id', clientId);
-
-    // 3. Mescla removendo duplicatas por id
-    const allProcesses = [...(directProcesses || [])];
-    if (linkedProcesses) {
-      for (const lp of linkedProcesses) {
-        const { process_clients, ...processData } = lp;
-        if (!allProcesses.some(p => p.id === processData.id)) {
-          allProcesses.push(processData);
+      // 3. Mescla removendo duplicatas por id
+      const allProcesses = [...(directProcesses || [])];
+      if (linkedProcesses) {
+        for (const lp of linkedProcesses) {
+          const { process_clients, ...processData } = lp;
+          if (!allProcesses.some(p => p.id === processData.id)) {
+            allProcesses.push(processData);
+          }
         }
       }
+
+      // 4. Ordena por data de criação (mais recentes primeiro)
+      allProcesses.sort((a, b) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
+
+      setProcesses(allProcesses);
+    } catch (err) {
+      console.error('Erro ao carregar processos do cliente:', err);
+    } finally {
+      setLoading(false);
     }
-
-    // 4. Ordena por data de criação (mais recentes primeiro)
-    allProcesses.sort((a, b) =>
-      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-    );
-
-    setProcesses(allProcesses);
-    setLoading(false);
   }
 
   useEffect(() => {
