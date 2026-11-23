@@ -37,3 +37,4 @@ SELECT
 WHERE NOT EXISTS (
   SELECT 1 FROM public.email_notification_settings LIMIT 1
 );
+
