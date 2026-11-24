@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Loader2, AlertCircle, ChevronDown, MessageSquare, Clock, CalendarDays, Mail, Plus, Search, Users } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
@@ -325,6 +326,15 @@ export function NewTaskModal({ isOpen, onClose, onSuccess, lockedProcessId, edit
     }
   }
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = originalOverflow;
+    };
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const priorityColors: Record<string, string> = {
@@ -333,7 +343,7 @@ export function NewTaskModal({ isOpen, onClose, onSuccess, lockedProcessId, edit
     'Alta': 'bg-error/10 text-error border-error/20',
   };
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 bg-surface/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
       <div className="bg-surface-container w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden border border-outline-variant/20 animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col">
         {/* Header */}
@@ -720,6 +730,7 @@ export function NewTaskModal({ isOpen, onClose, onSuccess, lockedProcessId, edit
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

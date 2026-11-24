@@ -1583,7 +1583,7 @@ export function Dashboard() {
   };
 
   return (
-    <div className="space-y-8 pb-20">
+    <>
       <NewTaskModal
         isOpen={isTaskModalOpen}
         onClose={() => {
@@ -1634,7 +1634,8 @@ export function Dashboard() {
         <TaskDetailModal task={selectedTaskDetail} onClose={() => setSelectedTaskDetail(null)} />
       )}
 
-      <section className="mb-6 flex items-start justify-between">
+      <div className="space-y-8 pb-20">
+        <section className="mb-6 flex items-start justify-between">
         <div>
           <h2 className="text-3xl font-headline font-extrabold tracking-tight text-on-surface mb-2">Visão Geral</h2>
           <p className="text-on-surface-variant">Bem-vindo(a) de volta. Aqui está o resumo jurídico do seu dia.</p>
@@ -1686,6 +1687,7 @@ export function Dashboard() {
           </Reorder.Item>
         ))}
       </Reorder.Group>
+      </div>
 
       <button
         onClick={() => setIsTaskModalOpen(true)}
@@ -1693,6 +1695,6 @@ export function Dashboard() {
       >
         <Plus className="w-6 h-6" />
       </button>
-    </div>
+    </>
   );
 }

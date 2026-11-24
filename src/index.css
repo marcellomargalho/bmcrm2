@@ -82,3 +82,13 @@
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: var(--color-secondary);
 }
+
+/* Impede que utilitários .space-y-* / .space-x-* do Tailwind v4 injetem margem
+   em overlays full-screen (fixed inset-0), eliminando o vão inferior na tela. */
+.fixed.inset-0 {
+  margin: 0 !important;
+}
+
+[class*="space-y-"] > .fixed {
+  margin-block: 0 !important;
+}
