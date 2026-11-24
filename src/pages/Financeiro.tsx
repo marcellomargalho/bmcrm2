@@ -522,7 +522,7 @@ export function Financeiro() {
   });
 
   return (
-    <div className="max-w-7xl mx-auto space-y-10 animate-in fade-in duration-700 pb-20">
+    <div className="max-w-7xl mx-auto space-y-10 pb-20">
       <NewContractModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onSuccess={handleSaveContract} initialData={contractToEdit} />
 
       {/* Header & New Contract Button */}

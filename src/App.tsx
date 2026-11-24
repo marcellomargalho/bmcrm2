@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AppLayout } from '@/components/AppLayout';
 import { useAuthInactivity } from '@/hooks/useAuthInactivity';
@@ -6,20 +6,24 @@ import { Login } from '@/pages/Login';
 import { Signup } from '@/pages/Signup';
 import { Dashboard } from '@/pages/Dashboard';
 import { ProcessList } from '@/pages/ProcessList';
-import { ProcessDetails } from '@/pages/ProcessDetails';
 import { ClientManagement } from '@/pages/ClientManagement';
 import { Agenda } from '@/pages/Agenda';
-import { DocumentManagement } from '@/pages/DocumentManagement';
-import { Settings } from '@/pages/Settings';
 import { UpdatePassword } from '@/pages/UpdatePassword';
 import { PendingApproval } from '@/pages/PendingApproval';
-import { Financeiro } from '@/pages/Financeiro';
-import { Intimacoes } from '@/pages/Intimacoes';
-import { Audiencias } from '@/pages/Audiencias';
-import { BlogManagement } from '@/pages/BlogManagement';
-import { Analytics } from '@/pages/Analytics';
-import { Atendimento } from '@/pages/Atendimento';
 import { supabase } from '@/lib/supabase';
+import { AuthUserContext, AuthUser } from '@/lib/authContext';
+import { invalidateCache } from '@/lib/pageCache';
+import {
+  LazyProcessDetails,
+  LazyDocumentManagement,
+  LazyFinanceiro,
+  LazyIntimacoes,
+  LazyAudiencias,
+  LazyBlogManagement,
+  LazyAtendimento,
+  LazyAnalytics,
+  LazySettings,
+} from '@/lib/routePreload';
 
 function ProtectedRoute({ 
   children, 
@@ -60,6 +64,7 @@ export default function App() {
   const [isApproved, setIsApproved] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [userRole, setUserRole] = useState<string | null>(null);
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
   const [sessionUserId, setSessionUserId] = useState<string | null>(null);
 
@@ -73,7 +78,7 @@ export default function App() {
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .select('is_approved, role')
+        .select('is_approved, role, name, email')
         .eq('id', userId)
         .single();
 
@@ -83,11 +88,18 @@ export default function App() {
         setAuthError('Sua conta está aguardando aprovação de um administrador.');
         setIsApproved(false);
         setIsAuthenticated(false);
+        setAuthUser(null);
         return false;
       }
       
       setIsApproved(data.is_approved);
       setUserRole(data.role);
+      setAuthUser({
+        id: userId,
+        email: data.email || '',
+        name: data.name || '',
+        role: data.role || '',
+      });
       setAuthError(null);
       return true;
     } catch (err: any) {
@@ -156,6 +168,8 @@ export default function App() {
   }, [sessionUserId]);
 
   const logout = React.useCallback(async () => {
+    invalidateCache();
+    setAuthUser(null);
     setIsAuthenticated(false);
     setIsApproved(false);
     setUserRole(null);
@@ -167,51 +181,54 @@ export default function App() {
   useAuthInactivity(logout, 30 * 60 * 1000);
 
   return (
-    <Routes>
-      <Route path="/login" element={
-        isLoading ? (
-          <div className="min-h-screen flex items-center justify-center bg-surface text-on-surface">Carregando...</div>
-        ) : (
-          isAuthenticated ? <Navigate to="/dashboard" replace /> : <Login initialError={authError} />
-        )
-      } />
-      <Route path="/signup" element={
-        isLoading ? (
-          <div className="min-h-screen flex items-center justify-center bg-surface text-on-surface">Carregando...</div>
-        ) : (
-          isAuthenticated ? <Navigate to="/dashboard" replace /> : <Signup />
-        )
-      } />
-      <Route path="/update-password" element={<UpdatePassword />} />
-      <Route path="/pending-approval" element={
-        <ProtectedRoute isAuthenticated={isAuthenticated} isApproved={isApproved} isLoading={isLoading}>
-          <PendingApproval />
-        </ProtectedRoute>
-      } />
-      
-      <Route path="/" element={
-        <ProtectedRoute isAuthenticated={isAuthenticated} isApproved={isApproved} isLoading={isLoading}>
-          <AppLayout onLogout={logout} userRole={userRole} />
-        </ProtectedRoute>
-      }>
-        <Route index element={<Navigate to="/dashboard" replace />} />
-        <Route path="dashboard" element={<Dashboard />} />
-        <Route path="processos" element={<ProcessList />} />
+    <AuthUserContext.Provider value={authUser}>
+      <Suspense fallback={<div className="p-8 text-xs text-outline">Carregando seção...</div>}>
+        <Routes>
+          <Route path="/login" element={
+            isLoading ? (
+              <div className="min-h-screen flex items-center justify-center bg-surface text-on-surface">Carregando...</div>
+            ) : (
+              isAuthenticated ? <Navigate to="/dashboard" replace /> : <Login initialError={authError} />
+            )
+          } />
+          <Route path="/signup" element={
+            isLoading ? (
+              <div className="min-h-screen flex items-center justify-center bg-surface text-on-surface">Carregando...</div>
+            ) : (
+              isAuthenticated ? <Navigate to="/dashboard" replace /> : <Signup />
+            )
+          } />
+          <Route path="/update-password" element={<UpdatePassword />} />
+          <Route path="/pending-approval" element={
+            <ProtectedRoute isAuthenticated={isAuthenticated} isApproved={isApproved} isLoading={isLoading}>
+              <PendingApproval />
+            </ProtectedRoute>
+          } />
+          
+          <Route path="/" element={
+            <ProtectedRoute isAuthenticated={isAuthenticated} isApproved={isApproved} isLoading={isLoading}>
+              <AppLayout onLogout={logout} userRole={userRole} />
+            </ProtectedRoute>
+          }>
+            <Route index element={<Navigate to="/dashboard" replace />} />
+            <Route path="dashboard" element={<Dashboard />} />
+            <Route path="processos" element={<ProcessList />} />
+            <Route path="processos/:id" element={<LazyProcessDetails />} />
+            <Route path="clientes" element={<ClientManagement />} />
+            <Route path="agenda" element={<Agenda />} />
+            <Route path="documentos" element={<LazyDocumentManagement />} />
+            <Route path="financeiro" element={<LazyFinanceiro />} />
+            <Route path="intimacoes" element={<LazyIntimacoes />} />
+            <Route path="audiencias" element={<LazyAudiencias />} />
+            <Route path="blog" element={<LazyBlogManagement />} />
+            <Route path="atendimento" element={<LazyAtendimento />} />
+            <Route path="analytics" element={<LazyAnalytics />} />
+            <Route path="configuracoes" element={<LazySettings />} />
+          </Route>
 
-        <Route path="processos/:id" element={<ProcessDetails />} />
-        <Route path="clientes" element={<ClientManagement />} />
-        <Route path="agenda" element={<Agenda />} />
-        <Route path="documentos" element={<DocumentManagement />} />
-        <Route path="financeiro" element={<Financeiro />} />
-        <Route path="intimacoes" element={<Intimacoes />} />
-        <Route path="audiencias" element={<Audiencias />} />
-        <Route path="blog" element={<BlogManagement />} />
-        <Route path="atendimento" element={<Atendimento />} />
-        <Route path="analytics" element={<Analytics />} />
-        <Route path="configuracoes" element={<Settings />} />
-      </Route>
-
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Suspense>
+    </AuthUserContext.Provider>
   );
 }

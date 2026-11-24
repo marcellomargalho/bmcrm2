@@ -337,7 +337,7 @@ export function Settings() {
           )}
 
           {activeTab === 'productivity' && isAdmin && (
-            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="space-y-8">
               <div className="bg-surface-container-low p-8 rounded-3xl border border-outline-variant/5">
                 <div className="flex justify-between items-center mb-8">
                   <div>
@@ -501,7 +501,7 @@ export function Settings() {
           )}
 
           {activeTab === 'intimacoes_config' && isAdmin && (
-            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="space-y-8">
               <div className="bg-surface-container-low p-8 rounded-3xl border border-outline-variant/5 space-y-8">
                 <div>
                   <h4 className="text-xl font-headline font-bold text-on-surface tracking-tight flex items-center gap-3">
@@ -576,7 +576,7 @@ export function Settings() {
           )}
 
           {activeTab === 'datajud_config' && isAdmin && (
-            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="space-y-8">
               <div className="bg-surface-container-low p-8 rounded-3xl border border-outline-variant/5 space-y-8">
                 <div>
                   <h4 className="text-xl font-headline font-bold text-on-surface tracking-tight flex items-center gap-3">

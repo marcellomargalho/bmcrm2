@@ -5,68 +5,80 @@ import { Plus, Edit2, Eye, History, Upload, Mail, Calendar as CalendarIcon, Calc
 import { cn } from '@/lib/utils';
 
 import { supabase } from '@/lib/supabase';
+import { useAuthUser } from '@/lib/authContext';
+import { getCached, setCached } from '@/lib/pageCache';
 import { NewProcessModal, ProcessRow } from '@/components/NewProcessModal';
 
 const PAGE_SIZE = 25;
 
 export function ProcessList() {
   const navigate = useNavigate();
-  const [processes, setProcesses] = useState<ProcessRow[]>([]);
-  const [loading, setLoading] = useState(true);
+  const authUser = useAuthUser();
+  const cachedPage0 = getCached<{ data: ProcessRow[]; count: number }>('processes_page0_todos');
+  const cachedCounts = getCached<{ total: number; active: number; archived: number; inactive: number }>('processes_counts');
+
+  const [processes, setProcesses] = useState<ProcessRow[]>(() => cachedPage0?.data || []);
+  const [loading, setLoading] = useState<boolean>(() => !cachedPage0);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(false);
+  const [hasMore, setHasMore] = useState<boolean>(() => cachedPage0 ? cachedPage0.data.length < cachedPage0.count : false);
   const [page, setPage] = useState(0);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProcess, setEditingProcess] = useState<ProcessRow | null>(null);
 
   const [filterText, setFilterText] = useState('');
-  const debouncedFilter = useDebounce(filterText, 350);
+  const debouncedFilter = useDebounce(filterText, 300);
   const [statusFilter, setStatusFilter] = useState<'todos' | 'ativos' | 'arquivados' | 'cliente_inativo'>('todos');
-  const [recentMovements, setRecentMovements] = useState<any[]>([]);
-  const [userRole, setUserRole] = useState<string | null>(null);
+  const [recentMovements, setRecentMovements] = useState<any[]>(() => getCached('processes_movements') || []);
+  const [userRole, setUserRole] = useState<string | null>(() => authUser?.role || null);
 
-  // Counts for summary cards — fetched via separate count queries, never all records
-  const [totalCount, setTotalCount] = useState(0);
-  const [activeCount, setActiveCount] = useState(0);
-  const [archivedCount, setArchivedCount] = useState(0);
-  const [clienteInativoCount, setClienteInativoCount] = useState(0);
+  // Counts for summary cards — fetched via parallel queries and cached
+  const [totalCount, setTotalCount] = useState<number>(() => cachedCounts?.total ?? 0);
+  const [activeCount, setActiveCount] = useState<number>(() => cachedCounts?.active ?? 0);
+  const [archivedCount, setArchivedCount] = useState<number>(() => cachedCounts?.archived ?? 0);
+  const [clienteInativoCount, setClienteInativoCount] = useState<number>(() => cachedCounts?.inactive ?? 0);
 
   async function fetchMovements() {
     const { data } = await supabase
       .from('tasks')
-      .select('*')
+      .select('id, process_id, process_number, client_name, description, task_type, status, created_at')
       .not('process_number', 'is', null)
       .neq('process_number', '')
       .order('created_at', { ascending: false })
       .limit(6);
-    setRecentMovements(data || []);
+    const list = data || [];
+    setRecentMovements(list);
+    setCached('processes_movements', list);
   }
 
   async function fetchCounts() {
-    const [total, active, archived] = await Promise.all([
+    const [total, active, archived, inactiveRes] = await Promise.all([
       supabase.from('processes').select('id', { count: 'exact', head: true }),
       supabase.from('processes').select('id', { count: 'exact', head: true }).eq('status', 'Em Andamento'),
       supabase.from('processes').select('id', { count: 'exact', head: true }).eq('status', 'Arquivado'),
+      supabase.from('processes').select('id, clients(status), process_clients(clients(status))'),
     ]);
-    setTotalCount(total.count ?? 0);
-    setActiveCount(active.count ?? 0);
-    setArchivedCount(archived.count ?? 0);
-
-    // Cliente inativo count: fetch minimal data (only ids) to count
-    const { data: inactiveClientProcs } = await supabase
-      .from('processes')
-      .select('id, clients(status), process_clients(clients(status))');
-    const inactiveCount = (inactiveClientProcs || []).filter((p: any) => {
+    const t = total.count ?? 0;
+    const ac = active.count ?? 0;
+    const ar = archived.count ?? 0;
+    const inact = (inactiveRes.data || []).filter((p: any) => {
       if (p.clients?.status === 'Inativo') return true;
       if (p.process_clients?.some((pc: any) => pc.clients?.status === 'Inativo')) return true;
       return false;
     }).length;
-    setClienteInativoCount(inactiveCount);
+
+    setTotalCount(t);
+    setActiveCount(ac);
+    setArchivedCount(ar);
+    setClienteInativoCount(inact);
+    setCached('processes_counts', { total: t, active: ac, archived: ar, inactive: inact });
   }
 
   const fetchProcesses = useCallback(async (reset = true) => {
+    const isDefaultQuery = reset && !debouncedFilter.trim() && statusFilter === 'todos';
     if (reset) {
-      setLoading(true);
+      if (!isDefaultQuery || !getCached('processes_page0_todos')) {
+        setLoading(true);
+      }
       setPage(0);
     } else {
       setLoadingMore(true);
@@ -76,8 +88,6 @@ export function ProcessList() {
     const from = currentPage * PAGE_SIZE;
     const to = from + PAGE_SIZE - 1;
 
-    // Quando há texto de busca, carregamos todos os processos e filtramos client-side
-    // (por número E por nome do cliente). Sem busca, usamos paginação normal.
     const isSearching = debouncedFilter.trim().length > 0;
 
     try {
@@ -90,7 +100,6 @@ export function ProcessList() {
         query = query.range(from, to);
       }
 
-      // Server-side status filter
       if (statusFilter === 'ativos') {
         query = query.neq('status', 'Arquivado');
       } else if (statusFilter === 'arquivados') {
@@ -100,15 +109,18 @@ export function ProcessList() {
       const { data, count } = await query;
 
       if (reset) {
-        setProcesses(data || []);
+        const list = data || [];
+        setProcesses(list);
         setPage(0);
+        if (isDefaultQuery) {
+          setCached('processes_page0_todos', { data: list, count: count ?? list.length });
+        }
       } else {
         setProcesses(prev => [...prev, ...(data || [])]);
         setPage(currentPage);
       }
 
       const loaded = reset ? (data?.length ?? 0) : processes.length + (data?.length ?? 0);
-      // Quando há busca ativa, todos os dados já foram carregados de uma vez (sem paginação)
       setHasMore(!isSearching && loaded < (count ?? 0));
     } catch (err) {
       console.error('Erro ao carregar processos:', err);
@@ -118,7 +130,6 @@ export function ProcessList() {
     }
   }, [debouncedFilter, statusFilter, page, processes.length]);
 
-  // Reset and refetch whenever filter or status changes
   useEffect(() => {
     fetchProcesses(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -127,19 +138,10 @@ export function ProcessList() {
   useEffect(() => {
     fetchMovements();
     fetchCounts();
-    async function fetchUserRole() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data: profileData } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', user.id)
-          .single();
-        if (profileData) setUserRole(profileData.role);
-      }
+    if (authUser?.role) {
+      setUserRole(authUser.role);
     }
-    fetchUserRole();
-  }, []);
+  }, [authUser?.role]);
 
   async function handleDeleteProcess(id: string) {
     const isAdmin = userRole === 'Administrador' || userRole === 'Advogado com Controladoria';

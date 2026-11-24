@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
+import { getCached, setCached } from '@/lib/pageCache';
 import toast from 'react-hot-toast';
 
 // ─── Interfaces ──────────────────────────────────────────────────────────────
@@ -102,10 +103,11 @@ const loadXlsx = async () => {
 // ─── Componente Principal ─────────────────────────────────────────────────────
 
 export function Audiencias() {
-  const [hearings, setHearings] = useState<Hearing[]>([]);
-  const [logs, setLogs] = useState<HearingLog[]>([]);
-  const [processes, setProcesses] = useState<ProcessOption[]>([]);
-  const [loading, setLoading] = useState(true);
+  const cachedHearings = getCached<Hearing[]>('audiencias_list');
+  const [hearings, setHearings] = useState<Hearing[]>(() => cachedHearings || []);
+  const [logs, setLogs] = useState<HearingLog[]>(() => getCached('audiencias_logs') || []);
+  const [processes, setProcesses] = useState<ProcessOption[]>(() => getCached('audiencias_procs') || []);
+  const [loading, setLoading] = useState<boolean>(() => !cachedHearings);
   const [activeTab, setActiveTab] = useState<'list' | 'import' | 'logs'>('list');
 
   // Filtros
@@ -162,18 +164,16 @@ export function Audiencias() {
 
 
   const fetchHearingsAndLogs = useCallback(async () => {
-    setLoading(true);
+    if (!getCached('audiencias_list')) setLoading(true);
     try {
-      const [{ data: hData }, { data: lData }, { data: pData }, { data: settings }] = await Promise.all([
+      const [{ data: hData }, { data: settings }] = await Promise.all([
         supabase.from('hearings').select('*').order('hearing_date', { ascending: true }),
-        supabase.from('hearing_logs').select('*, hearings(process_number, client_name)').order('sent_at', { ascending: false }).limit(50),
-        supabase.from('processes').select('id, number, comarca, client_id, type, clients(name)').neq('status', 'Arquivado'),
         supabase.from('email_notification_settings').select('senior_email, team_emails').limit(1).maybeSingle(),
       ]);
 
-      setHearings(hData || []);
-      setLogs((lData as any[]) || []);
-      setProcesses(pData || []);
+      const hList = hData || [];
+      setHearings(hList);
+      setCached('audiencias_list', hList);
       if (settings) {
         setEmailConfig({
           senior_email: settings.senior_email || 'brendamargalho.adv@gmail.com',
@@ -191,6 +191,37 @@ export function Audiencias() {
   useEffect(() => {
     fetchHearingsAndLogs();
   }, [fetchHearingsAndLogs]);
+
+  // Carrega processos apenas quando abrir modal de audiência
+  useEffect(() => {
+    if (isModalOpen && processes.length === 0) {
+      supabase
+        .from('processes')
+        .select('id, number, comarca, client_id, type, clients(name)')
+        .neq('status', 'Arquivado')
+        .then(({ data }) => {
+          const list = data || [];
+          setProcesses(list);
+          setCached('audiencias_procs', list);
+        });
+    }
+  }, [isModalOpen, processes.length]);
+
+  // Carrega histórico de logs apenas quando entrar na aba de logs
+  useEffect(() => {
+    if (activeTab === 'logs') {
+      supabase
+        .from('hearing_logs')
+        .select('*, hearings(process_number, client_name)')
+        .order('sent_at', { ascending: false })
+        .limit(50)
+        .then(({ data }) => {
+          const list = (data as any[]) || [];
+          setLogs(list);
+          setCached('audiencias_logs', list);
+        });
+    }
+  }, [activeTab]);
 
   // Autofill form if process selected
   useEffect(() => {

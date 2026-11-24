@@ -1,16 +1,10 @@
 import React from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
-function useUser() {
-  const [user, setUser] = useState<any>(null);
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      setUser(data.user);
-    });
-  }, []);
-  return user;
-}
+import { useAuthUser } from '@/lib/authContext';
+import { preloadRoute } from '@/lib/routePreload';
+import { getCached, setCached, isCacheFresh } from '@/lib/pageCache';
 import { 
   LayoutDashboard, 
   Gavel, 
@@ -62,8 +56,8 @@ const taskTypeColors: Record<string, string> = {
 };
 
 function NotificationDropdown({ userId }: { userId: string }) {
-  const [notifications, setNotifications] = useState<any[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
+  const [notifications, setNotifications] = useState<any[]>(() => getCached(`notifs_${userId}`) || []);
+  const [unreadCount, setUnreadCount] = useState<number>(() => getCached(`notifs_unread_${userId}`) ?? 0);
   const [open, setOpen] = useState(false);
   const [marking, setMarking] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -72,11 +66,15 @@ function NotificationDropdown({ userId }: { userId: string }) {
   async function fetchUnreadCount() {
     const { count, error } = await supabase
       .from('notifications')
-      .select('*', { count: 'exact', head: true })
+      .select('id', { count: 'exact', head: true })
       .eq('user_id', userId)
       .eq('is_read', false);
     
-    if (!error) setUnreadCount(count || 0);
+    if (!error) {
+      const val = count || 0;
+      setUnreadCount(val);
+      setCached(`notifs_unread_${userId}`, val);
+    }
   }
 
   async function fetchNotifications() {
@@ -86,12 +84,13 @@ function NotificationDropdown({ userId }: { userId: string }) {
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
       .limit(15);
-    setNotifications(data || []);
+    const list = data || [];
+    setNotifications(list);
+    setCached(`notifs_${userId}`, list);
   }
 
   useEffect(() => {
     if (!userId) return;
-    fetchNotifications();
     fetchUnreadCount();
 
     // Realtime subscription
@@ -101,14 +100,20 @@ function NotificationDropdown({ userId }: { userId: string }) {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` },
         () => { 
-          fetchNotifications(); 
           fetchUnreadCount();
+          if (open) fetchNotifications();
         }
       )
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
   }, [userId]);
+
+  useEffect(() => {
+    if (open && userId) {
+      fetchNotifications();
+    }
+  }, [open, userId]);
 
   // Close on outside click
   useEffect(() => {
@@ -264,22 +269,21 @@ function formatTimeAgo(dateStr: string): string {
 }
 
 export function Sidebar({ onLogout, userRole }: { onLogout: () => void, userRole: string | null }) {
-  const user = useUser();
-  const userName = user?.user_metadata?.full_name || 'Usuário';
-  const role = userRole || user?.user_metadata?.role || 'Advogado';
+  const authUser = useAuthUser();
+  const userName = authUser?.name || 'Usuário';
+  const role = userRole || authUser?.role || 'Advogado';
   const isEstagiario = role === 'Estagiário';
   const isAdvogadoSimples = role === 'Advogado';
   const isAdvogadoControladoria = role === 'Advogado com Controladoria';
   const isAdminOrControladoria = role === 'Administrador' || isAdvogadoControladoria;
 
-  const [intimacoesCount, setIntimacoesCount] = useState<number | null>(null);
+  const [intimacoesCount, setIntimacoesCount] = useState<number | null>(() => getCached('djen_unread_count') ?? null);
 
-  // Busca apenas intimações de HOJE não lidas para o badge
+  // Busca apenas intimações de HOJE não lidas em segundo plano (sem competir com o carregamento inicial)
   useEffect(() => {
-    if (isEstagiario) return;
-    async function fetchTodayUnread() {
+    if (isEstagiario || isCacheFresh('djen_unread_count', 300_000)) return;
+    const timer = setTimeout(async () => {
       try {
-        // 1. Get DJEN settings
         const { data: settings } = await supabase
           .from('system_settings')
           .select('key, value')
@@ -289,7 +293,6 @@ export function Sidebar({ onLogout, userRole }: { onLogout: () => void, userRole
         const oab = settings?.find(s => s.key === 'djen_oab_padrao')?.value || '';
         if (!nome && !oab) return;
 
-        // 2. Fetch a page of results to find today's items
         const url = new URL('https://comunicaapi.pje.jus.br/api/v1/comunicacao');
         if (nome) url.searchParams.append('nomeAdvogado', nome);
         else if (oab) url.searchParams.append('numeroOab', oab);
@@ -302,25 +305,31 @@ export function Sidebar({ onLogout, userRole }: { onLogout: () => void, userRole
         const todayItems: { id: number }[] = (data.items || []).filter(
           (i: { data_disponibilizacao?: string }) => i.data_disponibilizacao?.startsWith(today)
         );
-        if (todayItems.length === 0) { setIntimacoesCount(0); return; }
+        if (todayItems.length === 0) {
+          setIntimacoesCount(0);
+          setCached('djen_unread_count', 0);
+          return;
+        }
 
-        // 3. Check which ones the current user has already read
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) { setIntimacoesCount(todayItems.length); return; }
+        if (!authUser?.id) {
+          setIntimacoesCount(todayItems.length);
+          return;
+        }
 
         const { data: lidas } = await supabase
           .from('intimacoes_lidas')
           .select('intimacao_id')
-          .eq('user_id', user.id)
+          .eq('user_id', authUser.id)
           .in('intimacao_id', todayItems.map(i => i.id));
 
         const lidasSet = new Set((lidas || []).map((l: { intimacao_id: number }) => l.intimacao_id));
         const unreadCount = todayItems.filter(i => !lidasSet.has(i.id)).length;
         setIntimacoesCount(unreadCount);
+        setCached('djen_unread_count', unreadCount);
       } catch { /* silently fail */ }
-    }
-    fetchTodayUnread();
-  }, [isEstagiario]);
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, [isEstagiario, authUser?.id]);
 
   const filteredNavItems = navItems.filter(item => {
     // Itens adminOnly: visíveis APENAS para Administrador
@@ -351,8 +360,9 @@ export function Sidebar({ onLogout, userRole }: { onLogout: () => void, userRole
           <NavLink
             key={item.path}
             to={item.path}
+            onMouseEnter={() => preloadRoute(item.path)}
             className={({ isActive }) => cn(
-              "flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 active:scale-95",
+              "flex items-center gap-3 px-4 py-3 rounded-xl transition-colors",
               isActive 
                 ? "bg-surface-container-high text-secondary border-r-2 border-secondary font-semibold" 
                 : "text-primary opacity-70 hover:bg-surface-container-low hover:opacity-100"
@@ -403,9 +413,9 @@ export function Sidebar({ onLogout, userRole }: { onLogout: () => void, userRole
 }
 
 export function TopBar({ userRole, onLogout }: { userRole: string | null, onLogout: () => void }) {
-  const user = useUser();
-  const userName = user?.user_metadata?.full_name || 'Usuário';
-  const role = userRole || user?.user_metadata?.role || 'Advogado';
+  const authUser = useAuthUser();
+  const userName = authUser?.name || 'Usuário';
+  const role = userRole || authUser?.role || 'Advogado';
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -421,10 +431,10 @@ export function TopBar({ userRole, onLogout }: { userRole: string | null, onLogo
   }, []);
 
   return (
-    <header className="fixed top-0 right-0 w-[calc(100%-16rem)] h-16 bg-surface/80 backdrop-blur-xl flex justify-end items-center px-8 z-40 shadow-[0_20px_40px_rgba(4,16,21,0.4)]">
+    <header className="fixed top-0 right-0 w-[calc(100%-16rem)] h-16 bg-surface border-b border-outline-variant/10 flex justify-end items-center px-8 z-40">
       <div className="flex items-center gap-6">
-        {user?.id && (
-          <NotificationDropdown userId={user.id} />
+        {authUser?.id && (
+          <NotificationDropdown userId={authUser.id} />
         )}
         
         <div className="h-8 w-[1px] bg-outline-variant/20"></div>

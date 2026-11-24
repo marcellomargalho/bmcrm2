@@ -1,11 +1,22 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import { motion, Reorder } from 'motion/react';
-import { TrendingUp, Users, Calendar, Clock, FileText, ArrowRight, Plus, Loader2, CheckCircle2, Check, CalendarClock, AlertTriangle, RotateCcw, GripVertical, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, X, Gavel, MapPin, User, Tag, Pencil, Save, Filter, AlignLeft, LayoutGrid, History } from 'lucide-react';
+import { TrendingUp, Users, Calendar, Clock, FileText, ArrowRight, Plus, Loader2, CheckCircle2, Check, CalendarClock, AlertTriangle, RotateCcw, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, X, Gavel, MapPin, User, Tag, Pencil, Save, Filter, AlignLeft, LayoutGrid, History } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { NewTaskModal } from '@/components/NewTaskModal';
 import { supabase } from '@/lib/supabase';
+import { useAuthUser } from '@/lib/authContext';
+import { getCached, setCached } from '@/lib/pageCache';
 import './RecentTasks.css';
+
+interface DashboardCache {
+  allTasks: any[];
+  activeProcessesCount: number;
+  todayEventsCount: number;
+  allProfiles: { id: string; name: string; role: string }[];
+}
+
+const TASK_SELECT = 'id, process_id, client_id, client_name, process_number, description, task_type, responsible, priority, status, fatal_date, ideal_date, related_party, created_at, updated_at, processes(id, number, vara, comarca, court, area, status, responsible, autor, reu, clients(name, cpf_cnpj))';
 
 // ─── Widget IDs & localStorage key ────────────────────────────────
 const WIDGET_ORDER_KEY = 'dashboard_widget_order';
@@ -31,19 +42,24 @@ function saveOrder(order: string[]) {
 // ─── Dashboard ────────────────────────────────────────────────────────
 export function Dashboard() {
   const navigate = useNavigate();
+  const authUser = useAuthUser();
+  const initialCache = getCached<DashboardCache>('dashboard_bundle');
+
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
-  const [allTasks, setAllTasks] = useState<any[]>([]); // all tasks from DB
-  const [loadingTasks, setLoadingTasks] = useState(true);
-  const [activeProcessesCount, setActiveProcessesCount] = useState(0);
-  const [todayEventsCount, setTodayEventsCount] = useState(0);
+  const [allTasks, setAllTasks] = useState<any[]>(() => initialCache?.allTasks || []);
+  const [loadingTasks, setLoadingTasks] = useState<boolean>(() => !initialCache);
+  const [activeProcessesCount, setActiveProcessesCount] = useState<number>(() => initialCache?.activeProcessesCount ?? 0);
+  const [todayEventsCount, setTodayEventsCount] = useState<number>(() => initialCache?.todayEventsCount ?? 0);
   const [localSubmitting, setLocalSubmitting] = useState<string | null>(null);
-  const [userData, setUserData] = useState<{id: string, name: string, role: string} | null>(null);
+  const [userData, setUserData] = useState<{id: string, name: string, role: string} | null>(() =>
+    authUser ? { id: authUser.id, name: authUser.name, role: authUser.role } : null
+  );
   const [expandedTasks, setExpandedTasks] = useState<string[]>([]);
   const [readTasks, setReadTasks] = useState<Set<string>>(new Set());
   const [selectedTaskDetail, setSelectedTaskDetail] = useState<any | null>(null);
 
   // Person filter state (for admin/adv)
-  const [allProfiles, setAllProfiles] = useState<{id: string, name: string, role: string}[]>([]);
+  const [allProfiles, setAllProfiles] = useState<{id: string, name: string, role: string}[]>(() => initialCache?.allProfiles || []);
   const [personFilter, setPersonFilter] = useState<string>('all'); // 'all' or profile name
   const [personRoleFilter, setPersonRoleFilter] = useState<string>('all'); // 'all' | 'Administrador' | 'Advogado' | 'Estagiário'
 
@@ -91,146 +107,157 @@ export function Dashboard() {
     setReadTasks(prev => new Set(prev).add(taskId));
   }
 
-  const fetchStats = useCallback(async (u: {id: string, name: string, role: string}) => {
-    // 1. Fetch Processes Em Monitoramento (processos com tarefas de Acompanhamento de Processo ativas do usuário)
-    let procCount = 0;
-    if (u.name) {
-      const { data: monitoringTasks } = await supabase
-        .from('tasks')
-        .select('process_id')
-        .eq('task_type', 'Acompanhamento de Processo')
-        .neq('status', 'Concluída')
-        .ilike('responsible', `%${u.name}%`)
-        .not('process_id', 'is', null);
-      const uniqueProcessIds = new Set((monitoringTasks || []).map((t: any) => t.process_id));
-      procCount = uniqueProcessIds.size;
+  const computeMonitoringCount = useCallback((pendingList: any[], userName: string) => {
+    if (!userName) return 0;
+    const needle = userName.toLowerCase();
+    const uniqueProcessIds = new Set<string>();
+    for (const t of pendingList) {
+      if (
+        t.task_type === 'Acompanhamento de Processo' &&
+        t.process_id &&
+        t.responsible?.toLowerCase().includes(needle)
+      ) {
+        uniqueProcessIds.add(t.process_id);
+      }
     }
-    setActiveProcessesCount(procCount);
+    return uniqueProcessIds.size;
+  }, []);
 
-    // 2. Fetch Today's Audiências (from hearings table)
+  const fetchStats = useCallback(async (u: {id: string, name: string, role: string}) => {
     const today = new Date().toISOString().split('T')[0];
     const { count: eventCount } = await supabase
       .from('hearings')
-      .select('*', { count: 'exact', head: true })
+      .select('id', { count: 'exact', head: true })
       .eq('hearing_date', today)
       .neq('status', 'cancelada');
-
     setTodayEventsCount(eventCount || 0);
   }, []);
 
-  const fetchTasks = useCallback(async (u: {id: string, name: string, role: string}) => {
+  const fetchTasks = useCallback(async (u: {id: string, name: string, role: string}, showSpinner = false) => {
     if (!u) return;
-    setLoadingTasks(true);
+    if (showSpinner) setLoadingTasks(true);
     const isAdminUser = u.role === 'Administrador';
+    const today = new Date().toISOString().split('T')[0];
 
     try {
-      if (isAdminUser) {
-        // Fetch ALL non-concluded tasks + recently concluded ones
-        // Order: tarefas com prazo (mais urgentes primeiro), depois sem prazo
-        const { data: pendingData } = await supabase
-          .from('tasks')
-          .select('*, processes(id, number, vara, comarca, court, area, status, responsible, autor, reu, clients(name, cpf_cnpj))')
-          .neq('status', 'Concluída')
-          .order('fatal_date', { ascending: true, nullsFirst: false });
-
-        // Also fetch recently concluded (last 50) for history
-        const { data: concludedData } = await supabase
-          .from('tasks')
-          .select('*, processes(id, number, vara, comarca, court, area, status, responsible, autor, reu, clients(name, cpf_cnpj))')
-          .eq('status', 'Concluída')
-          .order('updated_at', { ascending: false })
-          .limit(50);
-
-        setAllTasks([...(pendingData || []), ...(concludedData || [])]);
-      } else {
-        // Não-administradores (Advogado, Estagiário, etc.): apenas tarefas em que estão como responsáveis
-        if (!u.name) {
-          setAllTasks([]);
-          return;
-        }
-
-        const { data: pendingData } = await supabase
-          .from('tasks')
-          .select('*, processes(id, number, vara, comarca, court, area, status, responsible, autor, reu, clients(name, cpf_cnpj))')
-          .ilike('responsible', `%${u.name}%`)
-          .neq('status', 'Concluída')
-          .order('fatal_date', { ascending: true, nullsFirst: false });
-
-        const { data: concludedData } = await supabase
-          .from('tasks')
-          .select('*, processes(id, number, vara, comarca, court, area, status, responsible, autor, reu, clients(name, cpf_cnpj))')
-          .ilike('responsible', `%${u.name}%`)
-          .eq('status', 'Concluída')
-          .order('updated_at', { ascending: false })
-          .limit(50);
-
-        setAllTasks([...(pendingData || []), ...(concludedData || [])]);
+      if (!isAdminUser && !u.name) {
+        setAllTasks([]);
+        setActiveProcessesCount(0);
+        return;
       }
+
+      const pendingQuery = supabase
+        .from('tasks')
+        .select(TASK_SELECT)
+        .neq('status', 'Concluída')
+        .order('fatal_date', { ascending: true, nullsFirst: false });
+
+      const concludedQuery = supabase
+        .from('tasks')
+        .select(TASK_SELECT)
+        .eq('status', 'Concluída')
+        .order('updated_at', { ascending: false })
+        .limit(20);
+
+      if (!isAdminUser) {
+        pendingQuery.ilike('responsible', `%${u.name}%`);
+        concludedQuery.ilike('responsible', `%${u.name}%`);
+      }
+
+      const hearingsPromise = supabase
+        .from('hearings')
+        .select('id', { count: 'exact', head: true })
+        .eq('hearing_date', today)
+        .neq('status', 'cancelada');
+
+      const profilesPromise = isAdminUser
+        ? supabase.from('profiles').select('id, name, role').eq('is_approved', true).order('name', { ascending: true })
+        : Promise.resolve({ data: null });
+
+      // Todas as consultas rodam em paralelo em 1 única rodada de rede!
+      const [pendingRes, concludedRes, hearingsRes, profilesRes] = await Promise.all([
+        pendingQuery,
+        concludedQuery,
+        hearingsPromise,
+        profilesPromise,
+      ]);
+
+      const pendingData = pendingRes.data || [];
+      const concludedData = concludedRes.data || [];
+      const combinedTasks = [...pendingData, ...concludedData];
+      const procCount = computeMonitoringCount(pendingData, u.name);
+      const evCount = hearingsRes.count || 0;
+      const profList = profilesRes.data || allProfiles;
+
+      setAllTasks(combinedTasks);
+      setActiveProcessesCount(procCount);
+      setTodayEventsCount(evCount);
+      if (profilesRes.data) setAllProfiles(profilesRes.data);
+
+      setCached<DashboardCache>('dashboard_bundle', {
+        allTasks: combinedTasks,
+        activeProcessesCount: procCount,
+        todayEventsCount: evCount,
+        allProfiles: profList,
+      });
     } catch (err) {
       console.error('Erro ao carregar tarefas:', err);
     } finally {
       setLoadingTasks(false);
     }
-  }, []);
+  }, [computeMonitoringCount, allProfiles]);
 
   useEffect(() => {
     let tasksChannel: any;
-    let processesChannel: any;
     let appointmentsChannel: any;
+    let cancelled = false;
 
     const init = async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
+        let u = authUser ? { id: authUser.id, name: authUser.name, role: authUser.role } : null;
+
+        if (!u) {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (!session?.user) {
+            setLoadingTasks(false);
+            return;
+          }
           const { data: profile } = await supabase
             .from('profiles')
             .select('role, name')
-            .eq('id', user.id)
+            .eq('id', session.user.id)
             .single();
-
-          const u = {
-            id: user.id,
-            name: profile?.name || user.user_metadata?.full_name || '',
-            role: profile?.role || ''
+          u = {
+            id: session.user.id,
+            name: profile?.name || session.user.user_metadata?.full_name || '',
+            role: profile?.role || '',
           };
-          setUserData(u);
-          fetchTasks(u);
-          fetchStats(u);
-
-          // Fetch all profiles for person filter (admin only)
-          if (u.role === 'Administrador') {
-            const { data: profilesData } = await supabase
-              .from('profiles')
-              .select('id, name, role')
-              .eq('is_approved', true)
-              .order('name', { ascending: true });
-            setAllProfiles(profilesData || []);
-          }
-
-          // Realtime Tasks
-          tasksChannel = supabase.channel('tasks_dashboard_changes')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, (payload) => {
-              if (payload.eventType === 'UPDATE') {
-                setAllTasks(prev => prev.map(t => t.id === payload.new.id ? { ...t, ...payload.new } : t));
-              } else {
-                fetchTasks(u);
-              }
-            })
-            .subscribe();
-
-          // Realtime Processes Stats
-          processesChannel = supabase.channel('processes_dashboard_stats')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'processes' }, () => fetchStats(u))
-            .subscribe();
-
-          // Realtime Appointments
-          appointmentsChannel = supabase.channel('appointments_dashboard')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, () => fetchStats(u))
-            .subscribe();
         }
+
+        if (cancelled) return;
+        setUserData(u);
+        const hasCache = Boolean(getCached('dashboard_bundle'));
+        await fetchTasks(u, !hasCache);
+
+        if (cancelled) return;
+
+        // Realtime Tasks
+        tasksChannel = supabase.channel('tasks_dashboard_changes')
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, (payload) => {
+            if (payload.eventType === 'UPDATE') {
+              setAllTasks(prev => prev.map(t => t.id === payload.new.id ? { ...t, ...payload.new } : t));
+            } else {
+              fetchTasks(u!, false);
+            }
+          })
+          .subscribe();
+
+        // Realtime Hearings
+        appointmentsChannel = supabase.channel('hearings_dashboard')
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'hearings' }, () => fetchStats(u!))
+          .subscribe();
       } catch (err) {
         console.error('Erro ao inicializar dashboard:', err);
-        // Garante que loadingTasks não fique preso se init falhar
         setLoadingTasks(false);
       }
     };
@@ -238,11 +265,11 @@ export function Dashboard() {
     init();
 
     return () => {
+      cancelled = true;
       if (tasksChannel) supabase.removeChannel(tasksChannel);
-      if (processesChannel) supabase.removeChannel(processesChannel);
       if (appointmentsChannel) supabase.removeChannel(appointmentsChannel);
     };
-  }, []); // Explicitly empty to init once and use realtime for updates
+  }, [authUser?.id]);
 
   async function toggleTaskComplete(taskId: string, currentStatus: string, triggerFollowUp: boolean = true) {
     if (localSubmitting === taskId) return;
@@ -324,38 +351,72 @@ export function Dashboard() {
     return result;
   }, [allTasks, isAdminOrAdv, personFilter, personRoleFilter, allProfiles]);
 
-  const upcomingDeadlines = tasks
-    .filter(t => t.fatal_date && t.status !== 'Concluída')
-    .sort((a, b) => new Date(a.fatal_date).getTime() - new Date(b.fatal_date).getTime())
-    .slice(0, 3);
+  const {
+    upcomingDeadlines,
+    pendingTasks,
+    recentTasks,
+    completedTasks,
+    totalCompletedCount,
+    filteredCategorizedTasks,
+  } = React.useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayMs = today.getTime();
+    const daysFromToday = (dateStr: string) =>
+      Math.ceil((new Date(dateStr + 'T00:00:00').getTime() - todayMs) / 86_400_000);
 
-  const pendingTasks = tasks.filter(t => t.status !== 'Concluída');
-  const recentTasks = pendingTasks;
-  const allCompletedTasks = tasks
-    .filter(t => t.status === 'Concluída')
-    .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
-  const completedTasks = allCompletedTasks.slice(0, 5);
-  const totalCompletedCount = allCompletedTasks.length;
+    const pending: any[] = [];
+    const completed: any[] = [];
+    const atrasados: any[] = [];
+    const hoje: any[] = [];
+    const em_dia: any[] = [];
+    const revisoes_pendentes: any[] = [];
+    const outras: any[] = [];
 
-  // Ordena do prazo mais urgente (menos dias restantes) ao menos urgente (mais dias restantes)
-  const sortByUrgency = (a: any, b: any) => getDaysUntil(a.fatal_date) - getDaysUntil(b.fatal_date);
+    for (const t of tasks) {
+      if (t.status === 'Concluída') {
+        completed.push(t);
+        continue;
+      }
+      pending.push(t);
+      if (t.task_type === 'Acompanhamento de Processo') {
+        revisoes_pendentes.push(t);
+      } else if (t.fatal_date) {
+        const d = daysFromToday(t.fatal_date);
+        if (d < 0) atrasados.push(t);
+        else if (d === 0) hoje.push(t);
+        else em_dia.push(t);
+      } else {
+        outras.push(t);
+      }
+    }
 
-  const categorizedTasks = {
-    atrasados: tasks.filter(t => t.fatal_date && t.status !== 'Concluída' && getDaysUntil(t.fatal_date) < 0 && t.task_type !== 'Acompanhamento de Processo').sort(sortByUrgency),
-    hoje: tasks.filter(t => t.fatal_date && t.status !== 'Concluída' && getDaysUntil(t.fatal_date) === 0 && t.task_type !== 'Acompanhamento de Processo').sort(sortByUrgency),
-    em_dia: tasks.filter(t => t.fatal_date && t.status !== 'Concluída' && getDaysUntil(t.fatal_date) > 0 && t.task_type !== 'Acompanhamento de Processo').sort(sortByUrgency),
-    revisoes_pendentes: tasks.filter(t => t.task_type === 'Acompanhamento de Processo' && t.status !== 'Concluída').sort((a, b) => {
-      // Sem prazo vai para o final
+    const sortByFatal = (a: any, b: any) => (a.fatal_date < b.fatal_date ? -1 : a.fatal_date > b.fatal_date ? 1 : 0);
+    atrasados.sort(sortByFatal);
+    hoje.sort(sortByFatal);
+    em_dia.sort(sortByFatal);
+    revisoes_pendentes.sort((a, b) => {
       if (!a.fatal_date && !b.fatal_date) return 0;
       if (!a.fatal_date) return 1;
       if (!b.fatal_date) return -1;
-      // Dos mais atrasados (dias negativos) até os mais distantes
-      return getDaysUntil(a.fatal_date) - getDaysUntil(b.fatal_date);
-    }),
-    outras: tasks.filter(t => !t.fatal_date && t.status !== 'Concluída'),
-  };
+      return sortByFatal(a, b);
+    });
+    completed.sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || ''));
 
-  const filteredCategorizedTasks = categorizedTasks;
+    const upcoming = pending
+      .filter(t => t.fatal_date)
+      .sort(sortByFatal)
+      .slice(0, 3);
+
+    return {
+      upcomingDeadlines: upcoming,
+      pendingTasks: pending,
+      recentTasks: pending,
+      completedTasks: completed.slice(0, 5),
+      totalCompletedCount: completed.length,
+      filteredCategorizedTasks: { atrasados, hoje, em_dia, revisoes_pendentes, outras },
+    };
+  }, [tasks]);
 
   const AUTO_COLLAPSE_THRESHOLD = 5;
 
@@ -1205,13 +1266,9 @@ export function Dashboard() {
       setSavingDates(false);
     }
 
-    return (
-      <div className="fixed inset-0 bg-surface/85 backdrop-blur-md z-[100] flex items-center justify-center p-4 sm:p-6" onClick={onClose}>
-        <motion.div 
-          initial={{ opacity: 0, scale: 0.95, y: 20 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.95, y: 20 }}
-          transition={{ duration: 0.2 }}
+    return createPortal(
+      <div className="fixed inset-0 bg-black/75 z-[100] flex items-center justify-center p-4 sm:p-6" onClick={onClose}>
+        <div
           className="bg-surface-container-low w-full max-w-2xl rounded-3xl border border-outline-variant/20 shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
           onClick={(e) => e.stopPropagation()}
         >
@@ -1577,8 +1634,9 @@ export function Dashboard() {
               </button>
             </div>
           </div>
-        </motion.div>
-      </div>
+        </div>
+      </div>,
+      document.body
     );
   };
 
@@ -1591,14 +1649,14 @@ export function Dashboard() {
           setModalLockedProcessId(undefined);
           setModalInitialTaskType(undefined);
         }}
-        onSuccess={() => { if (userData) fetchTasks(userData); }}
+        onSuccess={() => { if (userData) fetchTasks(userData, false); }}
         lockedProcessId={modalLockedProcessId}
         initialTaskType={modalInitialTaskType}
       />
 
-      {showFollowUpPrompt && (
-        <div className="fixed inset-0 bg-surface/85 backdrop-blur-md z-[110] flex items-center justify-center p-6">
-          <div className="bg-surface-container-low w-full max-w-sm rounded-3xl p-6 shadow-2xl flex flex-col items-center text-center border border-outline-variant/10 animate-in fade-in zoom-in duration-200">
+      {showFollowUpPrompt && createPortal(
+        <div className="fixed inset-0 bg-black/75 z-[110] flex items-center justify-center p-6">
+          <div className="bg-surface-container-low w-full max-w-sm rounded-3xl p-6 shadow-2xl flex flex-col items-center text-center border border-outline-variant/10">
             <div className="w-12 h-12 rounded-2xl bg-amber-500/10 text-amber-500 flex items-center justify-center mb-4">
               <RotateCcw className="w-6 h-6" />
             </div>
@@ -1627,7 +1685,8 @@ export function Dashboard() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {selectedTaskDetail && (
@@ -1636,62 +1695,24 @@ export function Dashboard() {
 
       <div className="space-y-8 pb-20">
         <section className="mb-6 flex items-start justify-between">
-        <div>
-          <h2 className="text-3xl font-headline font-extrabold tracking-tight text-on-surface mb-2">Visão Geral</h2>
-          <p className="text-on-surface-variant">Bem-vindo(a) de volta. Aqui está o resumo jurídico do seu dia.</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] text-outline uppercase tracking-widest font-bold flex items-center gap-1">
-            <GripVertical className="w-3.5 h-3.5" />
-            Arraste para reorganizar
-          </span>
-          {widgetOrder.join(',') !== DEFAULT_ORDER.join(',') && (
-            <button
-              onClick={resetLayout}
-              className="text-[10px] text-outline hover:text-secondary transition-colors font-bold px-2 py-1 rounded-lg hover:bg-secondary/10 border border-transparent hover:border-secondary/20"
-            >
-              Restaurar padrão
-            </button>
-          )}
-        </div>
-      </section>
+          <div>
+            <h2 className="text-3xl font-headline font-extrabold tracking-tight text-on-surface mb-2">Visão Geral</h2>
+            <p className="text-on-surface-variant">Bem-vindo(a) de volta. Aqui está o resumo jurídico do seu dia.</p>
+          </div>
+        </section>
 
-      {/* Drag-and-drop Reorder layout */}
-      <Reorder.Group
-        axis="y"
-        values={widgets.map(w => w.id)}
-        onReorder={handleReorder}
-        className="space-y-8"
-      >
-        {widgets.map(({ id, content }) => (
-          <Reorder.Item
-            key={id}
-            value={id}
-            className={cn(
-              "relative group/widget",
-              isDragging && "cursor-grabbing"
-            )}
-            onDragStart={() => setIsDragging(true)}
-            onDragEnd={() => setIsDragging(false)}
-            whileDrag={{ scale: 1.01, boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)', zIndex: 50 }}
-            transition={{ duration: 0.15 }}
-          >
-            {/* Drag handle */}
-            <div
-              className="absolute -left-6 top-1/2 -translate-y-1/2 opacity-0 group-hover/widget:opacity-100 transition-opacity cursor-grab active:cursor-grabbing z-10 p-1"
-              title="Arraste para mover"
-            >
-              <GripVertical className="w-4 h-4 text-outline/50 hover:text-secondary transition-colors" />
+        <div className="space-y-8">
+          {widgets.map(({ id, content }) => (
+            <div key={id}>
+              {content}
             </div>
-            {content}
-          </Reorder.Item>
-        ))}
-      </Reorder.Group>
+          ))}
+        </div>
       </div>
 
       <button
         onClick={() => setIsTaskModalOpen(true)}
-        className="fixed bottom-8 right-8 w-14 h-14 bg-secondary text-on-secondary rounded-full shadow-2xl flex items-center justify-center hover:scale-110 transition-transform active:scale-95 z-50"
+        className="fixed bottom-8 right-8 w-14 h-14 bg-secondary text-on-secondary rounded-full shadow-2xl flex items-center justify-center hover:opacity-90 transition-opacity z-50"
       >
         <Plus className="w-6 h-6" />
       </button>

@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
 import { Toaster, toast } from 'react-hot-toast';
 import { supabase } from '@/lib/supabase';
+import { getCached, setCached } from '@/lib/pageCache';
 import { Sidebar, TopBar } from './Navigation';
 
 export function AppLayout({ onLogout, userRole }: { onLogout: () => void, userRole: string | null }) {
@@ -33,7 +34,34 @@ export function AppLayout({ onLogout, userRole }: { onLogout: () => void, userRo
       )
       .subscribe();
 
+    // Prefetch silencioso em background das abas mais acessadas após o carregamento inicial
+    const prefetchTimer = setTimeout(async () => {
+      try {
+        if (!getCached('processes_page0_todos')) {
+          supabase
+            .from('processes')
+            .select('*, clients(name, cpf_cnpj, status), process_clients(client_id, role, clients(name, cpf_cnpj, status))', { count: 'exact' })
+            .order('created_at', { ascending: false })
+            .range(0, 24)
+            .then(({ data, count }) => {
+              if (data) setCached('processes_page0_todos', { data, count: count ?? data.length });
+            });
+        }
+        if (!getCached('clients_page0')) {
+          supabase
+            .from('clients')
+            .select('*', { count: 'exact' })
+            .order('created_at', { ascending: false })
+            .range(0, 24)
+            .then(({ data, count }) => {
+              if (data) setCached('clients_page0', { data, count: count ?? data.length });
+            });
+        }
+      } catch { /* ignore prefetch errors */ }
+    }, 900);
+
     return () => {
+      clearTimeout(prefetchTimer);
       supabase.removeChannel(channel);
     };
   }, []);

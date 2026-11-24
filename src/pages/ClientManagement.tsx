@@ -4,6 +4,8 @@ import { useDebounce } from '@/hooks/useDebounce';
 import { cn } from '@/lib/utils';
 import { Client } from '@/types';
 import { supabase } from '@/lib/supabase';
+import { useAuthUser } from '@/lib/authContext';
+import { getCached, setCached } from '@/lib/pageCache';
 
 type ProcessEntry = { number: string; court: string; responsible: string; type: string };
 const emptyProcess = (): ProcessEntry => ({ number: '', court: '', responsible: '', type: '' });
@@ -581,22 +583,26 @@ function DeleteClientModal({ isOpen, onClose, onConfirm, clientName, deleting }:
 
 export function ClientManagement() {
   const PAGE_SIZE = 25;
-  const [clients, setClients] = useState<Client[]>([]);
-  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
-  const [loading, setLoading] = useState(true);
+  const authUser = useAuthUser();
+  const cachedPage0 = getCached<{ data: Client[]; count: number }>('clients_page0');
+  const cachedCounts = getCached<{ total: number; active: number; inactive: number }>('clients_counts');
+
+  const [clients, setClients] = useState<Client[]>(() => cachedPage0?.data || []);
+  const [selectedClient, setSelectedClient] = useState<Client | null>(() => cachedPage0?.data?.[0] || null);
+  const [loading, setLoading] = useState<boolean>(() => !cachedPage0);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(false);
+  const [hasMore, setHasMore] = useState<boolean>(() => cachedPage0 ? cachedPage0.data.length < cachedPage0.count : false);
   const [page, setPage] = useState(0);
   const [searchText, setSearchText] = useState('');
-  const debouncedSearch = useDebounce(searchText, 350);
+  const debouncedSearch = useDebounce(searchText, 300);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [userRole, setUserRole] = useState<string | null>(null);
-  const [totalCount, setTotalCount] = useState(0);
-  const [activeCount, setActiveCount] = useState(0);
-  const [inactiveCount, setInactiveCount] = useState(0);
+  const [userRole, setUserRole] = useState<string | null>(() => authUser?.role || null);
+  const [totalCount, setTotalCount] = useState<number>(() => cachedCounts?.total ?? 0);
+  const [activeCount, setActiveCount] = useState<number>(() => cachedCounts?.active ?? 0);
+  const [inactiveCount, setInactiveCount] = useState<number>(() => cachedCounts?.inactive ?? 0);
 
   async function fetchCounts() {
     const [total, active, inactive] = await Promise.all([
@@ -604,14 +610,21 @@ export function ClientManagement() {
       supabase.from('clients').select('id', { count: 'exact', head: true }).eq('status', 'Ativo'),
       supabase.from('clients').select('id', { count: 'exact', head: true }).eq('status', 'Inativo'),
     ]);
-    setTotalCount(total.count ?? 0);
-    setActiveCount(active.count ?? 0);
-    setInactiveCount(inactive.count ?? 0);
+    const t = total.count ?? 0;
+    const ac = active.count ?? 0;
+    const inact = inactive.count ?? 0;
+    setTotalCount(t);
+    setActiveCount(ac);
+    setInactiveCount(inact);
+    setCached('clients_counts', { total: t, active: ac, inactive: inact });
   }
 
   const fetchClients = useCallback(async (reset = true) => {
+    const isDefaultQuery = reset && !debouncedSearch.trim();
     if (reset) {
-      setLoading(true);
+      if (!isDefaultQuery || !getCached('clients_page0')) {
+        setLoading(true);
+      }
       setPage(0);
     } else {
       setLoadingMore(true);
@@ -634,11 +647,14 @@ export function ClientManagement() {
     const { data, count } = await query;
 
     if (reset) {
-      setClients(data || []);
+      const list = data || [];
+      setClients(list);
       setPage(0);
-      // Auto-select first on fresh load
-      if (data && data.length > 0 && !selectedClient) {
-        setSelectedClient(data[0]);
+      if (isDefaultQuery) {
+        setCached('clients_page0', { data: list, count: count ?? list.length });
+      }
+      if (list.length > 0 && !selectedClient) {
+        setSelectedClient(list[0]);
       } else if (selectedClient && data) {
         const updated = data.find(c => c.id === selectedClient.id);
         if (updated) setSelectedClient(updated);
@@ -664,21 +680,10 @@ export function ClientManagement() {
 
   useEffect(() => {
     fetchCounts();
-    async function fetchUserRole() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data: profileData } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', user.id)
-          .single();
-        if (profileData) {
-          setUserRole(profileData.role);
-        }
-      }
+    if (authUser?.role) {
+      setUserRole(authUser.role);
     }
-    fetchUserRole();
-  }, []);
+  }, [authUser?.role]);
 
   const activeClients = activeCount;
   const inactiveClients = inactiveCount;

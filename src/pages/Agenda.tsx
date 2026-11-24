@@ -5,6 +5,8 @@ import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInte
 import { ptBR } from 'date-fns/locale';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
+import { useAuthUser } from '@/lib/authContext';
+import { getCached, setCached } from '@/lib/pageCache';
 
 interface CalendarEvent {
 
@@ -372,10 +374,15 @@ function SiteRequestsPanel() {
 }
 
 export function Agenda() {
+  const authUser = useAuthUser();
+  const cachedEvents = getCached<CalendarEvent[]>('agenda_events');
+
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [events, setEvents] = useState<CalendarEvent[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [userData, setUserData] = useState<{id: string, name: string, role: string} | null>(null);
+  const [events, setEvents] = useState<CalendarEvent[]>(() => cachedEvents || []);
+  const [loading, setLoading] = useState<boolean>(() => !cachedEvents);
+  const [userData, setUserData] = useState<{id: string, name: string, role: string} | null>(() =>
+    authUser ? { id: authUser.id, name: authUser.name, role: authUser.role } : null
+  );
   const [isModalOpen, setIsModalOpen] = useState(false);
   
   // New Event Form State
@@ -386,19 +393,18 @@ export function Agenda() {
   const [newDesc, setNewDesc] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  const fetchEvents = useCallback(async (u: any) => {
-    setLoading(true);
+  const fetchEvents = useCallback(async (_u?: any, showSpinner = false) => {
+    if (showSpinner) setLoading(true);
     try {
-      // 1. Fetch Tasks (Activities) - RLS handles visibility
-      const { data: tasks } = await supabase
-        .from('tasks')
-        .select('*')
-        .or('fatal_date.not.is.null,ideal_date.not.is.null');
-
-      // 2. Fetch Appointments - RLS handles visibility
-      const { data: appointments } = await supabase
-        .from('appointments')
-        .select('*');
+      const [{ data: tasks }, { data: appointments }] = await Promise.all([
+        supabase
+          .from('tasks')
+          .select('id, description, fatal_date, ideal_date, task_type, responsible')
+          .or('fatal_date.not.is.null,ideal_date.not.is.null'),
+        supabase
+          .from('appointments')
+          .select('id, title, start_time, type, description'),
+      ]);
 
       const unifiedEvents: CalendarEvent[] = [];
 
@@ -441,6 +447,7 @@ export function Agenda() {
       });
 
       setEvents(unifiedEvents);
+      setCached('agenda_events', unifiedEvents);
     } catch (err) {
       console.error('Error fetching calendar data:', err);
     } finally {
@@ -449,38 +456,25 @@ export function Agenda() {
   }, []);
 
   useEffect(() => {
-    supabase.auth.getUser().then(async ({ data: { user } }) => {
-      if (user) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('role, name')
-          .eq('id', user.id)
-          .single();
+    if (authUser) {
+      setUserData({ id: authUser.id, name: authUser.name, role: authUser.role });
+    }
+    const hasCache = Boolean(getCached('agenda_events'));
+    fetchEvents(authUser, !hasCache);
 
-        const u = {
-          id: user.id,
-          name: profile?.name || user.user_metadata?.full_name || '',
-          role: profile?.role || ''
-        };
-        setUserData(u);
-        fetchEvents(u);
+    const tasksChannel = supabase.channel('agenda_tasks')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, () => fetchEvents(authUser, false))
+      .subscribe();
 
-        // Realtime
-        const tasksChannel = supabase.channel('agenda_tasks')
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, () => fetchEvents(u))
-          .subscribe();
+    const appsChannel = supabase.channel('agenda_apps')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, () => fetchEvents(authUser, false))
+      .subscribe();
 
-        const appsChannel = supabase.channel('agenda_apps')
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, () => fetchEvents(u))
-          .subscribe();
-
-        return () => {
-          supabase.removeChannel(tasksChannel);
-          supabase.removeChannel(appsChannel);
-        };
-      }
-    });
-  }, [fetchEvents]);
+    return () => {
+      supabase.removeChannel(tasksChannel);
+      supabase.removeChannel(appsChannel);
+    };
+  }, [authUser?.id, fetchEvents]);
 
   const handleCreateAppointment = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -517,7 +511,7 @@ export function Agenda() {
   const todayEvents = events.filter(e => isSameDay(parseISO(e.date), new Date()));
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-700">
+    <div className="space-y-8">
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div>
           <div className="flex items-center gap-3 mb-2">

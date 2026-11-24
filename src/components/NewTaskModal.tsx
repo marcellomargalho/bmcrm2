@@ -344,8 +344,8 @@ export function NewTaskModal({ isOpen, onClose, onSuccess, lockedProcessId, edit
   };
 
   return createPortal(
-    <div className="fixed inset-0 bg-surface/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-      <div className="bg-surface-container w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden border border-outline-variant/20 animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 bg-black/75 z-[100] flex items-center justify-center p-4">
+      <div className="bg-surface-container w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden border border-outline-variant/20 max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="p-6 border-b border-outline-variant/10 flex justify-between items-center bg-surface-container-low shrink-0">
           <div>
