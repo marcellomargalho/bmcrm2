@@ -764,11 +764,8 @@ export function Dashboard() {
                   else timeAgo = `${diffDays}d`;
 
                   return (
-                    <motion.div 
+                    <div 
                       key={task.id} 
-                      initial={{ opacity: 0, x: -10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: i * 0.05 }}
                       className={cn("activity-item-modern", i === 0 && "recent")}
                     >
                       <div className="activity-node-modern">
@@ -815,7 +812,7 @@ export function Dashboard() {
                           </div>
                         </div>
                       </div>
-                    </motion.div>
+                    </div>
                   );
                 })}
               </div>
