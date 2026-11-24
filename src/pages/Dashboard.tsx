@@ -93,28 +93,14 @@ export function Dashboard() {
 
   const fetchStats = useCallback(async (u: {id: string, name: string, role: string}) => {
     // 1. Fetch Processes Em Monitoramento (processos com tarefas de Acompanhamento de Processo ativas do usuário)
-    const isAdminOrAdv = u.role === 'Administrador' || u.role === 'Advogado';
     let procCount = 0;
-    if (isAdminOrAdv) {
-      // Admin/Adv: conta processos com tarefas de acompanhamento ativas
+    if (u.name) {
       const { data: monitoringTasks } = await supabase
         .from('tasks')
         .select('process_id')
         .eq('task_type', 'Acompanhamento de Processo')
         .neq('status', 'Concluída')
         .ilike('responsible', `%${u.name}%`)
-        .not('process_id', 'is', null);
-      // Distinct process IDs
-      const uniqueProcessIds = new Set((monitoringTasks || []).map((t: any) => t.process_id));
-      procCount = uniqueProcessIds.size;
-    } else {
-      // Estagiário: conta processos com tarefas de acompanhamento ativas
-      const { data: monitoringTasks } = await supabase
-        .from('tasks')
-        .select('process_id')
-        .eq('task_type', 'Acompanhamento de Processo')
-        .neq('status', 'Concluída')
-        .or(`user_id.eq.${u.id}${u.name ? `,responsible.ilike.%${u.name}%` : ''}`)
         .not('process_id', 'is', null);
       const uniqueProcessIds = new Set((monitoringTasks || []).map((t: any) => t.process_id));
       procCount = uniqueProcessIds.size;
@@ -135,10 +121,10 @@ export function Dashboard() {
   const fetchTasks = useCallback(async (u: {id: string, name: string, role: string}) => {
     if (!u) return;
     setLoadingTasks(true);
-    const isAdminOrAdv = u.role === 'Administrador' || u.role === 'Advogado';
+    const isAdminUser = u.role === 'Administrador';
 
     try {
-      if (isAdminOrAdv) {
+      if (isAdminUser) {
         // Fetch ALL non-concluded tasks + recently concluded ones
         // Order: tarefas com prazo (mais urgentes primeiro), depois sem prazo
         const { data: pendingData } = await supabase
@@ -157,20 +143,23 @@ export function Dashboard() {
 
         setAllTasks([...(pendingData || []), ...(concludedData || [])]);
       } else {
-        // Estagiário: only their own tasks
-        const orQuery = `user_id.eq.${u.id}${u.name ? `,responsible.ilike.%${u.name}%` : ''}`;
+        // Não-administradores (Advogado, Estagiário, etc.): apenas tarefas em que estão como responsáveis
+        if (!u.name) {
+          setAllTasks([]);
+          return;
+        }
 
         const { data: pendingData } = await supabase
           .from('tasks')
           .select('*, processes(id, number, vara, comarca, court, area, status, responsible, autor, reu, clients(name, cpf_cnpj))')
-          .or(orQuery)
+          .ilike('responsible', `%${u.name}%`)
           .neq('status', 'Concluída')
           .order('fatal_date', { ascending: true, nullsFirst: false });
 
         const { data: concludedData } = await supabase
           .from('tasks')
           .select('*, processes(id, number, vara, comarca, court, area, status, responsible, autor, reu, clients(name, cpf_cnpj))')
-          .or(orQuery)
+          .ilike('responsible', `%${u.name}%`)
           .eq('status', 'Concluída')
           .order('updated_at', { ascending: false })
           .limit(50);
@@ -208,8 +197,8 @@ export function Dashboard() {
           fetchTasks(u);
           fetchStats(u);
 
-          // Fetch all profiles for person filter (admin/adv only)
-          if (u.role === 'Administrador' || u.role === 'Advogado') {
+          // Fetch all profiles for person filter (admin only)
+          if (u.role === 'Administrador') {
             const { data: profilesData } = await supabase
               .from('profiles')
               .select('id, name, role')
@@ -276,7 +265,7 @@ export function Dashboard() {
     }
     
     if (newStatus === 'Concluída') {
-      const task = tasks.find(t => t.id === taskId);
+      const task = originalAllTasks.find(t => t.id === taskId) || tasks.find(t => t.id === taskId);
       if (task && task.process_id) {
         const { data: { user } } = await supabase.auth.getUser();
         const allowedTypes = ['Petição', 'Despacho', 'Audiência', 'Julgamento', 'Protocolo', 'Diligência', 'Audiência de Instrução ou Conciliação', 'Análise de Processo', 'Outros'];
@@ -311,7 +300,7 @@ export function Dashboard() {
   };
 
   const isAdmin = userData?.role === 'Administrador';
-  const isAdminOrAdv = userData?.role === 'Administrador' || userData?.role === 'Advogado';
+  const isAdminOrAdv = isAdmin;
 
   function getDaysUntil(dateStr: string) {
     const today = new Date();
@@ -1426,7 +1415,7 @@ export function Dashboard() {
                         
                         <div className="space-y-4">
                           {timelineRecords.map((record, idx) => {
-                            const relato = record.description.replace(/^\[ACOMPANHAMENTO\]:\s*/, '');
+                            const relato = (record.description || '').replace(/^\[ACOMPANHAMENTO\]:\s*/, '');
                             const date = new Date(record.date);
                             const isFirst = idx === 0;
                             return (

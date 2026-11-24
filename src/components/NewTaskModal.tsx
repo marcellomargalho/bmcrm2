@@ -258,7 +258,7 @@ export function NewTaskModal({ isOpen, onClose, onSuccess, lockedProcessId, edit
         const notificationsPayload = responsibles
           .map((name: string) => {
             const profile = (allProfiles || []).find(
-              (p: any) => p.name.toLowerCase().trim() === name.toLowerCase().trim()
+              (p: any) => p.name?.toLowerCase().trim() === name.toLowerCase().trim()
             );
             if (!profile?.id) return null;
             return {
@@ -394,7 +394,7 @@ export function NewTaskModal({ isOpen, onClose, onSuccess, lockedProcessId, edit
                 {showClientSuggestions && clientSearch.trim() && (
                   <div className="absolute z-50 top-full mt-1 w-full bg-surface-container-high rounded-xl shadow-xl border border-outline-variant/20 overflow-hidden max-h-48 overflow-y-auto custom-scrollbar">
                     {clients
-                      .filter(c => c.name.toLowerCase().includes(clientSearch.toLowerCase()))
+                      .filter(c => (c.name || '').toLowerCase().includes(clientSearch.toLowerCase()))
                       .slice(0, 8)
                       .map(c => (
                         <button
@@ -415,7 +415,7 @@ export function NewTaskModal({ isOpen, onClose, onSuccess, lockedProcessId, edit
                         </button>
                       ))
                     }
-                    {clients.filter(c => c.name.toLowerCase().includes(clientSearch.toLowerCase())).length === 0 && (
+                    {clients.filter(c => (c.name || '').toLowerCase().includes(clientSearch.toLowerCase())).length === 0 && (
                       <div className="px-4 py-3 text-sm text-outline text-center">Nenhum cliente encontrado</div>
                     )}
                   </div>

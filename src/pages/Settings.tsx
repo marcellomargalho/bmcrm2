@@ -270,8 +270,14 @@ export function Settings() {
                     <input 
                       type="email" 
                       defaultValue={userEmail} 
-                      className="w-full bg-surface-container-lowest border border-outline-variant/10 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-secondary/20 outline-none"
+                      readOnly={profile?.role !== 'Administrador'}
+                      disabled={profile?.role !== 'Administrador'}
+                      title={profile?.role !== 'Administrador' ? 'Somente administradores podem alterar o e-mail' : undefined}
+                      className="w-full bg-surface-container-lowest border border-outline-variant/10 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-secondary/20 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
                     />
+                    {profile?.role !== 'Administrador' && (
+                      <p className="text-[10px] text-outline">Somente administradores podem alterar o e-mail.</p>
+                    )}
                   </div>
                    <div className="space-y-2">
                     <label className="text-xs font-bold text-outline uppercase tracking-widest">Função</label>
