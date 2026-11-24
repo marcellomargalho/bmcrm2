@@ -21,6 +21,7 @@ interface NotificationPayload {
   type: 'task_created' | 'task_assigned' | 'status_change' | 'deadline_approaching' | 'overdue' | 'needs_review'
   processId?: string
   taskId?: string
+  fromEmail?: string // Permite customizar ou testar outro remetente (ex: intimacao@brendamargalho.com)
   recipients?: string[] // Destinatários específicos selecionados na criação da tarefa
   data: {
     processNumber?: string
@@ -41,42 +42,61 @@ serve(async (req) => {
     return new Response('ok', { headers: corsHeaders })
   }
 
-  // ─── 1. Validar JWT ────────────────────────────────────────────────
+  // ─── 1. Validar JWT / Autorização ──────────────────────────────────
   const authHeader = req.headers.get('Authorization')
   if (!authHeader) {
-    return new Response('Unauthorized', { status: 401 })
+    return new Response(JSON.stringify({ error: 'Unauthorized: cabeçalho de autorização ausente' }), {
+      status: 401,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    })
   }
 
-  const userClient = createClient(
-    Deno.env.get('SUPABASE_URL')!,
-    Deno.env.get('SUPABASE_ANON_KEY')!,
-    {
-      global: {
-        headers: { Authorization: authHeader },
-      },
-    }
-  )
+  const token = authHeader.replace(/^Bearer\s+/i, '').trim()
+  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+  const isServiceRole = Boolean(serviceRoleKey && token === serviceRoleKey.trim())
 
-  const { data: { user }, error: userError } = await userClient.auth.getUser()
-
-  if (userError || !user) {
-    return new Response('Unauthorized', { status: 401 })
-  }
-
-  // ─── 2. Verificar perfil aprovado + role admin ─────────────────────
   const adminClient = createClient(
     Deno.env.get('SUPABASE_URL')!,
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    serviceRoleKey!
   )
 
-  const { data: profile } = await adminClient
-    .from('profiles')
-    .select('is_approved, role')
-    .eq('id', user.id)
-    .single()
+  let callerId = 'service-role'
 
-  if (!profile?.is_approved) {
-    return new Response('Forbidden', { status: 403 })
+  if (!isServiceRole) {
+    const userClient = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_ANON_KEY')!,
+      {
+        global: {
+          headers: { Authorization: authHeader },
+        },
+      }
+    )
+
+    const { data: { user }, error: userError } = await userClient.auth.getUser()
+
+    if (userError || !user) {
+      return new Response(JSON.stringify({ error: 'Unauthorized: token inválido' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    callerId = user.id
+
+    // ─── 2. Verificar perfil aprovado ──────────────────────────────────
+    const { data: profile } = await adminClient
+      .from('profiles')
+      .select('is_approved, role')
+      .eq('id', user.id)
+      .single()
+
+    if (!profile?.is_approved) {
+      return new Response(JSON.stringify({ error: 'Forbidden: usuário não aprovado' }), {
+        status: 403,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
   }
 
   try {
@@ -101,7 +121,7 @@ serve(async (req) => {
 
     // ─── 5. Ler payload ────────────────────────────────────────────────
     const payload: NotificationPayload = await req.json()
-    const { type, data, recipients: requestedRecipients } = payload
+    const { type, data, recipients: requestedRecipients, fromEmail: requestedFromEmail } = payload
 
     // ─── 6. Carregar destinatários ─────────────────────────────────────
     // Se foram informados destinatários específicos (ex: responsáveis selecionados na criação da tarefa),
@@ -205,8 +225,15 @@ serve(async (req) => {
 </body>
 </html>`
 
-    const fromEmail = 'notificacao@brendamargalho.com'
+    // Remetente: prioridade para requestedFromEmail > settings.from_email > notificacao@brendamargalho.com
+    const fromEmail = (requestedFromEmail && typeof requestedFromEmail === 'string' && requestedFromEmail.includes('@'))
+      ? requestedFromEmail.trim().toLowerCase()
+      : (settings?.from_email || 'notificacao@brendamargalho.com')
     const fromName = settings?.from_name || 'Brenda Margalho Advocacia'
+
+    console.log(`[send-notification] Remetente: "${fromName}" <${fromEmail}>`)
+    console.log(`[send-notification] Destinatários:`, recipients)
+    console.log(`[send-notification] Assunto: ${subject}`)
 
     // ─── 7. Enviar via Resend ──────────────────────────────────────────
     const resendRes = await fetch('https://api.resend.com/emails', {
@@ -224,19 +251,25 @@ serve(async (req) => {
     })
 
     const resendData = await resendRes.json()
+    console.log(`[send-notification] Resposta Resend (${resendRes.status}):`, JSON.stringify(resendData))
 
-    // ─── 8. Log de auditoria — registra ID do usuário autenticado ──────
+    // ─── 8. Log de auditoria — registra ID do chamador ─────────────────
     if (payload.processId) {
       await adminClient.from('process_audit_log').insert([{
         process_id: payload.processId,
         task_id: payload.taskId,
         action: type,
-        new_value: `E-mail enviado por ${user.id} para: ${recipients.join(', ')}`,
+        new_value: `E-mail enviado por ${callerId} para: ${recipients.join(', ')} (Status: ${resendRes.status})`,
         email_sent: resendRes.ok,
       }])
     }
 
-    return new Response(JSON.stringify({ success: resendRes.ok, resend: resendData }), {
+    return new Response(JSON.stringify({ 
+      success: resendRes.ok, 
+      resend: resendData,
+      from: fromEmail,
+      recipients 
+    }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: resendRes.ok ? 200 : 400,
     })
