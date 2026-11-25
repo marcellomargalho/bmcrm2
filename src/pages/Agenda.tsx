@@ -1,24 +1,84 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { ChevronLeft, ChevronRight, Plus, Calendar as CalendarIcon, Clock, MapPin, Users, X, Info, AlertTriangle, Gavel, MessageCircle, Video, Check, PhoneCall, ExternalLink, Link as LinkIcon, Inbox } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
+import { ChevronLeft, ChevronRight, Plus, Calendar as CalendarIcon, Clock, Users, X, AlertTriangle, Gavel, MessageCircle, Video, Check, PhoneCall, Inbox, Target, FileText } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
 import { useAuthUser } from '@/lib/authContext';
 import { getCached, setCached } from '@/lib/pageCache';
 
-interface CalendarEvent {
+type EventCategory = 'fatal' | 'ideal' | 'hearing' | 'appointment';
 
+interface CalendarEvent {
   id: string;
+  category: EventCategory;
   type: string;
   title: string;
   time?: string;
   date: string;
-  color: string;
-  source: 'task' | 'appointment';
+  source: 'task' | 'appointment' | 'hearing';
   responsible?: string;
   description?: string;
+  clientName?: string;
+  processNumber?: string;
+  taskType?: string;
+}
+
+const CATEGORY_META: Record<EventCategory, {
+  label: string;
+  shortTag: string;
+  pillClass: string;
+  badgeClass: string;
+  dotClass: string;
+}> = {
+  fatal: {
+    label: 'Prazo Fatal',
+    shortTag: 'FATAL',
+    pillClass: 'bg-error/15 text-error border-error',
+    badgeClass: 'bg-error/15 text-error border-error/30',
+    dotClass: 'bg-error',
+  },
+  ideal: {
+    label: 'Meta Ideal',
+    shortTag: 'META',
+    pillClass: 'bg-blue-500/15 text-blue-400 border-blue-500',
+    badgeClass: 'bg-blue-500/15 text-blue-400 border-blue-500/30',
+    dotClass: 'bg-blue-500',
+  },
+  hearing: {
+    label: 'Audiência',
+    shortTag: 'AUD',
+    pillClass: 'bg-secondary/15 text-secondary border-secondary',
+    badgeClass: 'bg-secondary/15 text-secondary border-secondary/30',
+    dotClass: 'bg-secondary',
+  },
+  appointment: {
+    label: 'Compromisso',
+    shortTag: 'COMP',
+    pillClass: 'bg-amber-500/15 text-amber-400 border-amber-500',
+    badgeClass: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
+    dotClass: 'bg-amber-500',
+  },
+};
+
+function getDeadlineUrgency(dateStr: string): { label: string; className: string; diffDays: number } {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const target = new Date(dateStr + 'T00:00:00');
+  const diffDays = Math.round((target.getTime() - today.getTime()) / 86_400_000);
+
+  if (diffDays < 0) {
+    const abs = Math.abs(diffDays);
+    return { label: `Atrasado ${abs}d`, className: 'bg-error text-white', diffDays };
+  }
+  if (diffDays === 0) {
+    return { label: 'Vence hoje', className: 'bg-error/20 text-error border border-error/40', diffDays };
+  }
+  if (diffDays === 1) {
+    return { label: 'Amanhã', className: 'bg-amber-500/20 text-amber-400 border border-amber-500/40', diffDays };
+  }
+  return { label: `Em ${diffDays}d`, className: 'bg-surface-container-highest text-on-surface-variant', diffDays };
 }
 
 interface SiteRequest {
@@ -375,9 +435,11 @@ function SiteRequestsPanel() {
 
 export function Agenda() {
   const authUser = useAuthUser();
-  const cachedEvents = getCached<CalendarEvent[]>('agenda_events');
+  const cachedEvents = getCached<CalendarEvent[]>('agenda_events_v2');
 
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [selectedDay, setSelectedDay] = useState<Date>(new Date());
+  const [categoryFilter, setCategoryFilter] = useState<'all' | EventCategory>('all');
   const [events, setEvents] = useState<CalendarEvent[]>(() => cachedEvents || []);
   const [loading, setLoading] = useState<boolean>(() => !cachedEvents);
   const [userData, setUserData] = useState<{id: string, name: string, role: string} | null>(() =>
@@ -396,14 +458,19 @@ export function Agenda() {
   const fetchEvents = useCallback(async (_u?: any, showSpinner = false) => {
     if (showSpinner) setLoading(true);
     try {
-      const [{ data: tasks }, { data: appointments }] = await Promise.all([
+      const [{ data: tasks }, { data: appointments }, { data: hearings }] = await Promise.all([
         supabase
           .from('tasks')
-          .select('id, description, fatal_date, ideal_date, task_type, responsible')
+          .select('id, description, fatal_date, ideal_date, task_type, responsible, client_name, process_number, status')
+          .neq('status', 'Concluída')
           .or('fatal_date.not.is.null,ideal_date.not.is.null'),
         supabase
           .from('appointments')
           .select('id, title, start_time, type, description'),
+        supabase
+          .from('hearings')
+          .select('id, process_number, client_name, hearing_type, hearing_date, hearing_time, observations')
+          .neq('status', 'cancelada'),
       ]);
 
       const unifiedEvents: CalendarEvent[] = [];
@@ -412,42 +479,65 @@ export function Agenda() {
         if (t.fatal_date) {
           unifiedEvents.push({
             id: `task-fatal-${t.id}`,
-            title: `[FATAL] ${t.description}`,
+            category: 'fatal',
+            title: t.description || t.task_type || 'Prazo Fatal',
             date: t.fatal_date,
-            type: t.task_type || 'Prazo',
-            color: 'bg-error',
+            type: 'Prazo Fatal',
+            taskType: t.task_type || undefined,
             source: 'task',
-            responsible: t.responsible
+            responsible: t.responsible || undefined,
+            clientName: t.client_name || undefined,
+            processNumber: t.process_number || undefined,
           });
         }
         if (t.ideal_date) {
           unifiedEvents.push({
             id: `task-ideal-${t.id}`,
-            title: t.description,
+            category: 'ideal',
+            title: t.description || t.task_type || 'Meta Ideal',
             date: t.ideal_date,
-            type: t.task_type || 'Tarefa',
-            color: 'bg-blue-500',
+            type: 'Meta Ideal',
+            taskType: t.task_type || undefined,
             source: 'task',
-            responsible: t.responsible
+            responsible: t.responsible || undefined,
+            clientName: t.client_name || undefined,
+            processNumber: t.process_number || undefined,
           });
         }
       });
 
+      hearings?.forEach(h => {
+        if (!h.hearing_date) return;
+        unifiedEvents.push({
+          id: `hearing-${h.id}`,
+          category: 'hearing',
+          title: `Audiência ${h.hearing_type || ''}`.trim(),
+          date: h.hearing_date,
+          time: h.hearing_time ? h.hearing_time.slice(0, 5) : undefined,
+          type: 'Audiência',
+          source: 'hearing',
+          clientName: h.client_name || undefined,
+          processNumber: h.process_number || undefined,
+          description: h.observations || undefined,
+        });
+      });
+
       appointments?.forEach(a => {
+        const isAud = a.type === 'Audiência' || a.type === 'Conciliação';
         unifiedEvents.push({
           id: `app-${a.id}`,
+          category: isAud ? 'hearing' : 'appointment',
           title: a.title,
           date: a.start_time.split('T')[0],
           time: format(parseISO(a.start_time), 'HH:mm'),
           type: a.type,
-          color: a.type === 'Audiência' ? 'bg-secondary' : 'bg-amber-500',
           source: 'appointment',
-          description: a.description
+          description: a.description || undefined,
         });
       });
 
       setEvents(unifiedEvents);
-      setCached('agenda_events', unifiedEvents);
+      setCached('agenda_events_v2', unifiedEvents);
     } catch (err) {
       console.error('Error fetching calendar data:', err);
     } finally {
@@ -459,7 +549,7 @@ export function Agenda() {
     if (authUser) {
       setUserData({ id: authUser.id, name: authUser.name, role: authUser.role });
     }
-    const hasCache = Boolean(getCached('agenda_events'));
+    const hasCache = Boolean(getCached('agenda_events_v2'));
     fetchEvents(authUser, !hasCache);
 
     const tasksChannel = supabase.channel('agenda_tasks')
@@ -470,9 +560,14 @@ export function Agenda() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, () => fetchEvents(authUser, false))
       .subscribe();
 
+    const hearingsChannel = supabase.channel('agenda_hearings')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'hearings' }, () => fetchEvents(authUser, false))
+      .subscribe();
+
     return () => {
       supabase.removeChannel(tasksChannel);
       supabase.removeChannel(appsChannel);
+      supabase.removeChannel(hearingsChannel);
     };
   }, [authUser?.id, fetchEvents]);
 
@@ -508,26 +603,56 @@ export function Agenda() {
   const endDate = endOfWeek(monthEnd);
   const calendarDays = eachDayOfInterval({ start: startDate, end: endDate });
 
-  const todayEvents = events.filter(e => isSameDay(parseISO(e.date), new Date()));
+  const visibleEvents = useMemo(() => {
+    if (categoryFilter === 'all') return events;
+    return events.filter(e => e.category === categoryFilter);
+  }, [events, categoryFilter]);
+
+  const eventsByDate = useMemo(() => {
+    const map = new Map<string, CalendarEvent[]>();
+    const priorityOrder: Record<EventCategory, number> = { fatal: 0, hearing: 1, ideal: 2, appointment: 3 };
+    for (const ev of visibleEvents) {
+      const list = map.get(ev.date) || [];
+      list.push(ev);
+      map.set(ev.date, list);
+    }
+    for (const [, list] of map) {
+      list.sort((a, b) => priorityOrder[a.category] - priorityOrder[b.category]);
+    }
+    return map;
+  }, [visibleEvents]);
+
+  const selectedDateStr = format(selectedDay, 'yyyy-MM-dd');
+  const selectedDayEvents = eventsByDate.get(selectedDateStr) || [];
+  const isSelectedToday = isSameDay(selectedDay, new Date());
+
+  const fatalRadar = useMemo(() => {
+    return events
+      .filter(e => e.category === 'fatal')
+      .map(e => ({ ...e, urgency: getDeadlineUrgency(e.date) }))
+      .filter(e => e.urgency.diffDays <= 30)
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .slice(0, 6);
+  }, [events]);
 
   return (
-    <div className="space-y-8">
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+    <div className="space-y-6">
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
-          <div className="flex items-center gap-3 mb-2">
+          <div className="flex items-center gap-3 mb-1.5">
             <h2 className="text-3xl font-headline font-extrabold tracking-tight text-on-surface">Agenda Jurídica</h2>
             {userData?.role === 'Administrador' && (
-              <span className="bg-secondary/15 text-secondary text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-full border border-secondary/20">Modo Admin</span>
+              <span className="bg-secondary/15 text-secondary text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full border border-secondary/20">Modo Admin</span>
             )}
           </div>
-          <p className="text-on-surface-variant">Controle seus prazos, audiências e reuniões com precisão absoluta.</p>
+          <p className="text-sm text-on-surface-variant">Clique em qualquer dia no calendário para ver todos os prazos fatais, metas ideais e audiências.</p>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           <button 
             onClick={() => setIsModalOpen(true)}
-            className="flex items-center gap-2 px-6 py-3 rounded-2xl bg-secondary text-on-secondary font-headline font-bold hover:opacity-90 transition-all shadow-lg shadow-secondary/20 active:scale-95"
+            className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-secondary text-on-secondary font-headline font-bold hover:opacity-90 transition-opacity shadow-lg shadow-secondary/20 text-sm"
           >
-            <Plus className="w-5 h-5" />
+            <Plus className="w-4 h-4" />
             Novo Compromisso
           </button>
         </div>
@@ -535,159 +660,277 @@ export function Agenda() {
 
       <SiteRequestsPanel />
 
-      <div className="grid grid-cols-12 gap-8">
-        <div className="col-span-12 lg:col-span-8 bg-surface-container-low rounded-3xl overflow-hidden shadow-2xl border border-outline-variant/5">
-          <div className="p-6 flex items-center justify-between border-b border-outline-variant/10 bg-surface-container-low/80 backdrop-blur-md">
+      {/* Legenda clara e filtros rápidos por tipo de prazo */}
+      <div className="flex flex-wrap items-center gap-2 bg-surface-container-low px-4 py-3 rounded-2xl border border-outline-variant/10">
+        <span className="text-[10px] font-black uppercase tracking-widest text-outline mr-1">Exibir:</span>
+        <button
+          onClick={() => setCategoryFilter('all')}
+          className={cn(
+            "px-3 py-1.5 rounded-xl text-xs font-bold transition-colors border",
+            categoryFilter === 'all'
+              ? "bg-secondary text-on-secondary border-secondary"
+              : "bg-surface-container-high text-on-surface-variant border-outline-variant/10 hover:text-on-surface"
+          )}
+        >
+          Todos ({events.length})
+        </button>
+        {(Object.keys(CATEGORY_META) as EventCategory[]).map((cat) => {
+          const meta = CATEGORY_META[cat];
+          const count = events.filter(e => e.category === cat).length;
+          const active = categoryFilter === cat;
+          return (
+            <button
+              key={cat}
+              onClick={() => setCategoryFilter(active ? 'all' : cat)}
+              className={cn(
+                "flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold transition-colors border",
+                active
+                  ? meta.pillClass
+                  : "bg-surface-container-high/60 text-on-surface-variant border-outline-variant/10 hover:text-on-surface"
+              )}
+            >
+              <span className={cn("w-2 h-2 rounded-full", meta.dotClass)} />
+              <span>{meta.label}</span>
+              <span className="opacity-70 text-[11px]">({count})</span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="grid grid-cols-12 gap-6 items-start">
+        <div className="col-span-12 lg:col-span-8 bg-surface-container-low rounded-3xl overflow-hidden shadow-xl border border-outline-variant/10">
+          <div className="px-6 py-4 flex items-center justify-between border-b border-outline-variant/10 bg-surface-container-low">
             <h3 className="text-xl font-headline font-bold text-on-surface capitalize">
               {format(currentDate, 'MMMM yyyy', { locale: ptBR })}
             </h3>
-            <div className="flex gap-2">
+            <div className="flex items-center gap-2">
               <button 
                 onClick={() => setCurrentDate(subMonths(currentDate, 1))}
-                className="p-2 rounded-xl hover:bg-surface-container-high text-outline transition-colors"
+                className="p-2 rounded-xl hover:bg-surface-container-high text-outline hover:text-on-surface transition-colors"
+                aria-label="Mês anterior"
               >
                 <ChevronLeft className="w-5 h-5" />
               </button>
               <button 
-                onClick={() => setCurrentDate(new Date())}
+                onClick={() => {
+                  const now = new Date();
+                  setCurrentDate(now);
+                  setSelectedDay(now);
+                }}
                 className="px-4 py-2 text-xs font-bold uppercase tracking-widest text-secondary hover:bg-secondary/10 rounded-xl transition-colors"
               >
                 Hoje
               </button>
               <button 
                 onClick={() => setCurrentDate(addMonths(currentDate, 1))}
-                className="p-2 rounded-xl hover:bg-surface-container-high text-outline transition-colors"
+                className="p-2 rounded-xl hover:bg-surface-container-high text-outline hover:text-on-surface transition-colors"
+                aria-label="Próximo mês"
               >
                 <ChevronRight className="w-5 h-5" />
               </button>
             </div>
           </div>
 
-          <div className="grid grid-cols-7 bg-surface-container-low/50 border-b border-outline-variant/10">
+          <div className="grid grid-cols-7 bg-surface-container-high/30 border-b border-outline-variant/10">
             {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map((day) => (
-              <div key={day} className="py-3 text-center text-[10px] uppercase tracking-widest font-black text-outline">
+              <div key={day} className="py-2.5 text-center text-[10px] uppercase tracking-widest font-black text-outline">
                 {day}
               </div>
             ))}
           </div>
 
-          <div className="grid grid-cols-7 grid-rows-5 h-[650px]">
+          <div className="grid grid-cols-7 auto-rows-[minmax(112px,auto)]">
             {calendarDays.map((day, i) => {
               const isCurrentMonth = isSameMonth(day, monthStart);
               const isToday = isSameDay(day, new Date());
+              const isSelected = isSameDay(day, selectedDay);
               const dateStr = format(day, 'yyyy-MM-dd');
-              const dayEvents = events.filter(e => e.date === dateStr);
+              const dayEvents = eventsByDate.get(dateStr) || [];
+              const fatalCount = dayEvents.filter(e => e.category === 'fatal').length;
               
               return (
-                <div 
-                  key={i} 
+                <button
+                  type="button"
+                  key={i}
+                  onClick={() => setSelectedDay(day)}
                   className={cn(
-                    "border-r border-b border-outline-variant/5 p-2 flex flex-col gap-1.5 transition-colors hover:bg-surface-container-high/30 group",
-                    !isCurrentMonth && "opacity-20",
-                    isToday && "bg-secondary/5"
+                    "border-r border-b border-outline-variant/10 p-2 flex flex-col gap-1.5 text-left transition-colors hover:bg-surface-container-high/40 focus:outline-none",
+                    !isCurrentMonth && "opacity-30 bg-surface-container-lowest/30",
+                    isToday && !isSelected && "bg-secondary/5",
+                    isSelected && "bg-secondary/10 ring-2 ring-inset ring-secondary/60"
                   )}
                 >
-                  <span className={cn(
-                    "text-xs font-bold w-7 h-7 flex items-center justify-center rounded-xl mb-1 transition-all group-hover:scale-110",
-                    isToday ? "bg-secondary text-on-secondary shadow-lg shadow-secondary/20" : "text-on-surface"
-                  )}>
-                    {format(day, 'd')}
-                  </span>
+                  <div className="flex items-center justify-between w-full">
+                    <span className={cn(
+                      "text-xs font-bold w-7 h-7 flex items-center justify-center rounded-xl",
+                      isToday
+                        ? "bg-secondary text-on-secondary shadow-md"
+                        : isSelected
+                        ? "bg-surface-container-highest text-secondary"
+                        : "text-on-surface"
+                    )}>
+                      {format(day, 'd')}
+                    </span>
+                    {fatalCount > 0 && (
+                      <span className="text-[9px] font-black px-1.5 py-0.5 rounded-md bg-error/20 text-error">
+                        {fatalCount} fatal
+                      </span>
+                    )}
+                  </div>
                   
-                  <div className="space-y-1 overflow-y-auto max-h-[100px] scrollbar-none">
-                    {dayEvents.slice(0, 3).map(event => (
-                      <div 
-                        key={event.id}
-                        className={cn(
-                          "px-1.5 py-0.5 rounded-md border-l-2 text-[9px] font-bold truncate transition-all hover:brightness-110",
-                          event.color === 'bg-error' ? 'bg-error/20 text-error border-error' : 
-                          event.color === 'bg-secondary' ? 'bg-secondary/20 text-secondary border-secondary' : 
-                          event.color === 'bg-amber-500' ? 'bg-amber-500/20 text-amber-400 border-amber-500' :
-                          'bg-blue-500/20 text-blue-400 border-blue-500'
-                        )}
-                        title={event.title}
-                      >
-                        {event.time && <span className="mr-1 opacity-70">{event.time}</span>}
-                        {event.title}
-                      </div>
-                    ))}
+                  <div className="space-y-1 w-full">
+                    {dayEvents.slice(0, 3).map(event => {
+                      const meta = CATEGORY_META[event.category];
+                      return (
+                        <div 
+                          key={event.id}
+                          className={cn(
+                            "px-1.5 py-1 rounded-md border-l-2 text-[10px] leading-tight font-semibold truncate flex items-center gap-1",
+                            meta.pillClass
+                          )}
+                          title={`${meta.label}: ${event.title}${event.clientName ? ` — ${event.clientName}` : ''}`}
+                        >
+                          <span className="text-[8px] font-black uppercase opacity-80 shrink-0">
+                            {event.time || meta.shortTag}
+                          </span>
+                          <span className="truncate">{event.clientName ? `${event.clientName.split(' ')[0]} · ${event.title}` : event.title}</span>
+                        </div>
+                      );
+                    })}
                     {dayEvents.length > 3 && (
-                      <div className="text-[8px] font-black text-outline text-center uppercase tracking-tighter">
-                        + {dayEvents.length - 3} mais
+                      <div className="text-[10px] font-bold text-secondary bg-secondary/10 rounded px-1.5 py-0.5 text-center">
+                        + {dayEvents.length - 3} itens
                       </div>
                     )}
                   </div>
-                </div>
+                </button>
               );
             })}
           </div>
         </div>
 
+        {/* Painel lateral: Detalhes do dia selecionado + Radar de Prazos Fatais */}
         <div className="col-span-12 lg:col-span-4 space-y-6">
-          <div className="bg-surface-container-low p-8 rounded-[2.5rem] shadow-2xl border border-outline-variant/5 relative overflow-hidden">
-             <div className="absolute top-0 right-0 p-8 opacity-5">
-                <CalendarIcon className="w-24 h-24 text-secondary rotate-12" />
-             </div>
-             
-            <h4 className="text-lg font-headline font-bold text-on-surface mb-6 flex items-center gap-3 relative z-10">
-              <Clock className="w-5 h-5 text-secondary" />
-              Hoje, {format(new Date(), "d 'de' MMMM", { locale: ptBR })}
-            </h4>
+          <div className="bg-surface-container-low p-6 rounded-3xl shadow-xl border border-outline-variant/10">
+            <div className="flex items-start justify-between gap-2 mb-5">
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-widest text-secondary block mb-1">
+                  {isSelectedToday ? 'Agenda de Hoje' : 'Dia Selecionado'}
+                </span>
+                <h4 className="text-lg font-headline font-bold text-on-surface capitalize flex items-center gap-2">
+                  <CalendarIcon className="w-4 h-4 text-secondary shrink-0" />
+                  {format(selectedDay, "d 'de' MMMM, EEEE", { locale: ptBR })}
+                </h4>
+              </div>
+              {!isSelectedToday && (
+                <button
+                  onClick={() => {
+                    const now = new Date();
+                    setSelectedDay(now);
+                    setCurrentDate(now);
+                  }}
+                  className="text-[10px] font-bold text-secondary hover:underline shrink-0 mt-1"
+                >
+                  Ir para hoje
+                </button>
+              )}
+            </div>
             
-            <div className="space-y-4 relative z-10">
-              {todayEvents.length === 0 ? (
-                <div className="py-12 text-center flex flex-col items-center gap-4 bg-surface-container-high/30 rounded-3xl border border-dashed border-outline-variant/20 font-body">
-                   <div className="w-12 h-12 rounded-full bg-surface-container-high flex items-center justify-center">
-                      <Gavel className="w-6 h-6 text-outline opacity-40" />
-                   </div>
-                   <p className="text-sm text-outline font-medium">Sem compromissos para hoje.</p>
+            <div className="space-y-3 max-h-[420px] overflow-y-auto custom-scrollbar pr-1">
+              {loading && selectedDayEvents.length === 0 ? (
+                <p className="text-xs text-outline py-6 text-center">Carregando prazos...</p>
+              ) : selectedDayEvents.length === 0 ? (
+                <div className="py-10 text-center flex flex-col items-center gap-3 bg-surface-container-high/20 rounded-2xl border border-dashed border-outline-variant/20">
+                  <Gavel className="w-6 h-6 text-outline opacity-40" />
+                  <p className="text-xs text-outline font-medium">Nenhum prazo ou compromisso neste dia.</p>
                 </div>
               ) : (
-                todayEvents.map((event) => (
-                  <div key={event.id} className="group p-5 rounded-3xl bg-surface-container-high/40 hover:bg-surface-container-high transition-all border border-outline-variant/10 cursor-pointer shadow-sm hover:shadow-md">
-                    <div className="flex justify-between items-start mb-3">
-                      <span className={cn(
-                        "px-2.5 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-widest border",
-                        event.color === 'bg-error' ? 'bg-error/15 text-error border-error/20' : 
-                        event.color === 'bg-secondary' ? 'bg-secondary/15 text-secondary border-secondary/20' : 
-                        event.color === 'bg-amber-500' ? 'bg-amber-500/15 text-amber-400 border-amber-500/20' :
-                        'bg-blue-500/15 text-blue-400 border-blue-500/20'
-                      )}>
-                        {event.type}
-                      </span>
-                      {event.time && <span className="text-xs font-black text-secondary">{event.time}</span>}
+                selectedDayEvents.map((event) => {
+                  const meta = CATEGORY_META[event.category];
+                  const urgency = (event.category === 'fatal' || event.category === 'ideal')
+                    ? getDeadlineUrgency(event.date)
+                    : null;
+
+                  return (
+                    <div key={event.id} className="p-4 rounded-2xl bg-surface-container-high/40 border border-outline-variant/10 space-y-2">
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <span className={cn("px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider border", meta.badgeClass)}>
+                          {event.type}
+                        </span>
+                        {event.time && (
+                          <span className="text-xs font-black text-secondary flex items-center gap-1">
+                            <Clock className="w-3 h-3" /> {event.time}
+                          </span>
+                        )}
+                        {urgency && (
+                          <span className={cn("px-2 py-0.5 rounded-md text-[10px] font-bold", urgency.className)}>
+                            {urgency.label}
+                          </span>
+                        )}
+                      </div>
+
+                      <h5 className="text-sm font-bold text-on-surface leading-snug">{event.title}</h5>
+
+                      {(event.clientName || event.processNumber) && (
+                        <div className="text-xs text-on-surface-variant space-y-0.5 pt-1 border-t border-outline-variant/10">
+                          {event.clientName && (
+                            <p className="font-semibold text-on-surface/90 truncate">Cliente: {event.clientName}</p>
+                          )}
+                          {event.processNumber && (
+                            <p className="font-mono text-[11px] text-outline truncate">Proc: {event.processNumber}</p>
+                          )}
+                        </div>
+                      )}
+
+                      {event.responsible && (
+                        <p className="text-[11px] text-outline font-medium flex items-center gap-1.5">
+                          <Users className="w-3.5 h-3.5 shrink-0" />
+                          <span>Resp: {event.responsible}</span>
+                        </p>
+                      )}
                     </div>
-                    <h5 className="text-sm font-bold text-on-surface group-hover:text-secondary transition-colors mb-2">{event.title}</h5>
-                    
-                    {event.responsible && (
-                       <p className="text-[10px] text-on-surface-variant font-medium flex items-center gap-1.5 opacity-80 uppercase tracking-tighter">
-                         <Users className="w-3.5 h-3.5" />
-                         Resp: {event.responsible}
-                       </p>
-                    )}
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>
 
-          <div className="bg-surface-container-low p-8 rounded-[2.5rem] shadow-2xl border border-outline-variant/5">
-            <h4 className="text-lg font-headline font-bold text-on-surface mb-6">Próximos Prazos</h4>
-            <div className="space-y-4">
-              {events
-                .filter(e => e.color === 'bg-error' && new Date(e.date) > new Date())
-                .sort((a,b) => a.date.localeCompare(b.date))
-                .slice(0, 3)
-                .map((item, i) => (
-                  <div key={i} className="flex items-center justify-between p-4 rounded-2xl bg-surface-container-high/30 border border-outline-variant/10 hover:border-error/30 transition-colors">
-                    <div className="min-w-0">
-                      <span className="text-xs font-bold text-on-surface block truncate">{item.title.replace('[FATAL] ', '')}</span>
-                      <span className="text-[10px] text-error font-black uppercase tracking-tighter">DATA: {format(parseISO(item.date), 'dd/MM/yyyy')}</span>
-                    </div>
+          <div className="bg-surface-container-low p-6 rounded-3xl shadow-xl border border-outline-variant/10">
+            <div className="flex items-center justify-between mb-4">
+              <h4 className="text-base font-headline font-bold text-on-surface flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-error" />
+                Radar de Prazos Fatais
+              </h4>
+              <span className="text-[10px] font-bold text-outline uppercase">Atrasados e 30d</span>
+            </div>
+            <div className="space-y-2.5">
+              {fatalRadar.map((item) => (
+                <button
+                  type="button"
+                  key={item.id}
+                  onClick={() => {
+                    const d = parseISO(item.date);
+                    setSelectedDay(d);
+                    setCurrentDate(d);
+                  }}
+                  className="w-full text-left p-3.5 rounded-2xl bg-surface-container-high/30 border border-outline-variant/10 hover:border-error/40 transition-colors space-y-1.5"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[11px] font-mono font-bold text-on-surface-variant">
+                      {format(parseISO(item.date), 'dd/MM/yyyy')}
+                    </span>
+                    <span className={cn("px-2 py-0.5 rounded-md text-[10px] font-bold", item.urgency.className)}>
+                      {item.urgency.label}
+                    </span>
                   </div>
-                ))}
-              {events.filter(e => e.color === 'bg-error').length === 0 && (
-                <p className="text-xs text-outline text-center py-4">Nenhum prazo fatal pendente.</p>
+                  <p className="text-xs font-bold text-on-surface line-clamp-2">{item.title}</p>
+                  {item.clientName && (
+                    <p className="text-[11px] text-outline truncate">{item.clientName}</p>
+                  )}
+                </button>
+              ))}
+              {fatalRadar.length === 0 && (
+                <p className="text-xs text-outline text-center py-4">Nenhum prazo fatal atrasado ou nos próximos 30 dias.</p>
               )}
             </div>
           </div>
@@ -695,116 +938,103 @@ export function Agenda() {
       </div>
 
       {/* New Appointment Modal */}
-      <AnimatePresence>
-        {isModalOpen && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 sm:p-0">
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsModalOpen(false)}
-              className="absolute inset-0 bg-surface/60 backdrop-blur-sm" 
-            />
-            
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.9, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="relative w-full max-w-[500px] bg-surface-container-low p-1 border border-outline-variant/10 rounded-[2.5rem] shadow-[0_32px_64px_-16px_rgba(0,0,0,0.6)]"
-            >
-              <div className="bg-surface-container-low backdrop-blur-2xl p-8 sm:p-10 rounded-[2.3rem] border border-white/[0.03]">
-                <div className="flex justify-between items-center mb-8">
-                  <div>
-                    <h3 className="text-2xl font-headline font-black text-on-surface">Novo Compromisso</h3>
-                    <p className="text-on-surface-variant text-sm mt-1">Sincronizado com sua agenda pessoal.</p>
-                  </div>
-                  <button 
-                    onClick={() => setIsModalOpen(false)}
-                    className="p-2 rounded-full hover:bg-surface-container-high transition-colors"
-                  >
-                    <X className="w-5 h-5 text-outline" />
-                  </button>
-                </div>
-
-                <form onSubmit={handleCreateAppointment} className="space-y-6">
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-outline ml-1">Título</label>
-                    <input 
-                      type="text" 
-                      required
-                      value={newTitle}
-                      onChange={e => setNewTitle(e.target.value)}
-                      placeholder="Ex: Reunião com Cliente Silva"
-                      className="w-full bg-surface-container-lowest border border-outline-variant/10 rounded-2xl px-5 py-4 text-sm text-on-surface outline-none focus:border-secondary/50 transition-all font-body shadow-inner"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black uppercase tracking-[0.2em] text-outline ml-1">Tipo</label>
-                      <select 
-                        value={newType}
-                        onChange={e => setNewType(e.target.value)}
-                        className="w-full bg-surface-container-lowest border border-outline-variant/10 rounded-2xl px-5 py-4 text-sm text-on-surface outline-none focus:border-secondary/50 appearance-none font-body shadow-inner"
-                      >
-                        <option value="Reunião">Reunião</option>
-                        <option value="Audiência">Audiência</option>
-                        <option value="Conciliação">Conciliação</option>
-                        <option value="Outro">Outro</option>
-                      </select>
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black uppercase tracking-[0.2em] text-outline ml-1">Horário</label>
-                      <select
-                        required
-                        value={newTime}
-                        onChange={e => setNewTime(e.target.value)}
-                        className="w-full bg-surface-container-lowest border border-outline-variant/10 rounded-2xl px-5 py-4 text-sm text-on-surface outline-none focus:border-secondary/50 font-body shadow-inner appearance-none"
-                      >
-                        {['09:00','10:00','11:00','12:00','14:00','15:00','16:00','17:00','18:00'].map(t => (
-                          <option key={t} value={t}>{t}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-outline ml-1">Data</label>
-                    <input 
-                      type="date" 
-                      required
-                      min={nextWeekday(format(new Date(), 'yyyy-MM-dd'))}
-                      value={newDate}
-                      onChange={e => setNewDate(nextWeekday(e.target.value))}
-                      className="w-full bg-surface-container-lowest border border-outline-variant/10 rounded-2xl px-5 py-4 text-sm text-on-surface outline-none focus:border-secondary/50 font-body shadow-inner"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-outline ml-1">Descrição</label>
-                    <textarea 
-                      value={newDesc}
-                      onChange={e => setNewDesc(e.target.value)}
-                      rows={3}
-                      placeholder="Observações importantes..."
-                      className="w-full bg-surface-container-lowest border border-outline-variant/10 rounded-2xl px-5 py-4 text-sm text-on-surface outline-none focus:border-secondary/50 transition-all resize-none font-body shadow-inner"
-                    />
-                  </div>
-
-                  <button 
-                    type="submit"
-                    disabled={submitting}
-                    className="w-full bg-secondary text-on-secondary font-headline font-black py-5 rounded-2xl shadow-xl shadow-secondary/20 hover:opacity-90 active:scale-[0.98] transition-all uppercase tracking-widest text-xs flex items-center justify-center gap-2"
-                  >
-                    {submitting ? 'Criando...' : 'Salvar Compromisso'}
-                    {!submitting && <Plus className="w-4 h-4" />}
-                  </button>
-                </form>
+      {isModalOpen && createPortal(
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/75" onClick={() => setIsModalOpen(false)}>
+          <div
+            className="relative w-full max-w-[500px] bg-surface-container-low border border-outline-variant/20 rounded-3xl shadow-2xl p-6 sm:p-8"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center mb-6">
+              <div>
+                <h3 className="text-xl font-headline font-black text-on-surface">Novo Compromisso</h3>
+                <p className="text-on-surface-variant text-xs mt-1">Adicione uma reunião, audiência ou lembrete à agenda.</p>
               </div>
-            </motion.div>
+              <button 
+                onClick={() => setIsModalOpen(false)}
+                className="p-2 rounded-full hover:bg-surface-container-high transition-colors"
+              >
+                <X className="w-5 h-5 text-outline" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateAppointment} className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black uppercase tracking-widest text-outline ml-1">Título</label>
+                <input 
+                  type="text" 
+                  required
+                  value={newTitle}
+                  onChange={e => setNewTitle(e.target.value)}
+                  placeholder="Ex: Reunião com Cliente Silva"
+                  className="w-full bg-surface-container-lowest border border-outline-variant/10 rounded-xl px-4 py-3 text-sm text-on-surface outline-none focus:border-secondary/50 font-body"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-outline ml-1">Tipo</label>
+                  <select 
+                    value={newType}
+                    onChange={e => setNewType(e.target.value)}
+                    className="w-full bg-surface-container-lowest border border-outline-variant/10 rounded-xl px-4 py-3 text-sm text-on-surface outline-none focus:border-secondary/50 appearance-none font-body"
+                  >
+                    <option value="Reunião">Reunião</option>
+                    <option value="Audiência">Audiência</option>
+                    <option value="Conciliação">Conciliação</option>
+                    <option value="Outro">Outro</option>
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-outline ml-1">Horário</label>
+                  <select
+                    required
+                    value={newTime}
+                    onChange={e => setNewTime(e.target.value)}
+                    className="w-full bg-surface-container-lowest border border-outline-variant/10 rounded-xl px-4 py-3 text-sm text-on-surface outline-none focus:border-secondary/50 font-body appearance-none"
+                  >
+                    {['09:00','10:00','11:00','12:00','14:00','15:00','16:00','17:00','18:00'].map(t => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black uppercase tracking-widest text-outline ml-1">Data</label>
+                <input 
+                  type="date" 
+                  required
+                  min={nextWeekday(format(new Date(), 'yyyy-MM-dd'))}
+                  value={newDate}
+                  onChange={e => setNewDate(nextWeekday(e.target.value))}
+                  className="w-full bg-surface-container-lowest border border-outline-variant/10 rounded-xl px-4 py-3 text-sm text-on-surface outline-none focus:border-secondary/50 font-body"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black uppercase tracking-widest text-outline ml-1">Descrição</label>
+                <textarea 
+                  value={newDesc}
+                  onChange={e => setNewDesc(e.target.value)}
+                  rows={3}
+                  placeholder="Observações importantes..."
+                  className="w-full bg-surface-container-lowest border border-outline-variant/10 rounded-xl px-4 py-3 text-sm text-on-surface outline-none focus:border-secondary/50 resize-none font-body"
+                />
+              </div>
+
+              <button 
+                type="submit"
+                disabled={submitting}
+                className="w-full bg-secondary text-on-secondary font-headline font-black py-3.5 rounded-xl shadow-lg shadow-secondary/20 hover:opacity-90 transition-opacity uppercase tracking-widest text-xs flex items-center justify-center gap-2"
+              >
+                {submitting ? 'Criando...' : 'Salvar Compromisso'}
+                {!submitting && <Plus className="w-4 h-4" />}
+              </button>
+            </form>
           </div>
-        )}
-      </AnimatePresence>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }
