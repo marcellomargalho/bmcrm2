@@ -81,7 +81,7 @@ function ProcessForm({ proc, index, onChange, onRemove, showRemove }: {
   );
 }
 
-function NewClientModal({ isOpen, onClose, onSuccess }: { isOpen: boolean; onClose: () => void; onSuccess: () => void }) {
+function NewClientModal({ isOpen, onClose, onSuccess }: { isOpen: boolean; onClose: () => void; onSuccess: (createdClient?: Client) => void }) {
   const [formData, setFormData] = useState({ name: '', cpf_cnpj: '', email: '', phone: '' });
   const [processes, setProcesses] = useState<ProcessEntry[]>([emptyProcess()]);
   const [submitting, setSubmitting] = useState(false);
@@ -138,7 +138,7 @@ function NewClientModal({ isOpen, onClose, onSuccess }: { isOpen: boolean; onClo
         );
       }
 
-      onSuccess();
+      onSuccess(clientData as Client);
       onClose();
       setFormData({ name: '', cpf_cnpj: '', email: '', phone: '' });
       setProcesses([emptyProcess()]);
@@ -619,7 +619,7 @@ export function ClientManagement() {
     setCached('clients_counts', { total: t, active: ac, inactive: inact });
   }
 
-  const fetchClients = useCallback(async (reset = true) => {
+  const fetchClients = useCallback(async (reset = true, selectClientId?: string) => {
     const isDefaultQuery = reset && !debouncedSearch.trim();
     if (reset) {
       if (!isDefaultQuery || !getCached('clients_page0')) {
@@ -653,7 +653,11 @@ export function ClientManagement() {
       if (isDefaultQuery) {
         setCached('clients_page0', { data: list, count: count ?? list.length });
       }
-      if (list.length > 0 && !selectedClient) {
+      if (selectClientId) {
+        const created = list.find(c => c.id === selectClientId);
+        if (created) setSelectedClient(created);
+        else if (list.length > 0) setSelectedClient(list[0]);
+      } else if (list.length > 0 && !selectedClient) {
         setSelectedClient(list[0]);
       } else if (selectedClient && data) {
         const updated = data.find(c => c.id === selectedClient.id);
@@ -718,7 +722,12 @@ export function ClientManagement() {
       <NewClientModal 
         isOpen={isModalOpen} 
         onClose={() => setIsModalOpen(false)} 
-        onSuccess={() => { fetchClients(true); fetchCounts(); }} 
+        onSuccess={(newClient) => {
+          if (newClient) setSelectedClient(newClient);
+          setSearchText('');
+          fetchClients(true, newClient?.id);
+          fetchCounts();
+        }} 
       />
       {selectedClient && (
         <EditClientModal
