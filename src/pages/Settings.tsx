@@ -21,6 +21,8 @@ import {
   RefreshCw,
   Lock,
   Check,
+  Mail,
+  Pencil,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
@@ -66,6 +68,12 @@ export function Settings() {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
 
+  // Alteração de E-mail por Administrador
+  const [editingEmailId, setEditingEmailId] = useState<string | null>(null);
+  const [editingEmailValue, setEditingEmailValue] = useState('');
+  const [savingMemberEmail, setSavingMemberEmail] = useState(false);
+  const [memberEmailError, setMemberEmailError] = useState('');
+
   useEffect(() => {
     async function loadInitial() {
       const userId = authUser?.id;
@@ -100,7 +108,8 @@ export function Settings() {
   }, [authUser?.id]);
 
   const role = profile?.role || authUser?.role || 'Advogado';
-  const isAdmin = role === 'Administrador' || role === 'Advogado com Controladoria';
+  const isStrictAdmin = role === 'Administrador';
+  const isAdmin = isStrictAdmin || role === 'Advogado com Controladoria';
 
   useEffect(() => {
     if (isAdmin) {
@@ -263,6 +272,42 @@ export function Settings() {
     }
   };
 
+  const handleUpdateMemberEmail = async (memberId: string) => {
+    if (!isStrictAdmin) return;
+    const trimmed = editingEmailValue.trim().toLowerCase();
+    if (!trimmed || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      setMemberEmailError('Informe um e-mail válido.');
+      return;
+    }
+    setSavingMemberEmail(true);
+    setMemberEmailError('');
+    try {
+      const { data, error } = await supabase.functions.invoke('update-user-email', {
+        body: { userId: memberId, newEmail: trimmed },
+      });
+      if (error) {
+        let msg = error.message;
+        try {
+          const parsed = await (error as any).context?.json?.();
+          if (parsed?.error) msg = parsed.error;
+        } catch {}
+        throw new Error(msg || 'Erro ao atualizar e-mail.');
+      }
+      if (data?.error) throw new Error(data.error);
+
+      setProfiles(prev => prev.map(p => (p.id === memberId ? { ...p, email: trimmed } : p)));
+      if (profile?.id === memberId) {
+        setProfile((prev: any) => ({ ...prev, email: trimmed }));
+      }
+      setEditingEmailId(null);
+      setEditingEmailValue('');
+    } catch (err: any) {
+      setMemberEmailError(err?.message || 'Não foi possível alterar o e-mail.');
+    } finally {
+      setSavingMemberEmail(false);
+    }
+  };
+
   const userName = profile?.name || authUser?.name || user?.user_metadata?.full_name || '';
   const userEmail = profile?.email || authUser?.email || user?.email || '';
 
@@ -281,7 +326,7 @@ export function Settings() {
   const pendingCount = profiles.filter(p => !p.is_approved).length;
 
   return (
-    <div className="max-w-5xl mx-auto space-y-8 pb-16">
+    <div className="max-w-6xl mx-auto space-y-8 pb-16">
       <section className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-outline-variant/10 pb-6">
         <div>
           <h2 className="text-3xl font-headline font-extrabold tracking-tight text-on-surface mb-1">Configurações</h2>
@@ -298,8 +343,8 @@ export function Settings() {
         </div>
       </section>
 
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-start">
-        <aside className="md:col-span-4 space-y-6 bg-surface-container-low p-4 rounded-3xl border border-outline-variant/10">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        <aside className="lg:col-span-3 space-y-6 bg-surface-container-low p-4 rounded-3xl border border-outline-variant/10">
           <div className="space-y-1.5">
             <span className="text-[10px] font-black uppercase tracking-widest text-outline px-3 block mb-2">
               Conta Pessoal
@@ -355,7 +400,7 @@ export function Settings() {
           )}
         </aside>
 
-        <main className="md:col-span-8 space-y-6">
+        <main className="lg:col-span-9 space-y-6">
           {activeTab === 'perfil' && (
             <>
               <form onSubmit={handleSaveProfile} className="bg-surface-container-low p-6 sm:p-8 rounded-3xl border border-outline-variant/10 space-y-6">
@@ -490,103 +535,172 @@ export function Settings() {
                 </button>
               </div>
 
-              <div className="space-y-3">
+              <div className="space-y-4">
                 {profiles.length === 0 ? (
                   <div className="text-center py-12 bg-surface-container-lowest/50 rounded-2xl border border-dashed border-outline-variant/20">
                     <p className="text-sm text-on-surface-variant">Nenhum colaborador encontrado.</p>
                   </div>
                 ) : (
-                  profiles.map((member) => (
-                    <div
-                      key={member.id}
-                      className="bg-surface-container-lowest p-5 rounded-2xl border border-outline-variant/10 flex flex-col lg:flex-row lg:items-center gap-4 hover:border-secondary/20 transition-colors"
-                    >
-                      <div className="flex items-center gap-3.5 flex-1 min-w-0">
-                        <div className="w-11 h-11 rounded-xl bg-secondary/10 flex items-center justify-center font-headline font-black text-secondary text-base border border-secondary/20 shrink-0">
-                          {member.name?.charAt(0).toUpperCase()}
-                        </div>
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <h5 className="text-sm font-bold text-on-surface truncate">{member.name}</h5>
-                            <span className={cn(
-                              'px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider border shrink-0',
-                              member.is_approved
-                                ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
-                                : 'bg-error/10 border-error/20 text-error'
-                            )}>
-                              {member.is_approved ? 'Ativo' : 'Pendente'}
-                            </span>
+                  profiles.map((member) => {
+                    const isEditingEmail = editingEmailId === member.id;
+                    return (
+                      <div
+                        key={member.id}
+                        className="bg-surface-container-lowest p-5 rounded-2xl border border-outline-variant/10 space-y-4 hover:border-secondary/25 transition-colors"
+                      >
+                        {/* Linha 1: Identificação completa (sem cortar nome ou e-mail) + Status */}
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                            <div className="w-11 h-11 rounded-xl bg-secondary/10 flex items-center justify-center font-headline font-black text-secondary text-base border border-secondary/20 shrink-0">
+                              {member.name?.charAt(0).toUpperCase()}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <h5 className="text-base font-bold text-on-surface leading-snug break-words">
+                                {member.name}
+                              </h5>
+                              {!isEditingEmail ? (
+                                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                                  <span className="text-xs text-on-surface-variant break-all flex items-center gap-1.5">
+                                    <Mail className="w-3.5 h-3.5 text-outline shrink-0" />
+                                    {member.email}
+                                  </span>
+                                  {isStrictAdmin && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setEditingEmailId(member.id);
+                                        setEditingEmailValue(member.email || '');
+                                        setMemberEmailError('');
+                                      }}
+                                      className="inline-flex items-center gap-1 text-[11px] font-bold text-secondary hover:underline"
+                                      title="Alterar e-mail de acesso e notificações"
+                                    >
+                                      <Pencil className="w-3 h-3" />
+                                      Alterar e-mail
+                                    </button>
+                                  )}
+                                </div>
+                              ) : (
+                                <div className="mt-2 space-y-1.5">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <input
+                                      type="email"
+                                      value={editingEmailValue}
+                                      onChange={(e) => setEditingEmailValue(e.target.value)}
+                                      placeholder="novo@email.com"
+                                      className="flex-1 min-w-[220px] bg-surface-container-low border border-secondary/40 rounded-xl px-3 py-1.5 text-xs text-on-surface outline-none"
+                                    />
+                                    <button
+                                      type="button"
+                                      disabled={savingMemberEmail}
+                                      onClick={() => handleUpdateMemberEmail(member.id)}
+                                      className="px-3 py-1.5 rounded-xl bg-secondary text-on-secondary text-xs font-bold hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-1"
+                                    >
+                                      {savingMemberEmail ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                                      Salvar
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setEditingEmailId(null);
+                                        setMemberEmailError('');
+                                      }}
+                                      className="px-3 py-1.5 rounded-xl bg-surface-container-high text-xs font-bold text-on-surface-variant hover:text-on-surface"
+                                    >
+                                      Cancelar
+                                    </button>
+                                  </div>
+                                  {memberEmailError && (
+                                    <p className="text-[11px] text-error font-semibold">{memberEmailError}</p>
+                                  )}
+                                </div>
+                              )}
+                            </div>
                           </div>
-                          <p className="text-xs text-outline truncate mt-0.5">{member.email}</p>
-                        </div>
-                      </div>
 
-                      <div className="flex flex-wrap items-center gap-2.5">
-                        <div className="relative">
-                          <select
-                            value={member.role || 'Advogado'}
-                            onChange={(e) => updateProfileRole(member.id, e.target.value)}
-                            className="appearance-none bg-surface-container-high text-xs font-bold text-on-surface pl-3.5 pr-8 py-2 rounded-xl border border-outline-variant/15 focus:border-secondary outline-none cursor-pointer"
-                          >
-                            <option value="Estagiário">Estagiário</option>
-                            <option value="Advogado">Advogado</option>
-                            <option value="Assessor Jurídico">Assessor Jurídico</option>
-                            <option value="Advogado com Controladoria">Advogado com Controladoria</option>
-                            <option value="Administrador">Administrador</option>
-                          </select>
-                          <ChevronDown className="w-3.5 h-3.5 text-outline absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                        </div>
-
-                        <button
-                          onClick={() => toggleApproval(member.id, member.is_approved)}
-                          className={cn(
-                            'flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[11px] font-bold transition-colors',
+                          <span className={cn(
+                            'px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider border shrink-0',
                             member.is_approved
-                              ? 'bg-surface-container-high text-on-surface-variant hover:bg-amber-500/15 hover:text-amber-400'
-                              : 'bg-secondary text-on-secondary hover:opacity-90'
-                          )}
-                        >
-                          {member.is_approved ? (
-                            <>
-                              <XCircle className="w-3.5 h-3.5" />
-                              Desativar
-                            </>
-                          ) : (
-                            <>
-                              <CheckCircle className="w-3.5 h-3.5" />
-                              Aprovar
-                            </>
-                          )}
-                        </button>
+                              ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+                              : 'bg-error/10 border-error/20 text-error'
+                          )}>
+                            {member.is_approved ? 'Ativo' : 'Pendente'}
+                          </span>
+                        </div>
 
-                        {confirmDeleteId === member.id ? (
-                          <div className="flex items-center gap-1 bg-error/10 p-1 rounded-xl border border-error/20">
-                            <button
-                              onClick={() => deleteUser(member.id)}
-                              disabled={deletingUserId === member.id}
-                              className="px-2.5 py-1 bg-error text-white text-[10px] font-black uppercase rounded-lg hover:opacity-90 flex items-center gap-1 disabled:opacity-50"
-                            >
-                              {deletingUserId === member.id ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Confirmar'}
-                            </button>
-                            <button
-                              onClick={() => setConfirmDeleteId(null)}
-                              className="p-1 text-error hover:bg-error/20 rounded-lg"
-                            >
-                              <XCircle className="w-3.5 h-3.5" />
-                            </button>
+                        {/* Linha 2: Cargo e Ações confortáveis */}
+                        <div className="pt-3 border-t border-outline-variant/10 flex flex-wrap items-center justify-between gap-3">
+                          <div className="flex items-center gap-2.5">
+                            <span className="text-[10px] font-black uppercase tracking-wider text-outline">Cargo:</span>
+                            <div className="relative">
+                              <select
+                                value={member.role || 'Advogado'}
+                                onChange={(e) => updateProfileRole(member.id, e.target.value)}
+                                className="appearance-none bg-surface-container-high text-xs font-bold text-on-surface pl-3.5 pr-8 py-2 rounded-xl border border-outline-variant/15 focus:border-secondary outline-none cursor-pointer"
+                              >
+                                <option value="Estagiário">Estagiário</option>
+                                <option value="Advogado">Advogado</option>
+                                <option value="Assessor Jurídico">Assessor Jurídico</option>
+                                <option value="Advogado com Controladoria">Advogado com Controladoria</option>
+                                <option value="Administrador">Administrador</option>
+                              </select>
+                              <ChevronDown className="w-3.5 h-3.5 text-outline absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                            </div>
                           </div>
-                        ) : (
-                          <button
-                            onClick={() => setConfirmDeleteId(member.id)}
-                            className="p-2 bg-surface-container-high text-outline hover:bg-error/10 hover:text-error rounded-xl transition-colors"
-                            title="Excluir Usuário"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        )}
+
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => toggleApproval(member.id, member.is_approved)}
+                              className={cn(
+                                'flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-colors',
+                                member.is_approved
+                                  ? 'bg-surface-container-high text-on-surface-variant hover:bg-amber-500/15 hover:text-amber-400'
+                                  : 'bg-secondary text-on-secondary hover:opacity-90'
+                              )}
+                            >
+                              {member.is_approved ? (
+                                <>
+                                  <XCircle className="w-3.5 h-3.5" />
+                                  Desativar
+                                </>
+                              ) : (
+                                <>
+                                  <CheckCircle className="w-3.5 h-3.5" />
+                                  Aprovar
+                                </>
+                              )}
+                            </button>
+
+                            {confirmDeleteId === member.id ? (
+                              <div className="flex items-center gap-1 bg-error/10 p-1 rounded-xl border border-error/20">
+                                <button
+                                  onClick={() => deleteUser(member.id)}
+                                  disabled={deletingUserId === member.id}
+                                  className="px-2.5 py-1 bg-error text-white text-[10px] font-black uppercase rounded-lg hover:opacity-90 flex items-center gap-1 disabled:opacity-50"
+                                >
+                                  {deletingUserId === member.id ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Confirmar'}
+                                </button>
+                                <button
+                                  onClick={() => setConfirmDeleteId(null)}
+                                  className="p-1 text-error hover:bg-error/20 rounded-lg"
+                                >
+                                  <XCircle className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => setConfirmDeleteId(member.id)}
+                                className="p-2 bg-surface-container-high text-outline hover:bg-error/10 hover:text-error rounded-xl transition-colors"
+                                title="Excluir Usuário"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
             </div>
