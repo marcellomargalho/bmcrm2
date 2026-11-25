@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useDebounce } from '@/hooks/useDebounce';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Edit2, Eye, History, Upload, Mail, Calendar as CalendarIcon, Calculator, TrendingUp, Clock, X, Loader2, Search, Trash2, Archive, UserX } from 'lucide-react';
+import { Plus, Edit2, Eye, History, TrendingUp, Clock, X, Loader2, Search, Trash2, Archive, UserX } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 import { supabase } from '@/lib/supabase';
@@ -525,77 +525,55 @@ export function ProcessList() {
         </div>
       </section>
 
-      <section className="mt-12 grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 space-y-4">
-          <h4 className="text-lg font-headline font-bold text-on-surface flex items-center gap-2">
-            <History className="w-5 h-5 text-secondary" />
-            Movimentações Recentes
-          </h4>
-          <div className="bg-surface-container-low/40 rounded-2xl p-6 relative overflow-hidden min-h-[120px]">
-            <div className="absolute left-9 top-6 bottom-6 w-[1px] bg-outline-variant/20"></div>
-            {recentMovements.length > 0 ? (
-              <div className="space-y-6">
-                {recentMovements.map((mov, i) => {
-                  const isCompleted = mov.status === 'Concluída';
-                  return (
-                    <div key={mov.id} className="flex gap-6 relative group z-10">
-                      <div className={cn(
-                        "w-6 h-6 rounded-full ring-4 ring-surface flex items-center justify-center border transition-colors shrink-0",
-                         i === 0 
-                           ? "bg-secondary border-transparent text-on-secondary" 
-                           : isCompleted 
-                             ? "bg-emerald-500 border-transparent text-white" 
-                             : "bg-surface-container-high border-outline-variant/30 text-secondary"
-                      )}>
-                        {i === 0 ? <div className="w-2 h-2 bg-on-secondary rounded-full"></div> : <Clock className="w-3 h-3" />}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <span className="text-[10px] uppercase tracking-widest text-outline font-bold">
-                          {new Date(mov.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                        <p className={cn(
-                          "text-sm font-semibold mt-1",
-                          isCompleted ? "text-on-surface-variant line-through" : "text-on-surface"
-                        )}>
-                          {mov.description}
-                        </p>
-                        <p className="text-xs text-on-surface-variant font-medium mt-0.5 border-l-2 border-secondary/30 pl-2">
-                          {mov.task_type && <span className="mr-1 border bg-secondary/10 text-secondary border-secondary/20 px-1 rounded">[{mov.task_type}]</span>}
-                          Processo: {mov.process_number}
-                        </p>
-                      </div>
+      <section className="mt-12 space-y-4">
+        <h4 className="text-lg font-headline font-bold text-on-surface flex items-center gap-2">
+          <History className="w-5 h-5 text-secondary" />
+          Movimentações Recentes
+        </h4>
+        <div className="bg-surface-container-low/40 rounded-2xl p-6 relative overflow-hidden min-h-[120px]">
+          <div className="absolute left-9 top-6 bottom-6 w-[1px] bg-outline-variant/20"></div>
+          {recentMovements.length > 0 ? (
+            <div className="space-y-6">
+              {recentMovements.map((mov, i) => {
+                const isCompleted = mov.status === 'Concluída';
+                return (
+                  <div key={mov.id} className="flex gap-6 relative group z-10">
+                    <div className={cn(
+                      "w-6 h-6 rounded-full ring-4 ring-surface flex items-center justify-center border transition-colors shrink-0",
+                       i === 0 
+                         ? "bg-secondary border-transparent text-on-secondary" 
+                         : isCompleted 
+                           ? "bg-emerald-500 border-transparent text-white" 
+                           : "bg-surface-container-high border-outline-variant/30 text-secondary"
+                    )}>
+                      {i === 0 ? <div className="w-2 h-2 bg-on-secondary rounded-full"></div> : <Clock className="w-3 h-3" />}
                     </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="text-center py-4 flex flex-col items-center justify-center relative z-10">
-                <Clock className="w-8 h-8 text-outline mb-2" />
-                <p className="text-sm font-medium text-on-surface-variant">Nenhuma movimentação associada aos processos.</p>
-                <p className="text-xs text-outline mt-1">As tarefas cadastradas com números de processo aparecerão aqui.</p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="space-y-4">
-          <h4 className="text-lg font-headline font-bold text-on-surface flex items-center gap-2">
-            <Plus className="w-5 h-5 text-secondary" />
-            Ações Rápidas
-          </h4>
-          <div className="grid grid-cols-2 gap-3">
-            {[
-              { icon: Upload, label: 'Subir Documento' },
-              { icon: Mail, label: 'Notificar Cliente' },
-              { icon: CalendarIcon, label: 'Novo Prazo' },
-              { icon: Calculator, label: 'Calcular Custas' }
-            ].map((action, i) => (
-              <button key={i} className="p-4 rounded-2xl bg-surface-container hover:bg-surface-bright transition-all border border-outline-variant/5 text-center group">
-                <action.icon className="w-5 h-5 text-secondary mx-auto mb-2 group-hover:scale-110 transition-transform" />
-                <span className="block text-xs font-bold text-on-surface">{action.label}</span>
-              </button>
-            ))}
-          </div>
+                    <div className="flex-1 min-w-0">
+                      <span className="text-[10px] uppercase tracking-widest text-outline font-bold">
+                        {new Date(mov.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                      <p className={cn(
+                        "text-sm font-semibold mt-1",
+                        isCompleted ? "text-on-surface-variant line-through" : "text-on-surface"
+                      )}>
+                        {mov.description}
+                      </p>
+                      <p className="text-xs text-on-surface-variant font-medium mt-0.5 border-l-2 border-secondary/30 pl-2">
+                        {mov.task_type && <span className="mr-1 border bg-secondary/10 text-secondary border-secondary/20 px-1 rounded">[{mov.task_type}]</span>}
+                        Processo: {mov.process_number}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="text-center py-4 flex flex-col items-center justify-center relative z-10">
+              <Clock className="w-8 h-8 text-outline mb-2" />
+              <p className="text-sm font-medium text-on-surface-variant">Nenhuma movimentação associada aos processos.</p>
+              <p className="text-xs text-outline mt-1">As tarefas cadastradas com números de processo aparecerão aqui.</p>
+            </div>
+          )}
         </div>
       </section>
     </div>
