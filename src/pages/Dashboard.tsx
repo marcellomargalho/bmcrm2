@@ -1,7 +1,29 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import { TrendingUp, Users, Calendar, Clock, FileText, ArrowRight, Plus, Loader2, CheckCircle2, Check, CalendarClock, AlertTriangle, RotateCcw, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, X, Gavel, MapPin, User, Tag, Pencil, Save, Filter, AlignLeft, LayoutGrid, History } from 'lucide-react';
+import {
+  Users,
+  Calendar,
+  Clock,
+  ArrowRight,
+  Plus,
+  Loader2,
+  CheckCircle2,
+  Check,
+  CalendarClock,
+  AlertTriangle,
+  RotateCcw,
+  X,
+  Gavel,
+  User,
+  Tag,
+  Pencil,
+  Save,
+  Filter,
+  AlignLeft,
+  History,
+  Search,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { NewTaskModal } from '@/components/NewTaskModal';
 import { supabase } from '@/lib/supabase';
@@ -11,78 +33,56 @@ import './RecentTasks.css';
 
 interface DashboardCache {
   allTasks: any[];
-  activeProcessesCount: number;
-  todayEventsCount: number;
+  hearingsToday: any[];
   allProfiles: { id: string; name: string; role: string }[];
 }
 
-const TASK_SELECT = 'id, process_id, client_id, client_name, process_number, description, task_type, responsible, priority, status, fatal_date, ideal_date, related_party, created_at, updated_at, processes(id, number, vara, comarca, court, area, status, responsible, autor, reu, clients(name, cpf_cnpj))';
+type TableFilterMode = 'attention' | 'all' | 'overdue' | 'today' | 'week' | 'monitoring' | 'completed';
 
-// ─── Widget IDs & localStorage key ────────────────────────────────
-const WIDGET_ORDER_KEY = 'dashboard_widget_order';
-const DEFAULT_ORDER = ['stats', 'deadlineTables', 'agenda_and_activities'];
+const CACHE_KEY = 'dashboard_bundle_v2';
 
-function getSavedOrder(): string[] {
-  try {
-    const saved = localStorage.getItem(WIDGET_ORDER_KEY);
-    if (saved) {
-      const parsed = JSON.parse(saved) as string[];
-      // ensure all widgets are present (handles new widgets added after save)
-      const merged = [...parsed.filter(id => DEFAULT_ORDER.includes(id)), ...DEFAULT_ORDER.filter(id => !parsed.includes(id))];
-      return merged;
-    }
-  } catch {}
-  return DEFAULT_ORDER;
+const TASK_SELECT =
+  'id, process_id, client_id, client_name, process_number, description, task_type, responsible, priority, status, fatal_date, ideal_date, related_party, created_at, updated_at, processes(id, number, vara, comarca, court, area, status, responsible, autor, reu, clients(name, cpf_cnpj))';
+
+function getDaysUntil(dateStr: string): number {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const target = new Date(dateStr + 'T00:00:00');
+  return Math.round((target.getTime() - today.getTime()) / 86_400_000);
 }
 
-function saveOrder(order: string[]) {
-  localStorage.setItem(WIDGET_ORDER_KEY, JSON.stringify(order));
+function formatDateBR(dateStr?: string | null): string {
+  if (!dateStr) return '—';
+  const [y, m, d] = dateStr.slice(0, 10).split('-');
+  return `${d}/${m}/${y}`;
 }
 
-// ─── Dashboard ────────────────────────────────────────────────────────
 export function Dashboard() {
   const navigate = useNavigate();
   const authUser = useAuthUser();
-  const initialCache = getCached<DashboardCache>('dashboard_bundle');
+  const initialCache = getCached<DashboardCache>(CACHE_KEY);
 
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [allTasks, setAllTasks] = useState<any[]>(() => initialCache?.allTasks || []);
+  const [hearingsToday, setHearingsToday] = useState<any[]>(() => initialCache?.hearingsToday || []);
   const [loadingTasks, setLoadingTasks] = useState<boolean>(() => !initialCache);
-  const [activeProcessesCount, setActiveProcessesCount] = useState<number>(() => initialCache?.activeProcessesCount ?? 0);
-  const [todayEventsCount, setTodayEventsCount] = useState<number>(() => initialCache?.todayEventsCount ?? 0);
+  const [refreshing, setRefreshing] = useState(false);
   const [localSubmitting, setLocalSubmitting] = useState<string | null>(null);
-  const [userData, setUserData] = useState<{id: string, name: string, role: string} | null>(() =>
+  const [userData, setUserData] = useState<{ id: string; name: string; role: string } | null>(() =>
     authUser ? { id: authUser.id, name: authUser.name, role: authUser.role } : null
   );
-  const [expandedTasks, setExpandedTasks] = useState<string[]>([]);
-  const [readTasks, setReadTasks] = useState<Set<string>>(new Set());
   const [selectedTaskDetail, setSelectedTaskDetail] = useState<any | null>(null);
 
-  // Person filter state (for admin/adv)
-  const [allProfiles, setAllProfiles] = useState<{id: string, name: string, role: string}[]>(() => initialCache?.allProfiles || []);
-  const [personFilter, setPersonFilter] = useState<string>('all'); // 'all' or profile name
-  const [personRoleFilter, setPersonRoleFilter] = useState<string>('all'); // 'all' | 'Administrador' | 'Advogado' | 'Estagiário'
+  // Person filter state (Admin)
+  const [allProfiles, setAllProfiles] = useState<{ id: string; name: string; role: string }[]>(
+    () => initialCache?.allProfiles || []
+  );
+  const [personFilter, setPersonFilter] = useState<string>('all');
+  const [personRoleFilter, setPersonRoleFilter] = useState<string>('all');
 
-  // Calendar State
-  const [currentMonth, setCurrentMonth] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
-  const [selectedDate, setSelectedDate] = useState<string | null>(new Date().toISOString().split('T')[0]);
-  const [taskFilter, setTaskFilter] = useState<'Todas' | 'Em progresso' | 'Concluídas'>('Todas');
-
-  // Deadline Tables State
-  const [deadlineSearch, setDeadlineSearch] = useState('');
-  const [deadlineFilter, setDeadlineFilter] = useState<'all' | 'atrasados' | 'hoje' | 'em_dia' | 'revisoes'>('all');
-  const [deadlineViewMode, setDeadlineViewMode] = useState<'lista' | 'tabela'>('lista');
-  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
-  const [tableExpandedCategory, setTableExpandedCategory] = useState<string | null>(null);
-
-  function toggleSectionCollapse(sectionKey: string) {
-    setCollapsedSections(prev => {
-      const next = new Set(prev);
-      if (next.has(sectionKey)) next.delete(sectionKey);
-      else next.add(sectionKey);
-      return next;
-    });
-  }
+  // Table & search state
+  const [tableFilter, setTableFilter] = useState<TableFilterMode>('attention');
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Follow-up state
   const [followUpProcessId, setFollowUpProcessId] = useState<string | null>(null);
@@ -90,126 +90,83 @@ export function Dashboard() {
   const [modalLockedProcessId, setModalLockedProcessId] = useState<string | undefined>(undefined);
   const [modalInitialTaskType, setModalInitialTaskType] = useState<string | undefined>(undefined);
 
-  const getDaysInMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
-  const getFirstDayOfMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth(), 1).getDay();
-  const daysInMonth = getDaysInMonth(currentMonth);
-  const firstDay = getFirstDayOfMonth(currentMonth);
-  const monthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+  const fetchDashboardData = useCallback(
+    async (u: { id: string; name: string; role: string }, mode: 'initial' | 'silent' | 'refresh' = 'initial') => {
+      if (!u) return;
+      if (mode === 'initial') setLoadingTasks(true);
+      else if (mode === 'refresh') setRefreshing(true);
 
-  const handlePrevMonth = () => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1));
-  const handleNextMonth = () => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1));
+      const isAdminUser = u.role === 'Administrador';
+      const todayStr = new Date().toISOString().slice(0, 10);
 
-  function toggleTaskExpand(taskId: string) {
-    setExpandedTasks(prev => 
-      prev.includes(taskId) ? prev.filter(id => id !== taskId) : [...prev, taskId]
-    );
-    // Mark as read when opened
-    setReadTasks(prev => new Set(prev).add(taskId));
-  }
+      try {
+        if (!isAdminUser && !u.name) {
+          setAllTasks([]);
+          return;
+        }
 
-  const computeMonitoringCount = useCallback((pendingList: any[], userName: string) => {
-    if (!userName) return 0;
-    const needle = userName.toLowerCase();
-    const uniqueProcessIds = new Set<string>();
-    for (const t of pendingList) {
-      if (
-        t.task_type === 'Acompanhamento de Processo' &&
-        t.process_id &&
-        t.responsible?.toLowerCase().includes(needle)
-      ) {
-        uniqueProcessIds.add(t.process_id);
+        const pendingQuery = supabase
+          .from('tasks')
+          .select(TASK_SELECT)
+          .neq('status', 'Concluída')
+          .order('fatal_date', { ascending: true, nullsFirst: false });
+
+        const concludedQuery = supabase
+          .from('tasks')
+          .select(TASK_SELECT)
+          .eq('status', 'Concluída')
+          .order('updated_at', { ascending: false })
+          .limit(20);
+
+        if (!isAdminUser) {
+          pendingQuery.ilike('responsible', `%${u.name}%`);
+          concludedQuery.ilike('responsible', `%${u.name}%`);
+        }
+
+        const hearingsPromise = supabase
+          .from('hearings')
+          .select('id, process_id, process_number, client_name, hearing_type, hearing_date, hearing_time')
+          .eq('hearing_date', todayStr)
+          .neq('status', 'cancelada')
+          .order('hearing_time', { ascending: true });
+
+        const profilesPromise = isAdminUser
+          ? supabase.from('profiles').select('id, name, role').eq('is_approved', true).order('name', { ascending: true })
+          : Promise.resolve({ data: null });
+
+        const [pendingRes, concludedRes, hearingsRes, profilesRes] = await Promise.all([
+          pendingQuery,
+          concludedQuery,
+          hearingsPromise,
+          profilesPromise,
+        ]);
+
+        const combinedTasks = [...(pendingRes.data || []), ...(concludedRes.data || [])];
+        const nextHearings = hearingsRes.data || [];
+        const profList = profilesRes.data || allProfiles;
+
+        setAllTasks(combinedTasks);
+        setHearingsToday(nextHearings);
+        if (profilesRes.data) setAllProfiles(profilesRes.data);
+
+        setCached<DashboardCache>(CACHE_KEY, {
+          allTasks: combinedTasks,
+          hearingsToday: nextHearings,
+          allProfiles: profList,
+        });
+      } catch (err) {
+        console.error('Erro ao carregar dashboard:', err);
+      } finally {
+        setLoadingTasks(false);
+        setRefreshing(false);
       }
-    }
-    return uniqueProcessIds.size;
-  }, []);
-
-  const fetchStats = useCallback(async (u: {id: string, name: string, role: string}) => {
-    const today = new Date().toISOString().split('T')[0];
-    const { count: eventCount } = await supabase
-      .from('hearings')
-      .select('id', { count: 'exact', head: true })
-      .eq('hearing_date', today)
-      .neq('status', 'cancelada');
-    setTodayEventsCount(eventCount || 0);
-  }, []);
-
-  const fetchTasks = useCallback(async (u: {id: string, name: string, role: string}, showSpinner = false) => {
-    if (!u) return;
-    if (showSpinner) setLoadingTasks(true);
-    const isAdminUser = u.role === 'Administrador';
-    const today = new Date().toISOString().split('T')[0];
-
-    try {
-      if (!isAdminUser && !u.name) {
-        setAllTasks([]);
-        setActiveProcessesCount(0);
-        return;
-      }
-
-      const pendingQuery = supabase
-        .from('tasks')
-        .select(TASK_SELECT)
-        .neq('status', 'Concluída')
-        .order('fatal_date', { ascending: true, nullsFirst: false });
-
-      const concludedQuery = supabase
-        .from('tasks')
-        .select(TASK_SELECT)
-        .eq('status', 'Concluída')
-        .order('updated_at', { ascending: false })
-        .limit(20);
-
-      if (!isAdminUser) {
-        pendingQuery.ilike('responsible', `%${u.name}%`);
-        concludedQuery.ilike('responsible', `%${u.name}%`);
-      }
-
-      const hearingsPromise = supabase
-        .from('hearings')
-        .select('id', { count: 'exact', head: true })
-        .eq('hearing_date', today)
-        .neq('status', 'cancelada');
-
-      const profilesPromise = isAdminUser
-        ? supabase.from('profiles').select('id, name, role').eq('is_approved', true).order('name', { ascending: true })
-        : Promise.resolve({ data: null });
-
-      // Todas as consultas rodam em paralelo em 1 única rodada de rede!
-      const [pendingRes, concludedRes, hearingsRes, profilesRes] = await Promise.all([
-        pendingQuery,
-        concludedQuery,
-        hearingsPromise,
-        profilesPromise,
-      ]);
-
-      const pendingData = pendingRes.data || [];
-      const concludedData = concludedRes.data || [];
-      const combinedTasks = [...pendingData, ...concludedData];
-      const procCount = computeMonitoringCount(pendingData, u.name);
-      const evCount = hearingsRes.count || 0;
-      const profList = profilesRes.data || allProfiles;
-
-      setAllTasks(combinedTasks);
-      setActiveProcessesCount(procCount);
-      setTodayEventsCount(evCount);
-      if (profilesRes.data) setAllProfiles(profilesRes.data);
-
-      setCached<DashboardCache>('dashboard_bundle', {
-        allTasks: combinedTasks,
-        activeProcessesCount: procCount,
-        todayEventsCount: evCount,
-        allProfiles: profList,
-      });
-    } catch (err) {
-      console.error('Erro ao carregar tarefas:', err);
-    } finally {
-      setLoadingTasks(false);
-    }
-  }, [computeMonitoringCount, allProfiles]);
+    },
+    [allProfiles]
+  );
 
   useEffect(() => {
     let tasksChannel: any;
-    let appointmentsChannel: any;
+    let hearingsChannel: any;
     let cancelled = false;
 
     const init = async () => {
@@ -217,7 +174,9 @@ export function Dashboard() {
         let u = authUser ? { id: authUser.id, name: authUser.name, role: authUser.role } : null;
 
         if (!u) {
-          const { data: { session } } = await supabase.auth.getSession();
+          const {
+            data: { session },
+          } = await supabase.auth.getSession();
           if (!session?.user) {
             setLoadingTasks(false);
             return;
@@ -236,25 +195,27 @@ export function Dashboard() {
 
         if (cancelled) return;
         setUserData(u);
-        const hasCache = Boolean(getCached('dashboard_bundle'));
-        await fetchTasks(u, !hasCache);
+        const hasCache = Boolean(getCached(CACHE_KEY));
+        await fetchDashboardData(u, hasCache ? 'silent' : 'initial');
 
         if (cancelled) return;
 
-        // Realtime Tasks
-        tasksChannel = supabase.channel('tasks_dashboard_changes')
+        tasksChannel = supabase
+          .channel('tasks_dashboard_changes')
           .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, (payload) => {
             if (payload.eventType === 'UPDATE') {
-              setAllTasks(prev => prev.map(t => t.id === payload.new.id ? { ...t, ...payload.new } : t));
+              setAllTasks((prev) => prev.map((t) => (t.id === payload.new.id ? { ...t, ...payload.new } : t)));
             } else {
-              fetchTasks(u!, false);
+              fetchDashboardData(u!, 'silent');
             }
           })
           .subscribe();
 
-        // Realtime Hearings
-        appointmentsChannel = supabase.channel('hearings_dashboard')
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'hearings' }, () => fetchStats(u!))
+        hearingsChannel = supabase
+          .channel('hearings_dashboard')
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'hearings' }, () =>
+            fetchDashboardData(u!, 'silent')
+          )
           .subscribe();
       } catch (err) {
         console.error('Erro ao inicializar dashboard:', err);
@@ -267,49 +228,71 @@ export function Dashboard() {
     return () => {
       cancelled = true;
       if (tasksChannel) supabase.removeChannel(tasksChannel);
-      if (appointmentsChannel) supabase.removeChannel(appointmentsChannel);
+      if (hearingsChannel) supabase.removeChannel(hearingsChannel);
     };
   }, [authUser?.id]);
 
   async function toggleTaskComplete(taskId: string, currentStatus: string, triggerFollowUp: boolean = true) {
     if (localSubmitting === taskId) return;
     const newStatus = currentStatus === 'Concluída' ? 'Pendente' : 'Concluída';
-    
-    setLocalSubmitting(taskId);
-    
-    // Optimistic Update: move task in local state immediately
-    const originalAllTasks = [...allTasks];
-    setAllTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: newStatus, updated_at: new Date().toISOString() } : t));
 
-    const { error } = await supabase.from('tasks').update({ status: newStatus, updated_at: new Date().toISOString() }).eq('id', taskId);
-    
+    setLocalSubmitting(taskId);
+
+    const originalAllTasks = [...allTasks];
+    const updatedTasks = allTasks.map((t) =>
+      t.id === taskId ? { ...t, status: newStatus, updated_at: new Date().toISOString() } : t
+    );
+    setAllTasks(updatedTasks);
+
+    const { error } = await supabase
+      .from('tasks')
+      .update({ status: newStatus, updated_at: new Date().toISOString() })
+      .eq('id', taskId);
+
     if (error) {
-      console.error("Erro ao atualizar tarefa:", error);
-      alert(`Não foi possível salvar o status da tarefa no banco de dados (${error.message || 'Erro de permissão'}). A alteração foi revertida.`);
-      setAllTasks(originalAllTasks); // Rollback on error
+      console.error('Erro ao atualizar tarefa:', error);
+      alert(
+        `Não foi possível salvar o status da tarefa no banco de dados (${error.message || 'Erro de permissão'}). A alteração foi revertida.`
+      );
+      setAllTasks(originalAllTasks);
       setLocalSubmitting(null);
       return;
     }
-    
-    if (newStatus === 'Concluída') {
-      const task = originalAllTasks.find(t => t.id === taskId) || tasks.find(t => t.id === taskId);
-      if (task && task.process_id) {
-        const { data: { user } } = await supabase.auth.getUser();
-        const allowedTypes = ['Petição', 'Despacho', 'Audiência', 'Julgamento', 'Protocolo', 'Diligência', 'Audiência de Instrução ou Conciliação', 'Análise de Processo', 'Outros'];
-        const movementType = allowedTypes.includes(task.task_type || '') ? task.task_type : 'Outros';
-        
-        await supabase.from('process_movements').insert([{
-           process_id: task.process_id,
-           type: movementType,
-           description: `Tarefa concluída: ${task.description}`,
-           date: new Date().toISOString(),
-           responsible: task.responsible,
-           user_id: user?.id
-        }]);
 
-        // Só exibe o prompt de novo acompanhamento se:
-        // 1. triggerFollowUp for true
-        // 2. A própria tarefa NÃO for um 'Acompanhamento de Processo' (evita loop infinito)
+    setCached<DashboardCache>(CACHE_KEY, {
+      allTasks: updatedTasks,
+      hearingsToday,
+      allProfiles,
+    });
+
+    if (newStatus === 'Concluída') {
+      const task = originalAllTasks.find((t) => t.id === taskId);
+      if (task && task.process_id) {
+        const userId = authUser?.id || (await supabase.auth.getSession()).data.session?.user?.id;
+        const allowedTypes = [
+          'Petição',
+          'Despacho',
+          'Audiência',
+          'Julgamento',
+          'Protocolo',
+          'Diligência',
+          'Audiência de Instrução ou Conciliação',
+          'Análise de Processo',
+          'Outros',
+        ];
+        const movementType = allowedTypes.includes(task.task_type || '') ? task.task_type : 'Outros';
+
+        await supabase.from('process_movements').insert([
+          {
+            process_id: task.process_id,
+            type: movementType,
+            description: `Tarefa concluída: ${task.description}`,
+            date: new Date().toISOString(),
+            responsible: task.responsible,
+            user_id: userId,
+          },
+        ]);
+
         if (triggerFollowUp && task.task_type !== 'Acompanhamento de Processo') {
           setFollowUpProcessId(task.process_id);
           setShowFollowUpPrompt(true);
@@ -320,841 +303,111 @@ export function Dashboard() {
     setLocalSubmitting(null);
   }
 
-  const priorityColors: Record<string, string> = {
-    'Baixa': 'bg-emerald-500/10 text-emerald-400',
-    'Média': 'bg-amber-500/10 text-amber-400',
-    'Alta': 'bg-error/10 text-error',
-  };
-
   const isAdmin = userData?.role === 'Administrador';
-  const isAdminOrAdv = isAdmin;
 
-  function getDaysUntil(dateStr: string) {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const target = new Date(dateStr + 'T00:00:00');
-    const diff = Math.ceil((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-    return diff;
-  }
-
-  // Apply person + role filters (for admin/adv only)
-  const tasks = React.useMemo(() => {
-    if (!isAdminOrAdv) return allTasks;
+  // Filtro de pessoa/cargo (Admin)
+  const scopedTasks = useMemo(() => {
+    if (!isAdmin) return allTasks;
     let result = allTasks;
     if (personRoleFilter !== 'all') {
-      const profilesOfRole = allProfiles.filter(p => p.role === personRoleFilter).map(p => p.name?.toLowerCase());
-      result = result.filter(t => profilesOfRole.some(name => name && t.responsible?.toLowerCase().includes(name)));
+      const profilesOfRole = allProfiles
+        .filter((p) => p.role === personRoleFilter)
+        .map((p) => p.name?.toLowerCase());
+      result = result.filter((t) => profilesOfRole.some((name) => name && t.responsible?.toLowerCase().includes(name)));
     }
     if (personFilter !== 'all') {
-      result = result.filter(t => t.responsible?.toLowerCase().includes(personFilter.toLowerCase()));
+      result = result.filter((t) => t.responsible?.toLowerCase().includes(personFilter.toLowerCase()));
     }
     return result;
-  }, [allTasks, isAdminOrAdv, personFilter, personRoleFilter, allProfiles]);
+  }, [allTasks, isAdmin, personFilter, personRoleFilter, allProfiles]);
 
-  const {
-    upcomingDeadlines,
-    pendingTasks,
-    recentTasks,
-    completedTasks,
-    totalCompletedCount,
-    filteredCategorizedTasks,
-  } = React.useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const todayMs = today.getTime();
-    const daysFromToday = (dateStr: string) =>
-      Math.ceil((new Date(dateStr + 'T00:00:00').getTime() - todayMs) / 86_400_000);
-
+  const { stats, pendingTasks, completedTasks, todayDueTasks, priorityTasks } = useMemo(() => {
     const pending: any[] = [];
     const completed: any[] = [];
-    const atrasados: any[] = [];
-    const hoje: any[] = [];
-    const em_dia: any[] = [];
-    const revisoes_pendentes: any[] = [];
-    const outras: any[] = [];
+    const dueToday: any[] = [];
+    let overdue = 0;
+    let week = 0;
+    let monitoring = 0;
+    let attention = 0;
 
-    for (const t of tasks) {
+    for (const t of scopedTasks) {
       if (t.status === 'Concluída') {
         completed.push(t);
         continue;
       }
       pending.push(t);
-      if (t.task_type === 'Acompanhamento de Processo') {
-        revisoes_pendentes.push(t);
-      } else if (t.fatal_date) {
-        const d = daysFromToday(t.fatal_date);
-        if (d < 0) atrasados.push(t);
-        else if (d === 0) hoje.push(t);
-        else em_dia.push(t);
-      } else {
-        outras.push(t);
+      if (t.task_type === 'Acompanhamento de Processo') monitoring++;
+      if (t.fatal_date) {
+        const d = getDaysUntil(t.fatal_date);
+        if (d < 0) overdue++;
+        else if (d === 0) dueToday.push(t);
+        else if (d <= 7) week++;
+        if (d <= 3) attention++;
       }
     }
 
-    const sortByFatal = (a: any, b: any) => (a.fatal_date < b.fatal_date ? -1 : a.fatal_date > b.fatal_date ? 1 : 0);
-    atrasados.sort(sortByFatal);
-    hoje.sort(sortByFatal);
-    em_dia.sort(sortByFatal);
-    revisoes_pendentes.sort((a, b) => {
+    pending.sort((a, b) => {
       if (!a.fatal_date && !b.fatal_date) return 0;
       if (!a.fatal_date) return 1;
       if (!b.fatal_date) return -1;
-      return sortByFatal(a, b);
+      return a.fatal_date < b.fatal_date ? -1 : a.fatal_date > b.fatal_date ? 1 : 0;
     });
+
     completed.sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || ''));
 
-    const upcoming = pending
-      .filter(t => t.fatal_date)
-      .sort(sortByFatal)
-      .slice(0, 3);
-
     return {
-      upcomingDeadlines: upcoming,
+      stats: {
+        overdue,
+        today: dueToday.length,
+        week,
+        monitoring,
+        attention,
+        hearings: hearingsToday.length,
+        totalOpen: pending.length,
+        completed: completed.length,
+      },
       pendingTasks: pending,
-      recentTasks: pending,
-      completedTasks: completed.slice(0, 5),
-      totalCompletedCount: completed.length,
-      filteredCategorizedTasks: { atrasados, hoje, em_dia, revisoes_pendentes, outras },
+      completedTasks: completed,
+      todayDueTasks: dueToday,
+      priorityTasks: pending.slice(0, 6),
     };
-  }, [tasks]);
+  }, [scopedTasks, hearingsToday.length]);
 
-  const AUTO_COLLAPSE_THRESHOLD = 5;
+  const filteredTableTasks = useMemo(() => {
+    const base = tableFilter === 'completed' ? completedTasks : pendingTasks;
+    const needle = searchQuery.trim().toLowerCase();
 
-  const renderDeadlineTable = (tasksList: any[], title: string, color: string, icon: React.ReactNode, sectionKey: string) => {
-    const isCollapsed = collapsedSections.has(sectionKey);
-    const hasMany = tasksList.length > AUTO_COLLAPSE_THRESHOLD;
-    const displayedTasks = isCollapsed ? tasksList.slice(0, AUTO_COLLAPSE_THRESHOLD) : tasksList;
+    return base.filter((t) => {
+      if (tableFilter === 'attention') {
+        const diff = t.fatal_date ? getDaysUntil(t.fatal_date) : null;
+        if (diff === null || diff > 3) return false;
+      } else if (tableFilter === 'overdue') {
+        if (!t.fatal_date || getDaysUntil(t.fatal_date) >= 0) return false;
+      } else if (tableFilter === 'today') {
+        if (!t.fatal_date || getDaysUntil(t.fatal_date) !== 0) return false;
+      } else if (tableFilter === 'week') {
+        if (!t.fatal_date) return false;
+        const d = getDaysUntil(t.fatal_date);
+        if (d < 0 || d > 7) return false;
+      } else if (tableFilter === 'monitoring') {
+        if (t.task_type !== 'Acompanhamento de Processo') return false;
+      }
 
-    return (
-      <div className="bg-surface-container-low rounded-2xl border border-outline-variant/10 overflow-hidden mb-6 shadow-sm">
-        {/* Clean Header */}
-        <div className="px-6 py-3.5 border-b border-outline-variant/10 flex items-center justify-between bg-surface-container-high/20">
-          <div className="flex items-center gap-2.5">
-            <div className={cn("p-1.5 rounded-lg", color)}>
-              {icon}
-            </div>
-            <h3 className="font-headline font-bold text-sm text-on-surface">{title}</h3>
-            <span className="px-2 py-0.5 bg-surface-container-highest text-outline rounded-full text-[11px] font-semibold">
-              {tasksList.length}
-            </span>
-          </div>
-          {hasMany && (
-            <button
-              onClick={() => toggleSectionCollapse(sectionKey)}
-              className="text-xs font-semibold text-outline hover:text-secondary flex items-center gap-1 transition-colors px-2 py-1 rounded-lg hover:bg-secondary/5"
-            >
-              {isCollapsed ? (
-                <><ChevronDown className="w-3.5 h-3.5" /> Ver todas ({tasksList.length})</>
-              ) : (
-                <><ChevronUp className="w-3.5 h-3.5" /> Mostrar menos</>
-              )}
-            </button>
-          )}
-        </div>
+      if (needle) {
+        const client = (t.client_name || t.processes?.clients?.name || '').toLowerCase();
+        const proc = (t.process_number || t.processes?.number || '').toLowerCase();
+        const desc = (t.description || '').toLowerCase();
+        const resp = (t.responsible || '').toLowerCase();
+        if (!client.includes(needle) && !proc.includes(needle) && !desc.includes(needle) && !resp.includes(needle)) {
+          return false;
+        }
+      }
 
-        {/* Table Body */}
-        <div className="overflow-x-auto custom-scrollbar">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="text-[10px] uppercase tracking-wider text-outline font-semibold border-b border-outline-variant/5">
-                <th className="px-6 py-3 w-[160px]">Prazo</th>
-                <th className="px-6 py-3">Descrição</th>
-                <th className="px-6 py-3">Cliente</th>
-                <th className="px-6 py-3">Processo</th>
-                <th className="px-6 py-3">Tipo</th>
-                <th className="px-6 py-3">Responsável</th>
-                <th className="px-6 py-3 text-right w-[60px]"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-outline-variant/5">
-              {displayedTasks.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-6 py-8 text-center text-outline text-xs italic">
-                    Nenhuma demanda nesta categoria.
-                  </td>
-                </tr>
-              ) : (
-                displayedTasks.map((task) => {
-                  const mainDate = task.ideal_date || task.fatal_date;
-                  const daysUntil = mainDate ? getDaysUntil(mainDate) : null;
-                  const isOverdue = daysUntil !== null && daysUntil < 0;
-                  const isToday = daysUntil === 0;
-                  const proc = task.processes;
+      return true;
+    });
+  }, [pendingTasks, completedTasks, tableFilter, searchQuery]);
 
-                  return (
-                    <tr 
-                      key={task.id} 
-                      onClick={() => setSelectedTaskDetail(task)}
-                      className="hover:bg-surface-container-high/40 transition-colors group cursor-pointer text-xs"
-                    >
-                      {/* Prazo Minimalista */}
-                      <td className="px-6 py-3">
-                        <div className="flex flex-col gap-0.5">
-                          <div className="flex items-center gap-1.5">
-                            <span className={cn(
-                              "font-bold text-xs",
-                              isOverdue ? "text-error" : isToday ? "text-amber-400" : "text-on-surface"
-                            )}>
-                              {mainDate ? new Date(mainDate + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : '—'}
-                            </span>
-                            {daysUntil !== null && (
-                              <span className={cn(
-                                "text-[10px] font-medium",
-                                isOverdue ? "text-error" : isToday ? "text-amber-400 font-semibold" : "text-outline"
-                              )}>
-                                • {isOverdue ? `${Math.abs(daysUntil)}d atraso` : isToday ? 'Hoje' : `${daysUntil}d`}
-                              </span>
-                            )}
-                          </div>
-                          {task.fatal_date && task.ideal_date && task.fatal_date !== task.ideal_date && (
-                            <span className="text-[10px] text-outline">
-                              Fatal: {new Date(task.fatal_date + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
-                            </span>
-                          )}
-                        </div>
-                      </td>
-
-                      {/* Descrição */}
-                      <td className="px-6 py-3 max-w-[220px]">
-                        <p className="text-xs text-on-surface font-medium line-clamp-2 leading-relaxed">{task.description}</p>
-                      </td>
-
-                      {/* Cliente */}
-                      <td className="px-6 py-3">
-                        <span className="text-xs text-on-surface-variant font-medium truncate block max-w-[140px]">
-                          {task.client_name || proc?.clients?.name || '—'}
-                        </span>
-                      </td>
-
-                      {/* Processo */}
-                      <td className="px-6 py-3">
-                        <div className="flex flex-col">
-                          <span className="text-[11px] text-on-surface font-mono font-medium truncate max-w-[150px]">
-                            {task.process_number || proc?.number || '—'}
-                          </span>
-                          {(proc?.vara || proc?.comarca) && (
-                            <span className="text-[10px] text-outline truncate max-w-[150px]">
-                              {[proc?.vara, proc?.comarca].filter(Boolean).join(' · ')}
-                            </span>
-                          )}
-                        </div>
-                      </td>
-
-                      {/* Tipo */}
-                      <td className="px-6 py-3">
-                        {task.task_type && (
-                          <span className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-surface-container-highest text-on-surface-variant/90 border border-outline-variant/10">
-                            {task.task_type}
-                          </span>
-                        )}
-                      </td>
-
-                      {/* Responsável */}
-                      <td className="px-6 py-3">
-                        <span className="text-xs text-on-surface-variant font-medium truncate block max-w-[110px]">
-                          {task.responsible?.split(',')[0]?.trim() || '—'}
-                        </span>
-                      </td>
-
-                      {/* Ações */}
-                      <td className="px-6 py-3 text-right">
-                        <div className="flex items-center justify-end opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button 
-                            onClick={(e) => { e.stopPropagation(); toggleTaskComplete(task.id, task.status); }}
-                            className="p-1.5 hover:bg-emerald-500/10 text-outline hover:text-emerald-500 rounded-lg transition-all"
-                            title="Concluir Demanda"
-                          >
-                            <CheckCircle2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    );
-  };
-
-  // ─── Widget order with localStorage persistence ───────────────────
-  const [widgetOrder, setWidgetOrder] = useState<string[]>(getSavedOrder);
-  const [isDragging, setIsDragging] = useState(false);
-
-  function handleReorder(newOrder: string[]) {
-    setWidgetOrder(newOrder);
-    saveOrder(newOrder);
-  }
-
-  function resetLayout() {
-    setWidgetOrder(DEFAULT_ORDER);
-    saveOrder(DEFAULT_ORDER);
-  }
-
-  // ─── Widget renderers ───────────────────────────────────────────────
-  const widgetContent: Record<string, React.ReactNode> = {
-    stats: (
-      <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-surface-container-low p-6 rounded-2xl border-l-4 border-secondary flex flex-col justify-between">
-            <span className="text-outline text-xs uppercase tracking-widest font-semibold">Em Monitoramento</span>
-            <div className="mt-4">
-              <h3 className="text-4xl font-headline font-black text-on-surface">{activeProcessesCount}</h3>
-              <p className="text-secondary text-sm font-medium mt-1 flex items-center gap-1">
-                <TrendingUp className="w-4 h-4" />
-                Processos em acompanhamento
-              </p>
-            </div>
-          </div>
-
-          <div className="bg-surface-container-low p-6 rounded-2xl border border-outline-variant/5 flex flex-col justify-between">
-            <span className="text-outline text-xs uppercase tracking-widest font-semibold">Audiências do Dia</span>
-            <div className="mt-4">
-              <h3 className="text-3xl font-headline font-bold text-on-surface">{todayEventsCount.toString().padStart(2, '0')}</h3>
-              <p className="text-on-surface-variant text-sm mt-1">Agendadas para hoje</p>
-            </div>
-          </div>
-
-          <div className="bg-surface-container-low p-6 rounded-2xl border border-outline-variant/5 flex flex-col justify-between">
-            <span className="text-outline text-xs uppercase tracking-widest font-semibold">Tarefas Pendentes</span>
-            <div className="mt-4">
-              <h3 className="text-3xl font-headline font-bold text-error">{pendingTasks.length.toString().padStart(2, '0')}</h3>
-              <p className="text-on-surface-variant text-sm mt-1">
-                {upcomingDeadlines.length > 0 ? `${upcomingDeadlines.length} com prazo próximo` : 'Nenhum prazo próximo'}
-              </p>
-            </div>
-          </div>
-        </section>
-    ),
-
-
-    agenda_and_activities: (
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* AGENDA / CALENDÁRIO */}
-        <div className="lg:col-span-5 bg-surface-container-low p-5 rounded-3xl shadow-xl flex flex-col border border-outline-variant/10">
-          <div className="flex items-center justify-between mb-4">
-            <h4 className="font-headline font-bold text-sm text-on-surface">Calendário de Prazos</h4>
-            <div className="flex items-center gap-1">
-              <button onClick={handlePrevMonth} className="p-1 hover:bg-surface-container-high rounded-lg text-on-surface-variant transition-colors"><ChevronLeft className="w-4 h-4" /></button>
-              <span className="text-[10px] font-bold w-20 text-center uppercase tracking-wide">{monthNames[currentMonth.getMonth()].substring(0,3)} {currentMonth.getFullYear()}</span>
-              <button onClick={handleNextMonth} className="p-1 hover:bg-surface-container-high rounded-lg text-on-surface-variant transition-colors"><ChevronRight className="w-4 h-4" /></button>
-            </div>
-          </div>
-          
-          <div className="grid grid-cols-7 gap-0.5 text-center mb-2">
-            {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map(d => (
-              <span key={d} className="text-[8px] font-black text-outline uppercase tracking-widest">{d}</span>
-            ))}
-          </div>
-          
-          <div className="grid grid-cols-7 gap-0.5">
-            {Array.from({ length: firstDay }).map((_, i) => (
-              <div key={`empty-${i}`} className="aspect-square" />
-            ))}
-            {Array.from({ length: daysInMonth }).map((_, i) => {
-              const day = i + 1;
-              const dateStr = `${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-              const dayTasks = tasks.filter(t => t.status !== 'Concluída' && (t.fatal_date === dateStr || t.ideal_date === dateStr));
-              const hasFatal = dayTasks.some(t => t.fatal_date === dateStr);
-              const hasIdeal = dayTasks.some(t => t.ideal_date === dateStr);
-              const isSelected = selectedDate === dateStr;
-              
-              const isToday = new Date().toISOString().split('T')[0] === dateStr;
-
-              return (
-                <button
-                  key={day}
-                  onClick={() => setSelectedDate(isSelected ? null : dateStr)}
-                  className={cn(
-                    "aspect-square rounded-lg flex flex-col items-center justify-center relative transition-all border",
-                    isSelected 
-                      ? "bg-secondary text-on-secondary border-secondary scale-110 z-10 shadow-lg" 
-                      : isToday 
-                        ? "bg-surface-container-highest border-secondary/30 text-secondary font-black"
-                        : "bg-surface-container-low border-transparent hover:border-outline-variant/30 text-on-surface",
-                    dayTasks.length > 0 && !isSelected && "font-bold text-on-surface bg-surface-container-highest shadow-sm"
-                  )}
-                >
-                  <span className="text-[11px]">{day}</span>
-                  <div className="flex gap-0.5 absolute bottom-1">
-                    {hasFatal && <span className={cn("w-1 h-1 rounded-full", isSelected ? "bg-white" : "bg-error")} />}
-                    {hasIdeal && !hasFatal && <span className={cn("w-1 h-1 rounded-full", isSelected ? "bg-white" : "bg-emerald-400")} />}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="mt-3 pt-3 border-t border-outline-variant/10 min-h-[120px] flex flex-col">
-          {selectedDate ? (
-            <div className="animate-in fade-in flex-1 flex flex-col">
-              <span className="text-[9px] uppercase tracking-widest text-secondary font-black mb-2 block">
-                Prazos para {new Date(selectedDate + 'T00:00:00').toLocaleDateString('pt-BR')}
-              </span>
-              <div className="space-y-1.5 overflow-y-auto custom-scrollbar pr-1 max-h-[150px]">
-                {tasks.filter(t => t.fatal_date === selectedDate || t.ideal_date === selectedDate).map(t => {
-                  const isFatal = t.fatal_date === selectedDate;
-                  const isCompleted = t.status === 'Concluída';
-                  return (
-                    <div key={t.id} className={cn(
-                      "flex items-center justify-between p-2 rounded-lg border transition-all hover:shadow-sm",
-                      isCompleted ? "opacity-50 line-through bg-surface" : "bg-surface-container-highest",
-                      isFatal ? "border-error/20" : "border-emerald-500/20"
-                    )}>
-                      <div className="min-w-0 pr-2">
-                        <p className="text-[11px] font-bold text-on-surface truncate">{t.description}</p>
-                        <p className="text-[9px] text-on-surface-variant mt-0.5">{t.client_name || 'Sem cliente'}</p>
-                      </div>
-                    </div>
-                  );
-                })}
-                {tasks.filter(t => t.fatal_date === selectedDate || t.ideal_date === selectedDate).length === 0 && (
-                  <div className="flex flex-col items-center justify-center py-2 text-outline opacity-60">
-                    <p className="text-[10px] font-medium">Dia livre.</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          ) : (
-            <div className="flex-1 flex flex-col items-center justify-center opacity-50">
-               <CalendarClock className="w-6 h-6 mb-2 text-outline" />
-               <p className="text-[10px] font-medium text-on-surface-variant text-center px-2">Selecione uma data no calendário para ver as tarefas associadas.</p>
-            </div>
-          )}
-          </div>
-        </div>
-
-        {/* ATIVIDADES RECENTES */}
-        <div className="lg:col-span-7 bg-surface-container-low p-5 rounded-3xl shadow-xl flex flex-col h-full border border-outline-variant/10">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex flex-col gap-0.5">
-              <h4 className="text-sm font-headline font-bold text-on-surface tracking-tight">Atividades Recentes</h4>
-              <p className="text-[9px] text-outline font-medium uppercase tracking-widest">Histórico de Conclusão</p>
-            </div>
-            {totalCompletedCount > 0 && (
-              <span className="text-[10px] font-bold text-secondary bg-secondary/10 px-2 py-1 rounded-lg">
-                {totalCompletedCount} concluída{totalCompletedCount > 1 ? 's' : ''}
-              </span>
-            )}
-          </div>
-
-          {completedTasks.length === 0 ? (
-            <div className="flex-1 flex items-center justify-center py-10 bg-surface-container-high/20 rounded-xl border border-dashed border-outline-variant/10">
-              <div className="text-center">
-                <CheckCircle2 className="w-6 h-6 text-outline opacity-30 mx-auto mb-2" />
-                <p className="text-on-surface-variant text-xs font-medium">Nenhuma atividade registrada.</p>
-              </div>
-            </div>
-          ) : (
-            <div className="flex-1 overflow-y-auto custom-scrollbar pr-2">
-              <div className="activities-container-modern">
-                {completedTasks.map((task, i) => {
-                  const completedAt = new Date(task.updated_at);
-                  const now = new Date();
-                  const diffMs = now.getTime() - completedAt.getTime();
-                  const diffMins = Math.floor(diffMs / 60000);
-                  const diffHours = Math.floor(diffMs / 3600000);
-                  const diffDays = Math.floor(diffMs / 86400000);
-                  
-                  let timeAgo = '';
-                  if (diffMins < 1) timeAgo = 'Agora';
-                  else if (diffMins < 60) timeAgo = `${diffMins}m`;
-                  else if (diffHours < 24) timeAgo = `${diffHours}h`;
-                  else timeAgo = `${diffDays}d`;
-
-                  return (
-                    <div 
-                      key={task.id} 
-                      className={cn("activity-item-modern", i === 0 && "recent")}
-                    >
-                      <div className="activity-node-modern">
-                        {i === 0 && <Check className="w-2.5 h-2.5 text-on-secondary" strokeWidth={4} />}
-                      </div>
-                      
-                      <div className="activity-card-modern p-3">
-                        <div className="activity-header-modern mb-1">
-                          <span className="activity-tag-modern text-[9px] py-0.5 px-1.5">Tarefa Concluída</span>
-                          
-                          <div className="flex items-center gap-2 ml-auto">
-                            <span className="activity-time-modern text-[10px]">{timeAgo}</span>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                toggleTaskComplete(task.id, task.status);
-                              }}
-                              disabled={localSubmitting === task.id}
-                              className={cn("activity-reopen-btn-inline text-[10px]", localSubmitting === task.id && "pulse")}
-                              title="Reabrir Tarefa"
-                            >
-                              {localSubmitting === task.id ? (
-                                <Loader2 className="w-3 h-3 animate-spin" />
-                              ) : (
-                                <RotateCcw className="w-3 h-3" />
-                              )}
-                              <span className="hidden sm:inline">Restaurar</span>
-                            </button>
-                          </div>
-                        </div>
-                        
-                        <p className="activity-desc-modern text-[11px] mb-2">{task.description}</p>
-                        
-                        <div className="activity-meta-modern mt-0">
-                          <div className="activity-meta-item text-[10px]">
-                            <div className="avatar-modern" style={{ width: '14px', height: '14px', fontSize: '7px' }}>
-                              {task.responsible?.charAt(0).toUpperCase() || 'U'}
-                            </div>
-                            <span>{task.responsible?.split(',')[0].trim()}</span>
-                          </div>
-                          <div className="activity-meta-item text-[10px]">
-                            <Users className="w-3 h-3" />
-                            <span>{task.client_name?.split(' ')[0]}</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    ),
-
-    deadlineTables: (
-        <div className="space-y-6">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-2">
-            <div className="flex items-center gap-3">
-              <h2 className="text-xl font-headline font-bold text-on-surface">Monitoramento de Prazos</h2>
-              <button onClick={() => setIsTaskModalOpen(true)} className="flex items-center gap-2 px-3 py-1 bg-secondary text-on-secondary rounded-lg text-[10px] font-black uppercase tracking-widest hover:scale-105 transition-transform">
-                <Plus className="w-3.5 h-3.5" />
-                Nova Tarefa
-              </button>
-            </div>
-            <div className="flex items-center gap-2">
-              {/* View mode toggle */}
-              <div className="flex bg-surface-container-low p-1 rounded-xl border border-outline-variant/10">
-                <button
-                  onClick={() => setDeadlineViewMode('lista')}
-                  className={cn(
-                    "flex items-center gap-1.5 px-3 py-1 rounded-lg text-[10px] font-bold transition-all",
-                    deadlineViewMode === 'lista' ? "bg-secondary text-on-secondary" : "text-outline hover:text-on-surface"
-                  )}
-                >
-                  <AlignLeft className="w-3 h-3" /> Lista
-                </button>
-                <button
-                  onClick={() => setDeadlineViewMode('tabela')}
-                  className={cn(
-                    "flex items-center gap-1.5 px-3 py-1 rounded-lg text-[10px] font-bold transition-all",
-                    deadlineViewMode === 'tabela' ? "bg-secondary text-on-secondary" : "text-outline hover:text-on-surface"
-                  )}
-                >
-                  <LayoutGrid className="w-3 h-3" /> Tabela
-                </button>
-              </div>
-              {/* Category filter */}
-              <div className="flex bg-surface-container-low p-1 rounded-xl border border-outline-variant/10">
-                <button 
-                  onClick={() => setDeadlineFilter('all')}
-                  className={cn(
-                    "px-3 py-1 rounded-lg text-[10px] font-bold transition-all",
-                    deadlineFilter === 'all' ? "bg-secondary text-on-secondary" : "text-outline hover:text-on-surface"
-                  )}
-                >
-                  Todos
-                </button>
-                <button 
-                  onClick={() => setDeadlineFilter('atrasados')}
-                  className={cn(
-                    "px-3 py-1 rounded-lg text-[10px] font-bold transition-all",
-                    deadlineFilter === 'atrasados' ? "bg-error text-white" : "text-outline hover:text-on-surface"
-                  )}
-                >
-                  Atrasados
-                </button>
-                <button 
-                  onClick={() => setDeadlineFilter('revisoes')}
-                  className={cn(
-                    "px-3 py-1 rounded-lg text-[10px] font-bold transition-all",
-                    deadlineFilter === 'revisoes' ? "bg-amber-500 text-white" : "text-outline hover:text-on-surface"
-                  )}
-                >
-                  Acompanhamentos
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Person Filter — visible only to Admins and Advogados */}
-          {isAdminOrAdv && allProfiles.length > 0 && (
-            <div className="bg-surface-container-low border border-outline-variant/10 rounded-2xl p-4 flex flex-col gap-3">
-              <div className="flex items-center gap-2 mb-1">
-                <Filter className="w-3.5 h-3.5 text-secondary" />
-                <span className="text-[10px] font-black uppercase tracking-widest text-outline">Filtrar por Pessoa</span>
-                {(personFilter !== 'all' || personRoleFilter !== 'all') && (
-                  <button
-                    onClick={() => { setPersonFilter('all'); setPersonRoleFilter('all'); }}
-                    className="ml-auto text-[9px] font-bold text-outline hover:text-error flex items-center gap-1 transition-colors"
-                  >
-                    <X className="w-3 h-3" /> Limpar filtro
-                  </button>
-                )}
-              </div>
-              {/* Role filter chips */}
-              <div className="flex flex-wrap gap-2">
-                {[
-                  { id: 'all', label: 'Todos' },
-                  { id: 'Administrador', label: 'Administradores' },
-                  { id: 'Advogado', label: 'Advogados' },
-                  { id: 'Estagiário', label: 'Estagiários' },
-                ].map(roleOpt => {
-                  const hasRole = roleOpt.id === 'all' ? true : allProfiles.some(p => p.role === roleOpt.id);
-                  if (!hasRole && roleOpt.id !== 'all') return null;
-                  return (
-                    <button
-                      key={roleOpt.id}
-                      onClick={() => { setPersonRoleFilter(roleOpt.id); setPersonFilter('all'); }}
-                      className={cn(
-                        "px-3 py-1.5 rounded-xl text-[10px] font-bold transition-all border",
-                        personRoleFilter === roleOpt.id
-                          ? "bg-secondary text-on-secondary border-secondary shadow-sm"
-                          : "bg-surface-container-high text-outline border-outline-variant/20 hover:text-on-surface hover:border-outline-variant/40"
-                      )}
-                    >
-                      {roleOpt.label}
-                      {roleOpt.id !== 'all' && (
-                        <span className="ml-1.5 opacity-60">{allProfiles.filter(p => p.role === roleOpt.id).length}</span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-              {/* Individual person chips */}
-              {(() => {
-                const profilesToShow = personRoleFilter === 'all' 
-                  ? allProfiles 
-                  : allProfiles.filter(p => p.role === personRoleFilter);
-                return (
-                  <div className="flex flex-wrap gap-2">
-                    {profilesToShow.map(profile => (
-                      <button
-                        key={profile.id}
-                        onClick={() => setPersonFilter(personFilter === profile.name ? 'all' : profile.name)}
-                        className={cn(
-                          "flex items-center gap-2 px-3 py-1.5 rounded-xl text-[10px] font-bold transition-all border",
-                          personFilter === profile.name
-                            ? "bg-secondary/20 text-secondary border-secondary/40 ring-1 ring-secondary/30"
-                            : "bg-surface-container text-on-surface-variant border-outline-variant/10 hover:border-secondary/20 hover:text-on-surface"
-                        )}
-                      >
-                        <span className="w-5 h-5 rounded-full bg-secondary/20 text-secondary flex items-center justify-center font-black text-[9px] shrink-0">
-                          {profile.name?.charAt(0).toUpperCase()}
-                        </span>
-                        {profile.name}
-                        <span className={cn(
-                          "text-[9px] px-1.5 py-0.5 rounded-md font-black uppercase tracking-tight",
-                          profile.role === 'Administrador' ? "bg-purple-500/10 text-purple-400" :
-                          profile.role?.startsWith('Advogado') ? "bg-secondary/10 text-secondary" :
-                          "bg-emerald-500/10 text-emerald-400"
-                        )}>
-                          {profile.role === 'Administrador' ? 'Adm' : profile.role?.startsWith('Advogado') ? 'Adv' : 'Est'}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                );
-              })()}
-            </div>
-          )}
-
-          {/* Summary cards - Minimalist & Clean */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-            {[
-              { key: 'atrasados', label: 'Atrasados', count: filteredCategorizedTasks.atrasados.length, activeBorder: 'border-error/50 bg-error/5', dotColor: 'bg-error', textColor: 'text-error', icon: <AlertTriangle className="w-3.5 h-3.5 text-error" /> },
-              { key: 'hoje', label: 'Para Hoje', count: filteredCategorizedTasks.hoje.length, activeBorder: 'border-secondary/50 bg-secondary/5', dotColor: 'bg-secondary', textColor: 'text-secondary', icon: <Clock className="w-3.5 h-3.5 text-secondary" /> },
-              { key: 'em_dia', label: 'Em Dia', count: filteredCategorizedTasks.em_dia.length, activeBorder: 'border-emerald-500/50 bg-emerald-500/5', dotColor: 'bg-emerald-500', textColor: 'text-emerald-500', icon: <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> },
-              { key: 'revisoes', label: 'Acompanhamentos', count: filteredCategorizedTasks.revisoes_pendentes.length, activeBorder: 'border-amber-500/50 bg-amber-500/5', dotColor: 'bg-amber-500', textColor: 'text-amber-500', icon: <RotateCcw className="w-3.5 h-3.5 text-amber-500" /> },
-            ].map(({ key, label, count, activeBorder, dotColor, textColor, icon }) => {
-              const isSelected = deadlineFilter === key;
-              return (
-                <button
-                  key={key}
-                  onClick={() => {
-                    setDeadlineFilter(deadlineFilter === key ? 'all' : (key as any));
-                    if (deadlineViewMode === 'tabela') {
-                      setTableExpandedCategory(tableExpandedCategory === key ? null : key);
-                    }
-                  }}
-                  className={cn(
-                    "bg-surface-container-low p-4 rounded-2xl border transition-all text-left flex flex-col justify-between hover:bg-surface-container-high/30",
-                    isSelected ? activeBorder : "border-outline-variant/10"
-                  )}
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-semibold text-outline flex items-center gap-1.5">
-                      <span className={cn("w-1.5 h-1.5 rounded-full", dotColor)} />
-                      {label}
-                    </span>
-                    {icon}
-                  </div>
-                  <div className="flex items-baseline justify-between">
-                    <span className={cn("text-2xl font-headline font-bold", isSelected ? textColor : "text-on-surface")}>
-                      {count}
-                    </span>
-                    {isSelected && (
-                      <span className="text-[10px] text-outline font-medium">Filtrado</span>
-                    )}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* TABLE MODE: compact expandable panels per category */}
-          {deadlineViewMode === 'tabela' && (
-            <div className="space-y-3">
-              {[
-                { key: 'atrasados', label: 'Demandas em Atraso', tasks: filteredCategorizedTasks.atrasados, color: 'bg-error/10 text-error', icon: <AlertTriangle className="w-4 h-4" /> },
-                { key: 'revisoes', label: 'Acompanhamentos Pendentes', tasks: filteredCategorizedTasks.revisoes_pendentes, color: 'bg-amber-500/10 text-amber-500', icon: <RotateCcw className="w-4 h-4" /> },
-                { key: 'hoje', label: 'Vencendo Hoje', tasks: filteredCategorizedTasks.hoje, color: 'bg-secondary/10 text-secondary', icon: <Clock className="w-4 h-4" /> },
-                { key: 'em_dia', label: 'Prazos em Dia', tasks: filteredCategorizedTasks.em_dia, color: 'bg-emerald-500/10 text-emerald-500', icon: <CheckCircle2 className="w-4 h-4" /> },
-              ].filter(({ key }) => deadlineFilter === 'all' || deadlineFilter === key || (deadlineFilter === 'revisoes' && key === 'revisoes'))
-               .map(({ key, label, tasks, color, icon }) => {
-                const isExpanded = tableExpandedCategory === key;
-                return (
-                  <div key={key} className="bg-surface-container-low rounded-2xl border border-outline-variant/10 overflow-hidden shadow-sm">
-                    <button
-                      onClick={() => setTableExpandedCategory(isExpanded ? null : key)}
-                      className="w-full px-6 py-3.5 flex items-center justify-between hover:bg-surface-container-high/30 transition-colors"
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <div className={cn("p-1.5 rounded-lg", color)}>{icon}</div>
-                        <span className="font-headline font-bold text-sm text-on-surface">{label}</span>
-                        <span className="px-2 py-0.5 bg-surface-container-highest rounded-full text-[11px] font-semibold text-outline">{tasks.length}</span>
-                      </div>
-                      <ChevronDown className={cn("w-4 h-4 text-outline transition-transform duration-200", isExpanded && "rotate-180")} />
-                    </button>
-                    {isExpanded && tasks.length > 0 && (
-                      <div className="border-t border-outline-variant/10 overflow-x-auto custom-scrollbar">
-                        <table className="w-full text-left border-collapse">
-                          <thead>
-                            <tr className="text-[10px] uppercase tracking-wider text-outline font-semibold border-b border-outline-variant/5">
-                              <th className="px-6 py-3 w-[160px]">Prazo</th>
-                              <th className="px-6 py-3">Descrição</th>
-                              <th className="px-6 py-3">Cliente</th>
-                              <th className="px-6 py-3">Processo</th>
-                              <th className="px-6 py-3">Responsável</th>
-                              <th className="px-6 py-3 text-right w-[60px]"></th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-outline-variant/5">
-                            {tasks.map(task => {
-                              const mainDate = task.ideal_date || task.fatal_date;
-                              const daysUntil = mainDate ? getDaysUntil(mainDate) : null;
-                              const isOverdue = daysUntil !== null && daysUntil < 0;
-                              const isToday = daysUntil === 0;
-                              const proc = task.processes;
-
-                              return (
-                                <tr key={task.id} onClick={() => setSelectedTaskDetail(task)} className="hover:bg-surface-container-high/40 transition-colors group cursor-pointer text-xs">
-                                  <td className="px-6 py-3">
-                                    <div className="flex flex-col gap-0.5">
-                                      <div className="flex items-center gap-1.5">
-                                        <span className={cn(
-                                          "font-bold text-xs",
-                                          isOverdue ? "text-error" : isToday ? "text-amber-400" : "text-on-surface"
-                                        )}>
-                                          {mainDate ? new Date(mainDate + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : '—'}
-                                        </span>
-                                        {daysUntil !== null && (
-                                          <span className={cn(
-                                            "text-[10px] font-medium",
-                                            isOverdue ? "text-error" : isToday ? "text-amber-400 font-semibold" : "text-outline"
-                                          )}>
-                                            • {isOverdue ? `${Math.abs(daysUntil)}d atraso` : isToday ? 'Hoje' : `${daysUntil}d`}
-                                          </span>
-                                        )}
-                                      </div>
-                                      {task.fatal_date && task.ideal_date && task.fatal_date !== task.ideal_date && (
-                                        <span className="text-[10px] text-outline">
-                                          Fatal: {new Date(task.fatal_date + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
-                                        </span>
-                                      )}
-                                    </div>
-                                  </td>
-                                  <td className="px-6 py-3 max-w-[220px]"><p className="text-xs text-on-surface font-medium line-clamp-2 leading-relaxed">{task.description}</p></td>
-                                  <td className="px-6 py-3"><span className="text-xs text-on-surface-variant font-medium truncate block max-w-[140px]">{task.client_name || proc?.clients?.name || '—'}</span></td>
-                                  <td className="px-6 py-3"><span className="text-[11px] text-on-surface font-mono font-medium truncate block max-w-[150px]">{task.process_number || proc?.number || '—'}</span></td>
-                                  <td className="px-6 py-3"><span className="text-xs text-on-surface-variant font-medium truncate block max-w-[110px]">{task.responsible?.split(',')[0]?.trim() || '—'}</span></td>
-                                  <td className="px-6 py-3 text-right">
-                                    <div className="flex items-center justify-end opacity-0 group-hover:opacity-100 transition-opacity">
-                                      <button onClick={(e) => { e.stopPropagation(); toggleTaskComplete(task.id, task.status); }} className="p-1.5 hover:bg-emerald-500/10 text-outline hover:text-emerald-500 rounded-lg transition-all" title="Concluir">
-                                        <CheckCircle2 className="w-4 h-4" />
-                                      </button>
-                                    </div>
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                    {isExpanded && tasks.length === 0 && (
-                      <p className="px-6 py-4 text-xs text-outline italic text-center border-t border-outline-variant/10">Nenhuma demanda nesta categoria.</p>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {/* LIST MODE: full expanded tables */}
-          {deadlineViewMode === 'lista' && (
-            <div className="grid grid-cols-1 xl:grid-cols-1 gap-6">
-              {(deadlineFilter === 'all' || deadlineFilter === 'atrasados') && renderDeadlineTable(
-                filteredCategorizedTasks.atrasados, 
-                "Demandas em Atraso", 
-                "bg-error/10 text-error", 
-                <AlertTriangle className="w-4 h-4" />,
-                'atrasados'
-              )}
-
-              {(deadlineFilter === 'all' || deadlineFilter === 'revisoes') && filteredCategorizedTasks.revisoes_pendentes.length > 0 && renderDeadlineTable(
-                filteredCategorizedTasks.revisoes_pendentes, 
-                "Acompanhamentos Pendentes", 
-                "bg-amber-500/10 text-amber-500", 
-                <RotateCcw className="w-4 h-4" />,
-                'revisoes'
-              )}
-              
-              {(deadlineFilter === 'all' || deadlineFilter === 'hoje') && renderDeadlineTable(
-                filteredCategorizedTasks.hoje, 
-                "Vencendo Hoje", 
-                "bg-secondary/10 text-secondary", 
-                <Clock className="w-4 h-4" />,
-                'hoje'
-              )}
-
-              {(deadlineFilter === 'all' || deadlineFilter === 'em_dia') && renderDeadlineTable(
-                filteredCategorizedTasks.em_dia, 
-                "Prazos em Dia", 
-                "bg-emerald-500/10 text-emerald-500", 
-                <Calendar className="w-4 h-4" />,
-                'em_dia'
-              )}
-            </div>
-          )}
-        </div>
-    ),
-  };
-
-  // Build ordered widgets list
-  const widgets = widgetOrder.map(id => ({ id, content: widgetContent[id] })).filter(w => w.content);
-
-  // ─── Task Detail Modal ───────────────────────────────────────────────
+  // ─── Task Detail Modal (completo, com todas integrações) ───────────
   const TaskDetailModal = ({ task, onClose }: { task: any; onClose: () => void }) => {
     const proc = task.processes;
     const [editingDates, setEditingDates] = useState(false);
@@ -1184,7 +437,6 @@ export function Dashboard() {
       setLoadingTimeline(false);
     }
 
-    // Bloquear scroll do body enquanto o modal estiver aberto
     useEffect(() => {
       const originalOverflow = document.body.style.overflow;
       document.body.style.overflow = 'hidden';
@@ -1193,7 +445,6 @@ export function Dashboard() {
       };
     }, []);
 
-    // Load timeline on mount if applicable
     useEffect(() => {
       if (task.task_type === 'Acompanhamento de Processo') {
         fetchTimeline();
@@ -1202,40 +453,37 @@ export function Dashboard() {
 
     async function handleRegistrarAcompanhamento() {
       if (!acompanhamentoRelato.trim()) {
-        alert("Preencha o relato do acompanhamento.");
+        alert('Preencha o relato do acompanhamento.');
         return;
       }
       setSavingAcompanhamento(true);
-      
-      const { data: { user } } = await supabase.auth.getUser();
 
-      // Busca o nome do usuário logado para usar como responsável pelo registro
-      // (não o responsável pela tarefa, que pode ser outro usuário)
-      let registradoPor = userData?.name || null;
-      if (!registradoPor && user?.id) {
+      const userId = authUser?.id || (await supabase.auth.getSession()).data.session?.user?.id;
+      let registradoPor = userData?.name || authUser?.name || null;
+      if (!registradoPor && userId) {
         const { data: profileData } = await supabase
           .from('profiles')
           .select('name')
-          .eq('id', user.id)
+          .eq('id', userId)
           .single();
-        registradoPor = profileData?.name || user?.email || 'Sistema';
+        registradoPor = profileData?.name || 'Sistema';
       }
-      
-      // 1. Log the movement if process is linked
+
       if (proc?.id) {
-        await supabase.from('process_movements').insert([{
-           process_id: proc.id,
-           type: 'Andamento',
-           description: `[ACOMPANHAMENTO]: ${acompanhamentoRelato}`,
-           date: new Date().toISOString(),
-           responsible: registradoPor || 'Sistema',
-           user_id: user?.id
-        }]);
+        await supabase.from('process_movements').insert([
+          {
+            process_id: proc.id,
+            type: 'Andamento',
+            description: `[ACOMPANHAMENTO]: ${acompanhamentoRelato}`,
+            date: new Date().toISOString(),
+            responsible: registradoPor || 'Sistema',
+            user_id: userId,
+          },
+        ]);
       }
-      
+
       setAcompanhamentoRelato('');
       setSavingAcompanhamento(false);
-      // Refresh timeline after saving
       await fetchTimeline();
     }
 
@@ -1243,19 +491,24 @@ export function Dashboard() {
       setSavingDates(true);
       const { error } = await supabase
         .from('tasks')
-        .update({ 
-          fatal_date: fatalDate || null, 
+        .update({
+          fatal_date: fatalDate || null,
           ideal_date: idealDate || null,
-          updated_at: new Date().toISOString()
+          updated_at: new Date().toISOString(),
         })
         .eq('id', task.id);
-      
+
       if (!error) {
-        // Update local tasks state
-        setAllTasks(prev => prev.map(t => 
+        const nextTasks = allTasks.map((t) =>
           t.id === task.id ? { ...t, fatal_date: fatalDate || null, ideal_date: idealDate || null } : t
-        ));
+        );
+        setAllTasks(nextTasks);
         setSelectedTaskDetail({ ...task, fatal_date: fatalDate || null, ideal_date: idealDate || null });
+        setCached<DashboardCache>(CACHE_KEY, {
+          allTasks: nextTasks,
+          hearingsToday,
+          allProfiles,
+        });
         setDateSaved(true);
         setEditingDates(false);
         setTimeout(() => setDateSaved(false), 2000);
@@ -1272,33 +525,43 @@ export function Dashboard() {
           {/* Header */}
           <div className="px-6 sm:px-8 py-5 border-b border-outline-variant/10 bg-surface-container-high/30 flex items-start justify-between shrink-0">
             <div className="flex items-center gap-4">
-              <div className={cn(
-                "w-12 h-12 rounded-2xl flex items-center justify-center shrink-0",
-                currentDaysUntil !== null && currentDaysUntil < 0 ? "bg-error/10 text-error" :
-                currentDaysUntil === 0 ? "bg-secondary/10 text-secondary" :
-                "bg-emerald-500/10 text-emerald-500"
-              )}>
+              <div
+                className={cn(
+                  'w-12 h-12 rounded-2xl flex items-center justify-center shrink-0',
+                  currentDaysUntil !== null && currentDaysUntil < 0
+                    ? 'bg-error/10 text-error'
+                    : currentDaysUntil === 0
+                    ? 'bg-secondary/10 text-secondary'
+                    : 'bg-emerald-500/10 text-emerald-500'
+                )}
+              >
                 <Gavel className="w-6 h-6" />
               </div>
               <div>
-                <h3 className="font-headline font-bold text-on-surface text-lg leading-tight">Detalhes da Demanda</h3>
+                <h3 className="font-headline font-extrabold text-xl text-on-surface tracking-tight">
+                  Detalhes da Demanda
+                </h3>
                 {task.task_type && (
-                  <span className="inline-block mt-1 text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-secondary/10 text-secondary border border-secondary/15">
-                    {task.task_type}
+                  <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-secondary/15 text-secondary mt-1">
+                    <Tag className="w-2.5 h-2.5" /> {task.task_type}
                   </span>
                 )}
               </div>
             </div>
-            <button onClick={onClose} className="p-2 hover:bg-surface-container-highest rounded-xl text-outline hover:text-on-surface transition-colors">
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-surface-container-highest rounded-xl text-outline hover:text-on-surface transition-colors"
+            >
               <X className="w-5 h-5" />
             </button>
           </div>
 
           {/* Body */}
           <div className="px-6 sm:px-8 py-6 space-y-6 overflow-y-auto flex-1 custom-scrollbar">
-            {/* Description */}
             <div>
-              <label className="text-[9px] uppercase tracking-widest text-outline font-black block mb-1.5">Descrição</label>
+              <label className="text-[9px] uppercase tracking-widest text-outline font-black block mb-1.5">
+                Descrição
+              </label>
               <p className="text-sm text-on-surface font-medium leading-relaxed bg-surface-container-highest/50 p-4 rounded-2xl border border-outline-variant/5">
                 {task.description || '—'}
               </p>
@@ -1310,31 +573,35 @@ export function Dashboard() {
                 <span className="text-[9px] uppercase tracking-widest text-outline font-black">Prazos</span>
                 <div className="flex items-center gap-2">
                   {dateSaved && (
-                    <span className="text-[10px] text-emerald-500 font-bold flex items-center gap-1 animate-in fade-in">
+                    <span className="text-[10px] text-emerald-500 font-bold flex items-center gap-1">
                       <Check className="w-3 h-3" /> Salvo
                     </span>
                   )}
                   {editingDates ? (
                     <div className="flex items-center gap-1">
-                      <button 
+                      <button
                         onClick={handleSaveDates}
                         disabled={savingDates}
-                        className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 text-[10px] font-bold transition-all"
+                        className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 text-[10px] font-bold transition-colors"
                       >
                         {savingDates ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
                         Salvar
                       </button>
-                      <button 
-                        onClick={() => { setEditingDates(false); setFatalDate(task.fatal_date || ''); setIdealDate(task.ideal_date || ''); }}
-                        className="px-2.5 py-1 rounded-lg bg-surface-container-highest text-outline hover:text-on-surface text-[10px] font-bold transition-all"
+                      <button
+                        onClick={() => {
+                          setEditingDates(false);
+                          setFatalDate(task.fatal_date || '');
+                          setIdealDate(task.ideal_date || '');
+                        }}
+                        className="px-2.5 py-1 rounded-lg bg-surface-container-highest text-outline hover:text-on-surface text-[10px] font-bold transition-colors"
                       >
                         Cancelar
                       </button>
                     </div>
                   ) : (
-                    <button 
+                    <button
                       onClick={() => setEditingDates(true)}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-secondary/10 text-secondary hover:bg-secondary/20 text-[10px] font-bold transition-all"
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-secondary/10 text-secondary hover:bg-secondary/20 text-[10px] font-bold transition-colors"
                     >
                       <Pencil className="w-3 h-3" /> Alterar Prazos
                     </button>
@@ -1342,43 +609,79 @@ export function Dashboard() {
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <div className={cn("p-4 rounded-2xl border transition-all", editingDates ? "bg-surface-container-highest border-secondary/20" : "bg-surface-container-highest/50 border-outline-variant/5")}>
+                <div
+                  className={cn(
+                    'p-4 rounded-2xl border',
+                    editingDates
+                      ? 'bg-surface-container-highest border-secondary/20'
+                      : 'bg-surface-container-highest/50 border-outline-variant/5'
+                  )}
+                >
                   <label className="text-[9px] uppercase tracking-widest text-outline font-black flex items-center gap-1.5 mb-1.5">
                     <AlertTriangle className="w-3 h-3" /> Prazo Fatal
                   </label>
                   {editingDates ? (
-                    <input 
-                      type="date" 
-                      value={fatalDate} 
+                    <input
+                      type="date"
+                      value={fatalDate}
                       onChange={(e) => setFatalDate(e.target.value)}
-                      className="w-full bg-surface-container-low border border-outline-variant/20 rounded-xl px-3 py-2 text-sm text-on-surface font-bold focus:border-secondary/40 focus:ring-2 focus:ring-secondary/10 outline-none transition-all"
+                      className="w-full bg-surface-container-low border border-outline-variant/20 rounded-xl px-3 py-2 text-sm text-on-surface font-bold focus:border-secondary/40 outline-none"
                     />
                   ) : (
                     <>
-                      <p className={cn("text-sm font-bold", currentDaysUntil !== null && currentDaysUntil < 0 ? "text-error" : currentDaysUntil === 0 ? "text-secondary" : "text-on-surface")}>
+                      <p
+                        className={cn(
+                          'text-sm font-bold tabular-nums',
+                          currentDaysUntil !== null && currentDaysUntil < 0
+                            ? 'text-error'
+                            : currentDaysUntil === 0
+                            ? 'text-secondary'
+                            : 'text-on-surface'
+                        )}
+                      >
                         {fatalDate ? new Date(fatalDate + 'T00:00:00').toLocaleDateString('pt-BR') : '—'}
                       </p>
                       {currentDaysUntil !== null && (
-                        <span className={cn("text-[10px] font-bold", currentDaysUntil < 0 ? "text-error" : currentDaysUntil === 0 ? "text-secondary" : "text-emerald-500")}>
-                          {currentDaysUntil < 0 ? `${Math.abs(currentDaysUntil)} dia(s) em atraso` : currentDaysUntil === 0 ? 'Vence hoje' : `Faltam ${currentDaysUntil} dia(s)`}
+                        <span
+                          className={cn(
+                            'text-[10px] font-bold',
+                            currentDaysUntil < 0
+                              ? 'text-error'
+                              : currentDaysUntil === 0
+                              ? 'text-secondary'
+                              : 'text-emerald-500'
+                          )}
+                        >
+                          {currentDaysUntil < 0
+                            ? `${Math.abs(currentDaysUntil)} dia(s) em atraso`
+                            : currentDaysUntil === 0
+                            ? 'Vence hoje'
+                            : `Faltam ${currentDaysUntil} dia(s)`}
                         </span>
                       )}
                     </>
                   )}
                 </div>
-                <div className={cn("p-4 rounded-2xl border transition-all", editingDates ? "bg-surface-container-highest border-secondary/20" : "bg-surface-container-highest/50 border-outline-variant/5")}>
+                <div
+                  className={cn(
+                    'p-4 rounded-2xl border',
+                    editingDates
+                      ? 'bg-surface-container-highest border-secondary/20'
+                      : 'bg-surface-container-highest/50 border-outline-variant/5'
+                  )}
+                >
                   <label className="text-[9px] uppercase tracking-widest text-outline font-black flex items-center gap-1.5 mb-1.5">
                     <CalendarClock className="w-3 h-3" /> Meta Ideal
                   </label>
                   {editingDates ? (
-                    <input 
-                      type="date" 
-                      value={idealDate} 
+                    <input
+                      type="date"
+                      value={idealDate}
                       onChange={(e) => setIdealDate(e.target.value)}
-                      className="w-full bg-surface-container-low border border-outline-variant/20 rounded-xl px-3 py-2 text-sm text-on-surface font-bold focus:border-secondary/40 focus:ring-2 focus:ring-secondary/10 outline-none transition-all"
+                      className="w-full bg-surface-container-low border border-outline-variant/20 rounded-xl px-3 py-2 text-sm text-on-surface font-bold focus:border-secondary/40 outline-none"
                     />
                   ) : (
-                    <p className="text-sm font-bold text-on-surface">
+                    <p className="text-sm font-bold text-on-surface tabular-nums">
                       {idealDate ? new Date(idealDate + 'T00:00:00').toLocaleDateString('pt-BR') : '—'}
                     </p>
                   )}
@@ -1405,119 +708,98 @@ export function Dashboard() {
             {/* Priority */}
             {task.priority && (
               <div className="bg-surface-container-highest/50 p-4 rounded-2xl border border-outline-variant/5">
-                <label className="text-[9px] uppercase tracking-widest text-outline font-black flex items-center gap-1.5 mb-1.5">
-                  <Tag className="w-3 h-3" /> Prioridade
+                <label className="text-[9px] uppercase tracking-widest text-outline font-black block mb-1.5">
+                  Prioridade
                 </label>
-                <span className={cn(
-                  "inline-block text-xs font-bold px-3 py-1 rounded-lg",
-                  priorityColors[task.priority] || 'bg-surface-container-highest text-outline'
-                )}>
+                <span
+                  className={cn(
+                    'text-xs font-bold px-3 py-1 rounded-lg',
+                    task.priority === 'Alta'
+                      ? 'bg-error/10 text-error'
+                      : task.priority === 'Média'
+                      ? 'bg-amber-500/10 text-amber-400'
+                      : 'bg-emerald-500/10 text-emerald-400'
+                  )}
+                >
                   {task.priority}
                 </span>
               </div>
             )}
 
-            {/* Acompanhamento Block */}
+            {/* Acompanhamento de Processo */}
             {task.task_type === 'Acompanhamento de Processo' && (
-              <div className="space-y-4">
-                {/* Input form */}
-                <div className="bg-surface-container-highest/50 p-5 rounded-2xl border border-amber-500/30 ring-1 ring-amber-500/10">
-                  <h4 className="text-[10px] uppercase tracking-widest text-amber-500 font-black mb-3 flex items-center gap-1.5">
-                    <RotateCcw className="w-3.5 h-3.5" /> Registrar Acompanhamento
-                  </h4>
-                  
-                  <textarea 
-                    value={acompanhamentoRelato}
-                    onChange={(e) => setAcompanhamentoRelato(e.target.value)}
-                    placeholder="Relate o que foi verificado neste acompanhamento..."
-                    className="w-full bg-surface-container-low border border-outline-variant/20 rounded-xl p-3 text-sm mb-3 focus:border-amber-500/40 focus:ring-2 focus:ring-amber-500/10 outline-none transition-all"
-                    rows={3}
-                  />
-                  
-                  <div className="flex justify-end">
-                    <button 
-                      onClick={handleRegistrarAcompanhamento}
-                      disabled={savingAcompanhamento}
-                      className="bg-amber-500 text-white px-5 py-2.5 rounded-xl font-bold text-xs hover:bg-amber-600 transition-all flex items-center gap-2"
-                    >
-                      {savingAcompanhamento ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                      Salvar Relato
-                    </button>
-                  </div>
+              <div className="bg-surface-container-highest/50 p-5 rounded-2xl border border-secondary/20 space-y-4">
+                <label className="text-[10px] uppercase tracking-widest text-secondary font-black flex items-center gap-1.5">
+                  <RotateCcw className="w-3.5 h-3.5" /> Registrar Acompanhamento
+                </label>
+                <textarea
+                  value={acompanhamentoRelato}
+                  onChange={(e) => setAcompanhamentoRelato(e.target.value)}
+                  placeholder="Relate o que foi verificado neste acompanhamento..."
+                  rows={3}
+                  className="w-full bg-surface-container-low border border-outline-variant/20 rounded-xl px-4 py-3 text-sm text-on-surface placeholder:text-outline/50 focus:border-secondary/40 outline-none resize-none"
+                />
+                <div className="flex justify-end">
+                  <button
+                    onClick={handleRegistrarAcompanhamento}
+                    disabled={savingAcompanhamento}
+                    className="flex items-center gap-2 px-4 py-2 bg-secondary text-on-secondary text-xs font-bold rounded-xl hover:opacity-90 transition-opacity disabled:opacity-50"
+                  >
+                    {savingAcompanhamento ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                    Salvar Relato
+                  </button>
                 </div>
 
-                {/* Timeline */}
-                <div className="bg-surface-container-highest/30 rounded-2xl border border-outline-variant/10 overflow-hidden">
-                  <div className="px-5 py-3 border-b border-outline-variant/10 flex items-center justify-between">
-                    <h4 className="text-[10px] uppercase tracking-widest text-outline font-black flex items-center gap-1.5">
-                      <History className="w-3.5 h-3.5" /> Histórico de Acompanhamentos
-                    </h4>
-                    {loadingTimeline && <Loader2 className="w-3.5 h-3.5 text-outline animate-spin" />}
+                {loadingTimeline ? (
+                  <div className="flex items-center justify-center py-4 text-outline text-xs gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin text-secondary" /> Carregando histórico...
                   </div>
-
-                  {!loadingTimeline && timelineRecords.length === 0 && (
-                    <div className="px-5 py-6 text-center">
-                      <p className="text-xs text-outline italic">Nenhum acompanhamento registrado ainda.</p>
-                    </div>
-                  )}
-
-                  {timelineRecords.length > 0 && (
-                    <div className="px-5 py-4">
-                      <div className="relative">
-                        {/* Vertical line */}
-                        <div className="absolute left-[7px] top-2 bottom-2 w-px bg-amber-500/20" />
-                        
-                        <div className="space-y-4">
-                          {timelineRecords.map((record, idx) => {
-                            const relato = (record.description || '').replace(/^\[ACOMPANHAMENTO\]:\s*/, '');
-                            const date = new Date(record.date);
-                            const isFirst = idx === 0;
-                            return (
-                              <div key={record.id} className="flex gap-4 relative">
-                                {/* Node */}
-                                <div className={cn(
-                                  "w-3.5 h-3.5 rounded-full shrink-0 mt-0.5 ring-2 ring-surface-container-highest/80 z-10",
-                                  isFirst ? "bg-amber-500 ring-amber-500/30" : "bg-surface-container-high ring-outline-variant/30"
-                                )} />
-                                
-                                {/* Content */}
-                                <div className={cn(
-                                  "flex-1 rounded-xl p-3 border transition-all",
-                                  isFirst
-                                    ? "bg-amber-500/8 border-amber-500/20"
-                                    : "bg-surface-container-highest/40 border-outline-variant/10"
-                                )}>
-                                  <div className="flex items-center justify-between gap-2 mb-1.5">
-                                    <span className={cn(
-                                      "text-[9px] font-black uppercase tracking-widest",
-                                      isFirst ? "text-amber-500" : "text-outline"
-                                    )}>
-                                      {isFirst ? '● Mais recente' : `#${timelineRecords.length - idx}`}
-                                    </span>
-                                    <span className="text-[9px] text-outline font-mono">
-                                      {date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' })}
-                                      {' '}
-                                      {date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                                    </span>
-                                  </div>
-                                  <p className="text-xs text-on-surface leading-relaxed">{relato}</p>
-                                  {record.responsible && (
-                                    <div className="flex items-center gap-1 mt-2">
-                                      <div className="w-4 h-4 rounded-full bg-secondary/15 text-secondary flex items-center justify-center text-[8px] font-black shrink-0">
-                                        {record.responsible.charAt(0).toUpperCase()}
-                                      </div>
-                                      <span className="text-[9px] text-outline font-medium">{record.responsible.split(',')[0].trim()}</span>
-                                    </div>
-                                  )}
-                                </div>
+                ) : (
+                  timelineRecords.length > 0 && (
+                    <div className="pt-4 border-t border-outline-variant/10 space-y-3">
+                      <span className="text-[9px] uppercase tracking-widest text-outline font-black flex items-center gap-1.5">
+                        <AlignLeft className="w-3 h-3" /> Linha do Tempo ({timelineRecords.length} registro(s))
+                      </span>
+                      <div className="space-y-3 pl-3 border-l-2 border-secondary/20 max-h-48 overflow-y-auto custom-scrollbar pr-2">
+                        {timelineRecords.map((record) => (
+                          <div key={record.id} className="relative pl-4">
+                            <div className="absolute -left-[21px] top-1.5 w-2.5 h-2.5 rounded-full bg-secondary ring-4 ring-surface-container-low" />
+                            <div className="bg-surface-container-low p-3 rounded-xl border border-outline-variant/10">
+                              <div className="flex items-center justify-between gap-2 mb-1">
+                                <span className="text-[10px] font-black text-secondary uppercase tracking-wider">
+                                  {new Date(record.date).toLocaleDateString('pt-BR', {
+                                    day: '2-digit',
+                                    month: 'short',
+                                    year: 'numeric',
+                                  })}
+                                </span>
+                                <span className="text-[10px] text-outline font-mono">
+                                  {new Date(record.date).toLocaleTimeString('pt-BR', {
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                  })}
+                                </span>
                               </div>
-                            );
-                          })}
-                        </div>
+                              <p className="text-xs text-on-surface leading-relaxed">
+                                {record.description.replace('[ACOMPANHAMENTO]: ', '')}
+                              </p>
+                              {record.responsible && (
+                                <div className="flex items-center gap-1 mt-2">
+                                  <div className="w-4 h-4 rounded-full bg-secondary/15 text-secondary flex items-center justify-center text-[8px] font-black shrink-0">
+                                    {record.responsible.charAt(0).toUpperCase()}
+                                  </div>
+                                  <span className="text-[9px] text-outline font-medium">
+                                    {record.responsible.split(',')[0].trim()}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
-                  )}
-                </div>
+                  )
+                )}
               </div>
             )}
 
@@ -1530,7 +812,7 @@ export function Dashboard() {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <span className="text-[9px] text-outline uppercase tracking-widest font-bold">Número</span>
-                    <p className="text-xs font-mono font-bold text-on-surface mt-0.5">{proc.number || '—'}</p>
+                    <p className="text-xs font-mono font-bold text-on-surface mt-0.5 tabular-nums">{proc.number || '—'}</p>
                   </div>
                   <div>
                     <span className="text-[9px] text-outline uppercase tracking-widest font-bold">Tribunal</span>
@@ -1570,8 +852,11 @@ export function Dashboard() {
                   )}
                 </div>
                 {proc.id && (
-                  <button 
-                    onClick={() => { onClose(); navigate(`/processos/${proc.id}`); }}
+                  <button
+                    onClick={() => {
+                      onClose();
+                      navigate(`/processos/${proc.id}`);
+                    }}
                     className="mt-2 flex items-center gap-2 text-secondary hover:text-secondary/80 text-[10px] font-black uppercase tracking-widest transition-colors"
                   >
                     <ArrowRight className="w-3.5 h-3.5" /> Ver Processo Completo
@@ -1583,15 +868,18 @@ export function Dashboard() {
 
           {/* Footer */}
           <div className="px-6 sm:px-8 py-4 border-t border-outline-variant/10 bg-surface-container-high/30 flex flex-wrap items-center justify-between gap-3 shrink-0">
-            <span className="text-[10px] text-outline uppercase tracking-widest font-bold">
+            <span className="text-[10px] text-outline uppercase tracking-widest font-bold tabular-nums">
               Criada em {new Date(task.created_at).toLocaleDateString('pt-BR')}
             </span>
             <div className="flex items-center gap-2 flex-wrap">
               {task.status !== 'Concluída' && task.process_id ? (
                 <>
                   <button
-                    onClick={() => { toggleTaskComplete(task.id, task.status, false); onClose(); }}
-                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 transition-all shrink-0"
+                    onClick={() => {
+                      toggleTaskComplete(task.id, task.status, false);
+                      onClose();
+                    }}
+                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 transition-colors shrink-0"
                     title="Conclui definitivamente esta demanda sem agendar novo acompanhamento"
                   >
                     <CheckCircle2 className="w-4 h-4" />
@@ -1605,7 +893,7 @@ export function Dashboard() {
                       setModalInitialTaskType('Acompanhamento de Processo');
                       setIsTaskModalOpen(true);
                     }}
-                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-amber-500/10 text-amber-500 hover:bg-amber-500/20 transition-all shrink-0"
+                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-amber-500/10 text-amber-500 hover:bg-amber-500/20 transition-colors shrink-0"
                     title="Conclui a demanda atual e abre para agendar o próximo acompanhamento"
                   >
                     <RotateCcw className="w-4 h-4" />
@@ -1614,19 +902,25 @@ export function Dashboard() {
                 </>
               ) : (
                 <button
-                  onClick={() => { toggleTaskComplete(task.id, task.status); onClose(); }}
+                  onClick={() => {
+                    toggleTaskComplete(task.id, task.status);
+                    onClose();
+                  }}
                   className={cn(
-                    "flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all shrink-0",
-                    task.status === 'Concluída' 
-                      ? "bg-secondary/10 text-secondary hover:bg-secondary/20" 
-                      : "bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20"
+                    'flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-colors shrink-0',
+                    task.status === 'Concluída'
+                      ? 'bg-secondary/10 text-secondary hover:bg-secondary/20'
+                      : 'bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20'
                   )}
                 >
                   <CheckCircle2 className="w-4 h-4" />
                   {task.status === 'Concluída' ? 'Reabrir Demanda' : 'Concluir'}
                 </button>
               )}
-              <button onClick={onClose} className="px-4 py-2 bg-surface-container-highest text-on-surface-variant text-xs font-bold rounded-xl hover:bg-surface-container-high transition-colors shrink-0">
+              <button
+                onClick={onClose}
+                className="px-4 py-2 bg-surface-container-highest text-on-surface-variant text-xs font-bold rounded-xl hover:bg-surface-container-high transition-colors shrink-0"
+              >
                 Fechar
               </button>
             </div>
@@ -1637,6 +931,13 @@ export function Dashboard() {
     );
   };
 
+  const todayFormatted = new Date().toLocaleDateString('pt-BR', {
+    weekday: 'long',
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+  });
+
   return (
     <>
       <NewTaskModal
@@ -1646,70 +947,519 @@ export function Dashboard() {
           setModalLockedProcessId(undefined);
           setModalInitialTaskType(undefined);
         }}
-        onSuccess={() => { if (userData) fetchTasks(userData, false); }}
+        onSuccess={() => {
+          if (userData) fetchDashboardData(userData, 'silent');
+        }}
         lockedProcessId={modalLockedProcessId}
         initialTaskType={modalInitialTaskType}
       />
 
-      {showFollowUpPrompt && createPortal(
-        <div className="fixed inset-0 bg-black/75 z-[110] flex items-center justify-center p-6">
-          <div className="bg-surface-container-low w-full max-w-sm rounded-3xl p-6 shadow-2xl flex flex-col items-center text-center border border-outline-variant/10">
-            <div className="w-12 h-12 rounded-2xl bg-amber-500/10 text-amber-500 flex items-center justify-center mb-4">
-              <RotateCcw className="w-6 h-6" />
+      {showFollowUpPrompt &&
+        createPortal(
+          <div className="fixed inset-0 bg-black/75 z-[110] flex items-center justify-center p-6">
+            <div className="bg-surface-container-low w-full max-w-sm rounded-3xl p-6 shadow-2xl flex flex-col items-center text-center border border-outline-variant/10">
+              <div className="w-12 h-12 rounded-2xl bg-amber-500/10 text-amber-500 flex items-center justify-center mb-4">
+                <RotateCcw className="w-6 h-6" />
+              </div>
+              <h3 className="font-headline font-bold text-lg text-on-surface mb-1.5">Demanda Concluída!</h3>
+              <p className="text-sm text-on-surface-variant mb-6 leading-relaxed">
+                Deseja agendar um novo acompanhamento para este processo ou prefere apenas finalizar?
+              </p>
+              <div className="flex flex-col sm:flex-row gap-2.5 w-full">
+                <button
+                  onClick={() => setShowFollowUpPrompt(false)}
+                  className="flex-1 py-3 px-4 bg-surface-container-highest text-on-surface-variant font-bold text-xs rounded-xl hover:bg-surface-container-high transition-colors"
+                >
+                  Apenas Finalizar
+                </button>
+                <button
+                  onClick={() => {
+                    setShowFollowUpPrompt(false);
+                    setModalLockedProcessId(followUpProcessId || undefined);
+                    setModalInitialTaskType('Acompanhamento de Processo');
+                    setIsTaskModalOpen(true);
+                  }}
+                  className="flex-1 py-3 px-4 bg-amber-500 text-white font-bold text-xs rounded-xl hover:bg-amber-600 transition-colors shadow-md shadow-amber-500/20 flex items-center justify-center gap-1.5"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  Agendar Novo
+                </button>
+              </div>
             </div>
-            <h3 className="font-headline font-bold text-lg text-on-surface mb-1.5">Demanda Concluída!</h3>
-            <p className="text-sm text-on-surface-variant mb-6 leading-relaxed">
-              Deseja agendar um novo acompanhamento para este processo ou prefere apenas finalizar?
-            </p>
-            <div className="flex flex-col sm:flex-row gap-2.5 w-full">
-              <button 
-                onClick={() => setShowFollowUpPrompt(false)} 
-                className="flex-1 py-3 px-4 bg-surface-container-highest text-on-surface-variant font-bold text-xs rounded-xl hover:bg-surface-container-high transition-all"
-              >
-                Apenas Finalizar
-              </button>
-              <button 
-                onClick={() => {
-                  setShowFollowUpPrompt(false);
-                  setModalLockedProcessId(followUpProcessId || undefined);
-                  setModalInitialTaskType('Acompanhamento de Processo');
-                  setIsTaskModalOpen(true);
-                }} 
-                className="flex-1 py-3 px-4 bg-amber-500 text-white font-bold text-xs rounded-xl hover:bg-amber-600 transition-all shadow-md shadow-amber-500/20 flex items-center justify-center gap-1.5"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                Agendar Novo
-              </button>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
+          </div>,
+          document.body
+        )}
 
       {selectedTaskDetail && (
         <TaskDetailModal task={selectedTaskDetail} onClose={() => setSelectedTaskDetail(null)} />
       )}
 
-      <div className="space-y-8 pb-20">
-        <section className="mb-6 flex items-start justify-between">
+      <div className="max-w-[1440px] mx-auto space-y-6 pb-20">
+        {/* Cabeçalho */}
+        <header className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-outline-variant/15 pb-5">
           <div>
-            <h2 className="text-3xl font-headline font-extrabold tracking-tight text-on-surface mb-2">Visão Geral</h2>
-            <p className="text-on-surface-variant">Bem-vindo(a) de volta. Aqui está o resumo jurídico do seu dia.</p>
+            <h2 className="text-3xl font-headline font-extrabold tracking-tight text-on-surface">
+              Visão Geral
+            </h2>
+            <p className="text-xs text-outline mt-1 capitalize">{todayFormatted}</p>
+          </div>
+
+          <div className="flex items-center gap-2.5">
+            <button
+              type="button"
+              onClick={() => userData && fetchDashboardData(userData, 'refresh')}
+              disabled={refreshing}
+              className="px-3.5 py-2 rounded-xl bg-surface-container-low border border-outline-variant/15 text-xs font-semibold text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors inline-flex items-center gap-1.5 disabled:opacity-50"
+            >
+              <RotateCcw className={cn('w-3.5 h-3.5', refreshing && 'animate-spin')} />
+              {refreshing ? 'Atualizando...' : 'Atualizar'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsTaskModalOpen(true)}
+              className="px-4 py-2 rounded-xl bg-secondary text-on-secondary text-xs font-headline font-bold hover:opacity-90 transition-opacity inline-flex items-center gap-1.5 shadow-sm"
+            >
+              <Plus className="w-4 h-4" />
+              Nova Tarefa
+            </button>
+          </div>
+        </header>
+
+        {/* Faixa de 6 KPIs práticos e clicáveis */}
+        <section className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
+          {[
+            { key: 'overdue' as TableFilterMode, value: stats.overdue, label: 'Em atraso', accent: stats.overdue > 0 ? 'text-error' : 'text-on-surface' },
+            { key: 'today' as TableFilterMode, value: stats.today, label: 'Vencem hoje', accent: stats.today > 0 ? 'text-secondary' : 'text-on-surface' },
+            { key: 'week' as TableFilterMode, value: stats.week, label: 'Próximos 7 dias', accent: 'text-on-surface' },
+            { key: 'monitoring' as TableFilterMode, value: stats.monitoring, label: 'Acompanhamentos', accent: 'text-on-surface' },
+            { key: 'today' as TableFilterMode, value: stats.hearings, label: 'Audiências hoje', accent: stats.hearings > 0 ? 'text-secondary' : 'text-on-surface' },
+            { key: 'all' as TableFilterMode, value: stats.totalOpen, label: 'Total em aberto', accent: 'text-on-surface' },
+          ].map((card, idx) => (
+            <button
+              key={idx}
+              type="button"
+              onClick={() => setTableFilter(card.key)}
+              className={cn(
+                'bg-surface-container-low rounded-xl p-4 text-left border transition-colors',
+                tableFilter === card.key
+                  ? 'border-secondary/60 bg-surface-container-high/40'
+                  : 'border-outline-variant/15 hover:border-outline-variant/35'
+              )}
+            >
+              <div className={cn('text-2xl font-headline font-extrabold leading-none tabular-nums', card.accent)}>
+                {card.value}
+              </div>
+              <div className="text-[11px] text-outline font-medium mt-2 leading-snug">{card.label}</div>
+            </button>
+          ))}
+        </section>
+
+        {/* Filtro por Cargo e Pessoa (apenas Administrador) */}
+        {isAdmin && allProfiles.length > 0 && (
+          <section className="bg-surface-container-low border border-outline-variant/15 rounded-xl p-3.5 flex flex-wrap items-center gap-2">
+            <span className="text-[10px] font-black uppercase tracking-widest text-outline flex items-center gap-1.5 mr-1">
+              <Filter className="w-3.5 h-3.5 text-secondary" /> Equipe:
+            </span>
+            {[
+              { id: 'all', label: 'Todos' },
+              { id: 'Administrador', label: 'Administradores' },
+              { id: 'Advogado', label: 'Advogados' },
+              { id: 'Estagiário', label: 'Estagiários' },
+            ].map((roleOpt) => {
+              const hasRole = roleOpt.id === 'all' || allProfiles.some((p) => p.role === roleOpt.id);
+              if (!hasRole) return null;
+              return (
+                <button
+                  key={roleOpt.id}
+                  type="button"
+                  onClick={() => {
+                    setPersonRoleFilter(roleOpt.id);
+                    setPersonFilter('all');
+                  }}
+                  className={cn(
+                    'px-2.5 py-1 rounded-lg text-[11px] font-bold transition-colors border',
+                    personRoleFilter === roleOpt.id
+                      ? 'bg-secondary text-on-secondary border-secondary'
+                      : 'bg-surface-container-high/50 text-outline border-outline-variant/15 hover:text-on-surface'
+                  )}
+                >
+                  {roleOpt.label}
+                </button>
+              );
+            })}
+
+            <select
+              value={personFilter}
+              onChange={(e) => setPersonFilter(e.target.value)}
+              className="ml-auto bg-surface-container-lowest border border-outline-variant/15 rounded-lg px-3 py-1.5 text-xs text-on-surface focus:border-secondary/60 outline-none"
+            >
+              <option value="all">Todos os colaboradores</option>
+              {(personRoleFilter === 'all'
+                ? allProfiles
+                : allProfiles.filter((p) => p.role === personRoleFilter)
+              ).map((prof) => (
+                <option key={prof.id} value={prof.name}>
+                  {prof.name}
+                </option>
+              ))}
+            </select>
+
+            {(personFilter !== 'all' || personRoleFilter !== 'all') && (
+              <button
+                type="button"
+                onClick={() => {
+                  setPersonFilter('all');
+                  setPersonRoleFilter('all');
+                }}
+                className="text-[11px] font-bold text-outline hover:text-error flex items-center gap-1"
+              >
+                <X className="w-3.5 h-3.5" /> Limpar
+              </button>
+            )}
+          </section>
+        )}
+
+        {/* Painel 2 colunas: Hoje no escritório + Fila prioritária */}
+        <section className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+          {/* Esquerda: Hoje no Escritório */}
+          <div className="lg:col-span-5 bg-surface-container-low rounded-2xl border border-outline-variant/15 p-5 flex flex-col">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-headline font-bold text-on-surface flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-secondary" />
+                Hoje no escritório
+              </h3>
+              <span className="text-xs font-bold text-outline tabular-nums">
+                {todayDueTasks.length + hearingsToday.length} item(ns)
+              </span>
+            </div>
+
+            {loadingTasks ? (
+              <div className="py-12 flex items-center justify-center text-xs text-outline gap-2">
+                <Loader2 className="w-4 h-4 animate-spin text-secondary" /> Carregando...
+              </div>
+            ) : todayDueTasks.length === 0 && hearingsToday.length === 0 ? (
+              <div className="py-10 text-center text-xs text-outline border border-dashed border-outline-variant/20 rounded-xl my-auto">
+                Nenhum prazo fatal ou audiência marcada para hoje.
+              </div>
+            ) : (
+              <div className="divide-y divide-outline-variant/10 max-h-[340px] overflow-y-auto custom-scrollbar pr-1">
+                {hearingsToday.map((h) => (
+                  <div key={`h-${h.id}`} className="py-3 flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-on-surface flex items-center gap-2 truncate">
+                        <Gavel className="w-3.5 h-3.5 text-secondary shrink-0" />
+                        <span className="truncate">
+                          Audiência {h.hearing_type} — {h.client_name}
+                        </span>
+                      </p>
+                      <p className="text-[11px] text-outline pl-5 mt-0.5 truncate tabular-nums">
+                        {h.hearing_time?.slice(0, 5)} · Proc. {h.process_number}
+                      </p>
+                    </div>
+                    {h.process_id && (
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/processos/${h.process_id}`)}
+                        className="px-2.5 py-1 rounded-lg border border-outline-variant/20 bg-surface-container-high/50 text-[11px] font-semibold text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high shrink-0"
+                      >
+                        Abrir
+                      </button>
+                    )}
+                  </div>
+                ))}
+
+                {todayDueTasks.map((t) => (
+                  <div key={`t-${t.id}`} className="py-3 flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-on-surface flex items-center gap-2 truncate">
+                        <Clock className="w-3.5 h-3.5 text-secondary shrink-0" />
+                        <span className="truncate">{t.client_name || t.processes?.clients?.name || 'Demanda'}</span>
+                      </p>
+                      <p className="text-[11px] text-outline pl-5 mt-0.5 truncate">{t.description}</p>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedTaskDetail(t)}
+                        className="px-2.5 py-1 rounded-lg border border-outline-variant/20 bg-surface-container-high/50 text-[11px] font-semibold text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high"
+                      >
+                        Abrir
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => toggleTaskComplete(t.id, t.status)}
+                        disabled={localSubmitting === t.id}
+                        className="px-2.5 py-1 rounded-lg border border-emerald-500/25 bg-emerald-500/10 text-[11px] font-semibold text-emerald-400 hover:bg-emerald-500/20 disabled:opacity-50"
+                      >
+                        Concluir
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Direita: Fila Prioritária */}
+          <div className="lg:col-span-7 bg-surface-container-low rounded-2xl border border-outline-variant/15 p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-headline font-bold text-on-surface flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-secondary" />
+                Fila prioritária (prazos mais próximos)
+              </h3>
+              <button
+                type="button"
+                onClick={() => setTableFilter('all')}
+                className="text-xs font-semibold text-secondary hover:underline"
+              >
+                Ver todas ({pendingTasks.length})
+              </button>
+            </div>
+
+            {loadingTasks ? (
+              <div className="py-12 flex items-center justify-center text-xs text-outline gap-2">
+                <Loader2 className="w-4 h-4 animate-spin text-secondary" /> Carregando...
+              </div>
+            ) : priorityTasks.length === 0 ? (
+              <div className="py-10 text-center text-xs text-outline border border-dashed border-outline-variant/20 rounded-xl">
+                Nenhuma tarefa pendente.
+              </div>
+            ) : (
+              <div className="divide-y divide-outline-variant/10">
+                {priorityTasks.map((t) => {
+                  const diff = t.fatal_date ? getDaysUntil(t.fatal_date) : null;
+                  const isOverdue = diff !== null && diff < 0;
+                  const isToday = diff === 0;
+                  const clientName = t.client_name || t.processes?.clients?.name || 'Sem cliente';
+
+                  return (
+                    <div key={t.id} className="py-3 flex items-center justify-between gap-4">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-semibold text-on-surface truncate">{t.description}</p>
+                        <p className="text-[11px] text-on-surface-variant mt-0.5 flex items-center gap-2 flex-wrap">
+                          <span className="text-secondary font-medium">{clientName}</span>
+                          {t.task_type && <span className="text-outline">· {t.task_type}</span>}
+                          {t.responsible && <span className="text-outline">· {t.responsible.split(',')[0].trim()}</span>}
+                          {t.fatal_date && (
+                            <span
+                              className={cn(
+                                'tabular-nums font-semibold',
+                                isOverdue ? 'text-error' : isToday ? 'text-amber-400' : 'text-outline'
+                              )}
+                            >
+                              · {isOverdue ? `${Math.abs(diff!)}d atraso` : isToday ? 'Vence hoje' : formatDateBR(t.fatal_date)}
+                            </span>
+                          )}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedTaskDetail(t)}
+                          className="px-2.5 py-1 rounded-lg border border-outline-variant/20 bg-surface-container-high/50 text-[11px] font-semibold text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high"
+                        >
+                          Abrir
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => toggleTaskComplete(t.id, t.status)}
+                          disabled={localSubmitting === t.id}
+                          className="px-2.5 py-1 rounded-lg border border-emerald-500/25 bg-emerald-500/10 text-[11px] font-semibold text-emerald-400 hover:bg-emerald-500/20 disabled:opacity-50"
+                        >
+                          Concluir
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </section>
 
-        <div className="space-y-8">
-          {widgets.map(({ id, content }) => (
-            <div key={id}>
-              {content}
+        {/* Tabela completa inferior */}
+        <section className="bg-surface-container-low rounded-2xl border border-outline-variant/15 p-5 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h3 className="text-base font-headline font-bold text-on-surface">
+              Acompanhamento de demandas
+            </h3>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {(
+                [
+                  { id: 'attention', label: `Exigem atenção (${stats.attention})` },
+                  { id: 'all', label: `Todas (${stats.totalOpen})` },
+                  { id: 'overdue', label: `Atrasadas (${stats.overdue})` },
+                  { id: 'today', label: `Hoje (${stats.today})` },
+                  { id: 'monitoring', label: `Acompanhamentos (${stats.monitoring})` },
+                  { id: 'completed', label: `Concluídas (${stats.completed})` },
+                ] as { id: TableFilterMode; label: string }[]
+              ).map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setTableFilter(tab.id)}
+                  className={cn(
+                    'px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors border',
+                    tableFilter === tab.id
+                      ? 'bg-secondary text-on-secondary border-secondary'
+                      : 'bg-surface-container-high/50 text-on-surface-variant border-outline-variant/15 hover:text-on-surface'
+                  )}
+                >
+                  {tab.label}
+                </button>
+              ))}
             </div>
-          ))}
-        </div>
+          </div>
+
+          {/* Barra de busca */}
+          <div className="flex flex-wrap items-center gap-2.5">
+            <div className="relative flex-1 min-w-[220px]">
+              <Search className="w-3.5 h-3.5 text-outline absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Buscar por cliente, nº do processo, responsável ou descrição..."
+                className="w-full bg-surface-container-lowest border border-outline-variant/15 rounded-lg pl-8 pr-3 py-2 text-xs text-on-surface placeholder:text-outline/60 focus:border-secondary/60 outline-none"
+              />
+            </div>
+
+            {(tableFilter !== 'all' || searchQuery) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setTableFilter('all');
+                  setSearchQuery('');
+                }}
+                className="px-3 py-2 rounded-lg border border-outline-variant/15 bg-surface-container-high/50 text-xs font-semibold text-on-surface-variant hover:text-on-surface"
+              >
+                Limpar
+              </button>
+            )}
+          </div>
+
+          {/* Tabela */}
+          <div className="overflow-x-auto custom-scrollbar">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-outline-variant/15 text-[10px] font-bold uppercase tracking-wider text-outline">
+                  <th className="py-2.5 pr-4">Cliente</th>
+                  <th className="py-2.5 px-3">Demanda / Processo</th>
+                  <th className="py-2.5 px-3">Prazo Fatal</th>
+                  <th className="py-2.5 px-3">Situação</th>
+                  <th className="py-2.5 px-3">Responsável</th>
+                  <th className="py-2.5 pl-3 text-right">Ações</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-outline-variant/10 text-xs">
+                {filteredTableTasks.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-10 text-center text-outline">
+                      Nenhuma demanda encontrada neste filtro.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredTableTasks.slice(0, 60).map((t) => {
+                    const isCompleted = t.status === 'Concluída';
+                    const diff = t.fatal_date ? getDaysUntil(t.fatal_date) : null;
+                    const clientName = t.client_name || t.processes?.clients?.name || '—';
+                    const procNum = t.process_number || t.processes?.number || '';
+
+                    let statusBadge = {
+                      text: isCompleted ? 'Concluída' : 'Sem prazo',
+                      cls: isCompleted
+                        ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/25'
+                        : 'bg-surface-container-high text-outline border-outline-variant/15',
+                    };
+                    if (!isCompleted && diff !== null) {
+                      if (diff < 0) {
+                        statusBadge = {
+                          text: `Atrasado ${Math.abs(diff)}d`,
+                          cls: 'bg-error/15 text-error border-error/25',
+                        };
+                      } else if (diff === 0) {
+                        statusBadge = {
+                          text: 'Vence hoje',
+                          cls: 'bg-amber-500/15 text-amber-400 border-amber-500/25',
+                        };
+                      } else if (diff <= 3) {
+                        statusBadge = {
+                          text: `Em ${diff} dia(s)`,
+                          cls: 'bg-secondary/15 text-secondary border-secondary/25',
+                        };
+                      } else {
+                        statusBadge = {
+                          text: `Em dia (${diff}d)`,
+                          cls: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/25',
+                        };
+                      }
+                    }
+
+                    return (
+                      <tr
+                        key={t.id}
+                        onClick={() => setSelectedTaskDetail(t)}
+                        className="hover:bg-surface-container-high/35 transition-colors cursor-pointer"
+                      >
+                        <td className="py-3 pr-4 font-semibold text-secondary max-w-[200px] truncate">
+                          {clientName}
+                        </td>
+                        <td className="py-3 px-3 max-w-[340px]">
+                          <p className="font-medium text-on-surface truncate">{t.description}</p>
+                          <p className="text-[11px] text-outline font-mono truncate tabular-nums">
+                            {[procNum, t.task_type].filter(Boolean).join(' · ') || '—'}
+                          </p>
+                        </td>
+                        <td className="py-3 px-3 whitespace-nowrap text-on-surface font-medium tabular-nums">
+                          {formatDateBR(t.fatal_date)}
+                        </td>
+                        <td className="py-3 px-3 whitespace-nowrap">
+                          <span className={cn('px-2.5 py-0.5 rounded-md text-[11px] font-semibold border', statusBadge.cls)}>
+                            {statusBadge.text}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 text-on-surface-variant max-w-[160px] truncate">
+                          {t.responsible || '—'}
+                        </td>
+                        <td className="py-3 pl-3 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                          <div className="inline-flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => setSelectedTaskDetail(t)}
+                              className="px-2.5 py-1 rounded-lg border border-outline-variant/20 bg-surface-container-high/50 text-[11px] font-semibold text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high"
+                            >
+                              Abrir
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => toggleTaskComplete(t.id, t.status)}
+                              disabled={localSubmitting === t.id}
+                              className={cn(
+                                'px-2.5 py-1 rounded-lg border text-[11px] font-semibold disabled:opacity-50',
+                                isCompleted
+                                  ? 'border-secondary/30 bg-secondary/10 text-secondary hover:bg-secondary/20'
+                                  : 'border-emerald-500/25 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20'
+                              )}
+                            >
+                              {isCompleted ? 'Reabrir' : 'Concluir'}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
       </div>
 
       <button
         onClick={() => setIsTaskModalOpen(true)}
         className="fixed bottom-8 right-8 w-14 h-14 bg-secondary text-on-secondary rounded-full shadow-2xl flex items-center justify-center hover:opacity-90 transition-opacity z-50"
+        title="Nova Tarefa"
       >
         <Plus className="w-6 h-6" />
       </button>
