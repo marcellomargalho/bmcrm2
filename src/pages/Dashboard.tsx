@@ -23,6 +23,7 @@ import {
   AlignLeft,
   History,
   Search,
+  ArrowUpDown,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { NewTaskModal } from '@/components/NewTaskModal';
@@ -38,6 +39,7 @@ interface DashboardCache {
 }
 
 type TableFilterMode = 'attention' | 'all' | 'overdue' | 'today' | 'week' | 'monitoring' | 'completed';
+type DeadlineSortMode = 'nearest' | 'furthest';
 
 const CACHE_KEY = 'dashboard_bundle_v2';
 
@@ -81,7 +83,8 @@ export function Dashboard() {
   const [personRoleFilter, setPersonRoleFilter] = useState<string>('all');
 
   // Table & search state
-  const [tableFilter, setTableFilter] = useState<TableFilterMode>('attention');
+  const [tableFilter, setTableFilter] = useState<TableFilterMode>('all');
+  const [deadlineSort, setDeadlineSort] = useState<DeadlineSortMode>('nearest');
   const [searchQuery, setSearchQuery] = useState('');
 
   // Follow-up state
@@ -382,7 +385,7 @@ export function Dashboard() {
     const base = tableFilter === 'completed' ? completedTasks : pendingTasks;
     const needle = searchQuery.trim().toLowerCase();
 
-    return base.filter((t) => {
+    const filtered = base.filter((t) => {
       if (tableFilter === 'attention') {
         const diff = t.fatal_date ? getDaysUntil(t.fatal_date) : null;
         if (diff === null || diff > 3) return false;
@@ -410,7 +413,34 @@ export function Dashboard() {
 
       return true;
     });
-  }, [pendingTasks, completedTasks, tableFilter, searchQuery]);
+
+    if (tableFilter === 'completed') {
+      return filtered;
+    }
+
+    return [...filtered].sort((a, b) => {
+      const aDate = a.fatal_date || '';
+      const bDate = b.fatal_date || '';
+      if (!aDate && !bDate) return 0;
+      if (!aDate) return 1;
+      if (!bDate) return -1;
+
+      if (aDate !== bDate) {
+        return deadlineSort === 'nearest'
+          ? aDate.localeCompare(bDate)
+          : bDate.localeCompare(aDate);
+      }
+
+      const aIdeal = a.ideal_date || '';
+      const bIdeal = b.ideal_date || '';
+      if (!aIdeal && !bIdeal) return 0;
+      if (!aIdeal) return 1;
+      if (!bIdeal) return -1;
+      return deadlineSort === 'nearest'
+        ? aIdeal.localeCompare(bIdeal)
+        : bIdeal.localeCompare(aIdeal);
+    });
+  }, [pendingTasks, completedTasks, tableFilter, searchQuery, deadlineSort]);
 
   // ─── Task Detail Modal (completo, com todas integrações) ───────────
   const TaskDetailModal = ({ task, onClose }: { task: any; onClose: () => void }) => {
@@ -1366,8 +1396,8 @@ export function Dashboard() {
             <div className="flex flex-wrap items-center gap-1.5">
               {(
                 [
-                  { id: 'attention', label: `Exigem atenção (${stats.attention})` },
                   { id: 'all', label: `Todas (${stats.totalOpen})` },
+                  { id: 'attention', label: `Exigem atenção (${stats.attention})` },
                   { id: 'overdue', label: `Atrasadas (${stats.overdue})` },
                   { id: 'today', label: `Hoje (${stats.today})` },
                   { id: 'monitoring', label: `Acompanhamentos (${stats.monitoring})` },
@@ -1391,7 +1421,7 @@ export function Dashboard() {
             </div>
           </div>
 
-          {/* Barra de busca */}
+          {/* Barra de busca e ordenação de prazos */}
           <div className="flex flex-wrap items-center gap-2.5">
             <div className="relative flex-1 min-w-[220px]">
               <Search className="w-3.5 h-3.5 text-outline absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -1404,11 +1434,45 @@ export function Dashboard() {
               />
             </div>
 
-            {(tableFilter !== 'all' || searchQuery) && (
+            {tableFilter !== 'completed' && (
+              <div className="inline-flex items-center rounded-lg border border-outline-variant/15 bg-surface-container-lowest p-0.5">
+                <span className="inline-flex items-center gap-1 px-2 text-[11px] font-medium text-outline">
+                  <ArrowUpDown className="w-3 h-3" />
+                  Prazo:
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setDeadlineSort('nearest')}
+                  className={cn(
+                    'px-2.5 py-1.5 rounded-md text-xs font-semibold transition-colors',
+                    deadlineSort === 'nearest'
+                      ? 'bg-secondary text-on-secondary'
+                      : 'text-on-surface-variant hover:text-on-surface'
+                  )}
+                >
+                  Mais próximos
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDeadlineSort('furthest')}
+                  className={cn(
+                    'px-2.5 py-1.5 rounded-md text-xs font-semibold transition-colors',
+                    deadlineSort === 'furthest'
+                      ? 'bg-secondary text-on-secondary'
+                      : 'text-on-surface-variant hover:text-on-surface'
+                  )}
+                >
+                  Mais longes
+                </button>
+              </div>
+            )}
+
+            {(tableFilter !== 'all' || searchQuery || deadlineSort !== 'nearest') && (
               <button
                 type="button"
                 onClick={() => {
                   setTableFilter('all');
+                  setDeadlineSort('nearest');
                   setSearchQuery('');
                 }}
                 className="px-3 py-2 rounded-lg border border-outline-variant/15 bg-surface-container-high/50 text-xs font-semibold text-on-surface-variant hover:text-on-surface"
