@@ -1285,8 +1285,10 @@ export function Dashboard() {
               <div className="divide-y divide-outline-variant/10">
                 {priorityTasks.map((t) => {
                   const diff = t.fatal_date ? getDaysUntil(t.fatal_date) : null;
+                  const idealDiff = t.ideal_date ? getDaysUntil(t.ideal_date) : null;
                   const isOverdue = diff !== null && diff < 0;
                   const isToday = diff === 0;
+                  const isIdealToday = idealDiff === 0;
                   const clientName = t.client_name || t.processes?.clients?.name || 'Sem cliente';
 
                   return (
@@ -1298,18 +1300,33 @@ export function Dashboard() {
                           {t.task_type && <span className="text-outline">· {t.task_type}</span>}
                           {t.responsible && <span className="text-outline">· {t.responsible.split(',')[0].trim()}</span>}
                           {t.ideal_date && (
-                            <span className="tabular-nums text-on-surface-variant">
-                              · Ideal {formatDateBR(t.ideal_date)}
+                            <span
+                              className={cn(
+                                'tabular-nums',
+                                isIdealToday
+                                  ? 'px-1.5 py-0.5 rounded bg-amber-500/15 border border-amber-500/35 text-amber-300 font-bold'
+                                  : 'text-on-surface-variant'
+                              )}
+                            >
+                              {isIdealToday ? 'Ideal Hoje' : `· Ideal ${formatDateBR(t.ideal_date)}`}
                             </span>
                           )}
                           {t.fatal_date && (
                             <span
                               className={cn(
                                 'tabular-nums font-semibold',
-                                isOverdue ? 'text-error' : isToday ? 'text-amber-400' : 'text-outline'
+                                isOverdue
+                                  ? 'text-error'
+                                  : isToday
+                                  ? 'px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-500/40 text-amber-300 font-bold'
+                                  : 'text-outline'
                               )}
                             >
-                              · Fatal {isOverdue ? `${Math.abs(diff!)}d atraso` : isToday ? 'Vence hoje' : formatDateBR(t.fatal_date)}
+                              {isToday
+                                ? `Fatal Hoje (${formatDateBR(t.fatal_date)})`
+                                : isOverdue
+                                ? `· Fatal ${Math.abs(diff!)}d atraso`
+                                : `· Fatal ${formatDateBR(t.fatal_date)}`}
                             </span>
                           )}
                         </p>
@@ -1426,6 +1443,10 @@ export function Dashboard() {
                   filteredTableTasks.slice(0, 60).map((t) => {
                     const isCompleted = t.status === 'Concluída';
                     const diff = t.fatal_date ? getDaysUntil(t.fatal_date) : null;
+                    const idealDiff = t.ideal_date ? getDaysUntil(t.ideal_date) : null;
+                    const isFatalToday = !isCompleted && diff === 0;
+                    const isFatalOverdue = !isCompleted && diff !== null && diff < 0;
+                    const isIdealToday = !isCompleted && idealDiff === 0;
                     const clientName = t.client_name || t.processes?.clients?.name || '—';
                     const procNum = t.process_number || t.processes?.number || '';
 
@@ -1463,7 +1484,10 @@ export function Dashboard() {
                       <tr
                         key={t.id}
                         onClick={() => setSelectedTaskDetail(t)}
-                        className="hover:bg-surface-container-high/35 transition-colors cursor-pointer"
+                        className={cn(
+                          'hover:bg-surface-container-high/35 transition-colors cursor-pointer',
+                          (isFatalToday || isIdealToday) && 'bg-amber-500/[0.04]'
+                        )}
                       >
                         <td className="py-3 pr-4 font-semibold text-secondary max-w-[200px] truncate">
                           {clientName}
@@ -1474,11 +1498,25 @@ export function Dashboard() {
                             {[procNum, t.task_type].filter(Boolean).join(' · ') || '—'}
                           </p>
                         </td>
-                        <td className="py-3 px-3 whitespace-nowrap text-on-surface-variant font-medium tabular-nums">
-                          {formatDateBR(t.ideal_date)}
+                        <td className="py-3 px-3 whitespace-nowrap font-medium tabular-nums">
+                          {isIdealToday ? (
+                            <span className="inline-block px-2 py-0.5 rounded-md bg-amber-500/15 border border-amber-500/35 text-amber-300 font-bold">
+                              {formatDateBR(t.ideal_date)}
+                            </span>
+                          ) : (
+                            <span className="text-on-surface-variant">{formatDateBR(t.ideal_date)}</span>
+                          )}
                         </td>
-                        <td className="py-3 px-3 whitespace-nowrap text-on-surface font-medium tabular-nums">
-                          {formatDateBR(t.fatal_date)}
+                        <td className="py-3 px-3 whitespace-nowrap font-medium tabular-nums">
+                          {isFatalToday ? (
+                            <span className="inline-block px-2 py-0.5 rounded-md bg-amber-500/20 border border-amber-500/40 text-amber-300 font-bold">
+                              {formatDateBR(t.fatal_date)}
+                            </span>
+                          ) : isFatalOverdue ? (
+                            <span className="text-error font-bold">{formatDateBR(t.fatal_date)}</span>
+                          ) : (
+                            <span className="text-on-surface">{formatDateBR(t.fatal_date)}</span>
+                          )}
                         </td>
                         <td className="py-3 px-3 whitespace-nowrap">
                           <span className={cn('px-2.5 py-0.5 rounded-md text-[11px] font-semibold border', statusBadge.cls)}>
