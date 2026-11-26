@@ -329,6 +329,7 @@ export function Dashboard() {
     let week = 0;
     let monitoring = 0;
     let attention = 0;
+    let todayHearingTasks = 0;
 
     for (const t of scopedTasks) {
       if (t.status === 'Concluída') {
@@ -340,8 +341,12 @@ export function Dashboard() {
       if (t.fatal_date) {
         const d = getDaysUntil(t.fatal_date);
         if (d < 0) overdue++;
-        else if (d === 0) dueToday.push(t);
-        else if (d <= 7) week++;
+        else if (d === 0) {
+          dueToday.push(t);
+          if (t.task_type?.toLowerCase().includes('audiência') || t.task_type?.toLowerCase().includes('audiencia')) {
+            todayHearingTasks++;
+          }
+        } else if (d <= 7) week++;
         if (d <= 3) attention++;
       }
     }
@@ -362,7 +367,7 @@ export function Dashboard() {
         week,
         monitoring,
         attention,
-        hearings: hearingsToday.length,
+        hearings: hearingsToday.length + todayHearingTasks,
         totalOpen: pending.length,
         completed: completed.length,
       },
@@ -1208,12 +1213,23 @@ export function Dashboard() {
                   </div>
                 ))}
 
-                {todayDueTasks.map((t) => (
+                {todayDueTasks.map((t) => {
+                  const isHearingTask =
+                    t.task_type?.toLowerCase().includes('audiência') ||
+                    t.task_type?.toLowerCase().includes('audiencia');
+                  return (
                   <div key={`t-${t.id}`} className="py-3 flex items-center justify-between gap-3">
                     <div className="min-w-0">
                       <p className="text-xs font-semibold text-on-surface flex items-center gap-2 truncate">
-                        <Clock className="w-3.5 h-3.5 text-secondary shrink-0" />
-                        <span className="truncate">{t.client_name || t.processes?.clients?.name || 'Demanda'}</span>
+                        {isHearingTask ? (
+                          <Gavel className="w-3.5 h-3.5 text-secondary shrink-0" />
+                        ) : (
+                          <Clock className="w-3.5 h-3.5 text-secondary shrink-0" />
+                        )}
+                        <span className="truncate">
+                          {isHearingTask ? 'Audiência — ' : ''}
+                          {t.client_name || t.processes?.clients?.name || 'Demanda'}
+                        </span>
                       </p>
                       <p className="text-[11px] text-outline pl-5 mt-0.5 truncate">{t.description}</p>
                     </div>
@@ -1235,7 +1251,8 @@ export function Dashboard() {
                       </button>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
