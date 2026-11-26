@@ -1054,68 +1054,108 @@ export function Dashboard() {
           ))}
         </section>
 
-        {/* Filtro por Cargo e Pessoa (apenas Administrador) */}
+        {/* Filtro por Cargo e Pessoa (apenas Administrador) — com contagem de tarefas disponíveis */}
         {isAdmin && allProfiles.length > 0 && (
-          <section className="bg-surface-container-low border border-outline-variant/15 rounded-xl p-3.5 flex flex-wrap items-center gap-2">
-            <span className="text-[10px] font-black uppercase tracking-widest text-outline flex items-center gap-1.5 mr-1">
-              <Filter className="w-3.5 h-3.5 text-secondary" /> Equipe:
-            </span>
-            {[
-              { id: 'all', label: 'Todos' },
-              { id: 'Administrador', label: 'Administradores' },
-              { id: 'Advogado', label: 'Advogados' },
-              { id: 'Estagiário', label: 'Estagiários' },
-            ].map((roleOpt) => {
-              const hasRole = roleOpt.id === 'all' || allProfiles.some((p) => p.role === roleOpt.id);
-              if (!hasRole) return null;
-              return (
+          <section className="bg-surface-container-low border border-outline-variant/15 rounded-2xl p-4 space-y-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[10px] font-black uppercase tracking-widest text-outline flex items-center gap-1.5 mr-1">
+                <Filter className="w-3.5 h-3.5 text-secondary" /> Filtrar por Colaborador:
+              </span>
+              {[
+                { id: 'all', label: 'Todos' },
+                { id: 'Administrador', label: 'Administradores' },
+                { id: 'Advogado', label: 'Advogados' },
+                { id: 'Assessor Jurídico', label: 'Assessores' },
+                { id: 'Estagiário', label: 'Estagiários' },
+              ].map((roleOpt) => {
+                const hasRole = roleOpt.id === 'all' || allProfiles.some((p) => p.role === roleOpt.id);
+                if (!hasRole) return null;
+                return (
+                  <button
+                    key={roleOpt.id}
+                    type="button"
+                    onClick={() => {
+                      setPersonRoleFilter(roleOpt.id);
+                      setPersonFilter('all');
+                    }}
+                    className={cn(
+                      'px-2.5 py-1 rounded-lg text-[11px] font-bold transition-colors border',
+                      personRoleFilter === roleOpt.id
+                        ? 'bg-secondary text-on-secondary border-secondary'
+                        : 'bg-surface-container-high/50 text-outline border-outline-variant/15 hover:text-on-surface'
+                    )}
+                  >
+                    {roleOpt.label}
+                  </button>
+                );
+              })}
+
+              {(personFilter !== 'all' || personRoleFilter !== 'all') && (
                 <button
-                  key={roleOpt.id}
                   type="button"
                   onClick={() => {
-                    setPersonRoleFilter(roleOpt.id);
                     setPersonFilter('all');
+                    setPersonRoleFilter('all');
                   }}
-                  className={cn(
-                    'px-2.5 py-1 rounded-lg text-[11px] font-bold transition-colors border',
-                    personRoleFilter === roleOpt.id
-                      ? 'bg-secondary text-on-secondary border-secondary'
-                      : 'bg-surface-container-high/50 text-outline border-outline-variant/15 hover:text-on-surface'
-                  )}
+                  className="ml-auto text-[11px] font-bold text-outline hover:text-error flex items-center gap-1"
                 >
-                  {roleOpt.label}
+                  <X className="w-3.5 h-3.5" /> Limpar filtro
                 </button>
-              );
-            })}
+              )}
+            </div>
 
-            <select
-              value={personFilter}
-              onChange={(e) => setPersonFilter(e.target.value)}
-              className="ml-auto bg-surface-container-lowest border border-outline-variant/15 rounded-lg px-3 py-1.5 text-xs text-on-surface focus:border-secondary/60 outline-none"
-            >
-              <option value="all">Todos os colaboradores</option>
+            <div className="flex flex-wrap gap-2">
               {(personRoleFilter === 'all'
                 ? allProfiles
                 : allProfiles.filter((p) => p.role === personRoleFilter)
-              ).map((prof) => (
-                <option key={prof.id} value={prof.name}>
-                  {prof.name}
-                </option>
-              ))}
-            </select>
+              ).map((profile) => {
+                const openCount = allTasks.filter(
+                  (t) =>
+                    t.status !== 'Concluída' &&
+                    t.responsible?.toLowerCase().includes(profile.name?.toLowerCase())
+                ).length;
+                const isSelected = personFilter === profile.name;
+                const roleTag =
+                  profile.role === 'Administrador'
+                    ? 'Adm'
+                    : profile.role?.startsWith('Advogado')
+                    ? 'Adv'
+                    : profile.role === 'Assessor Jurídico'
+                    ? 'Ass'
+                    : 'Est';
 
-            {(personFilter !== 'all' || personRoleFilter !== 'all') && (
-              <button
-                type="button"
-                onClick={() => {
-                  setPersonFilter('all');
-                  setPersonRoleFilter('all');
-                }}
-                className="text-[11px] font-bold text-outline hover:text-error flex items-center gap-1"
-              >
-                <X className="w-3.5 h-3.5" /> Limpar
-              </button>
-            )}
+                return (
+                  <button
+                    key={profile.id}
+                    type="button"
+                    onClick={() => setPersonFilter(isSelected ? 'all' : profile.name)}
+                    className={cn(
+                      'flex items-center gap-2 px-3 py-1.5 rounded-xl text-[11px] font-bold transition-colors border',
+                      isSelected
+                        ? 'bg-secondary/20 text-secondary border-secondary/50 ring-1 ring-secondary/30'
+                        : 'bg-surface-container-lowest text-on-surface-variant border-outline-variant/15 hover:border-secondary/30 hover:text-on-surface'
+                    )}
+                  >
+                    <span className="w-5 h-5 rounded-full bg-secondary/15 text-secondary flex items-center justify-center font-black text-[9px] shrink-0">
+                      {profile.name?.charAt(0).toUpperCase()}
+                    </span>
+                    <span>{profile.name}</span>
+                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-surface-container-high text-outline uppercase">
+                      {roleTag}
+                    </span>
+                    <span
+                      className={cn(
+                        'px-1.5 py-0.5 rounded-md text-[10px] font-extrabold tabular-nums',
+                        openCount > 0 ? 'bg-secondary/15 text-secondary' : 'bg-surface-container-high text-outline'
+                      )}
+                      title="Tarefas em aberto para este usuário"
+                    >
+                      {openCount}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </section>
         )}
 
@@ -1240,6 +1280,11 @@ export function Dashboard() {
                           <span className="text-secondary font-medium">{clientName}</span>
                           {t.task_type && <span className="text-outline">· {t.task_type}</span>}
                           {t.responsible && <span className="text-outline">· {t.responsible.split(',')[0].trim()}</span>}
+                          {t.ideal_date && (
+                            <span className="tabular-nums text-on-surface-variant">
+                              · Ideal {formatDateBR(t.ideal_date)}
+                            </span>
+                          )}
                           {t.fatal_date && (
                             <span
                               className={cn(
@@ -1247,7 +1292,7 @@ export function Dashboard() {
                                 isOverdue ? 'text-error' : isToday ? 'text-amber-400' : 'text-outline'
                               )}
                             >
-                              · {isOverdue ? `${Math.abs(diff!)}d atraso` : isToday ? 'Vence hoje' : formatDateBR(t.fatal_date)}
+                              · Fatal {isOverdue ? `${Math.abs(diff!)}d atraso` : isToday ? 'Vence hoje' : formatDateBR(t.fatal_date)}
                             </span>
                           )}
                         </p>
@@ -1346,6 +1391,7 @@ export function Dashboard() {
                 <tr className="border-b border-outline-variant/15 text-[10px] font-bold uppercase tracking-wider text-outline">
                   <th className="py-2.5 pr-4">Cliente</th>
                   <th className="py-2.5 px-3">Demanda / Processo</th>
+                  <th className="py-2.5 px-3">Prazo Ideal</th>
                   <th className="py-2.5 px-3">Prazo Fatal</th>
                   <th className="py-2.5 px-3">Situação</th>
                   <th className="py-2.5 px-3">Responsável</th>
@@ -1355,7 +1401,7 @@ export function Dashboard() {
               <tbody className="divide-y divide-outline-variant/10 text-xs">
                 {filteredTableTasks.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-10 text-center text-outline">
+                    <td colSpan={7} className="py-10 text-center text-outline">
                       Nenhuma demanda encontrada neste filtro.
                     </td>
                   </tr>
@@ -1411,6 +1457,9 @@ export function Dashboard() {
                             {[procNum, t.task_type].filter(Boolean).join(' · ') || '—'}
                           </p>
                         </td>
+                        <td className="py-3 px-3 whitespace-nowrap text-on-surface-variant font-medium tabular-nums">
+                          {formatDateBR(t.ideal_date)}
+                        </td>
                         <td className="py-3 px-3 whitespace-nowrap text-on-surface font-medium tabular-nums">
                           {formatDateBR(t.fatal_date)}
                         </td>
@@ -1453,6 +1502,96 @@ export function Dashboard() {
               </tbody>
             </table>
           </div>
+        </section>
+
+        {/* Widget de Histórico de Tarefas Concluídas (com opção de Restaurar) */}
+        <section className="recent-tasks-section bg-surface-container-low rounded-2xl border border-outline-variant/15 p-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-base font-headline font-bold text-on-surface flex items-center gap-2">
+              <History className="w-4 h-4 text-secondary" />
+              Histórico de Tarefas Concluídas
+            </h3>
+            <span className="text-xs font-semibold text-outline tabular-nums">
+              {completedTasks.length} concluída(s) recentemente
+            </span>
+          </div>
+
+          {completedTasks.length === 0 ? (
+            <div className="py-8 text-center text-xs text-outline border border-dashed border-outline-variant/20 rounded-xl">
+              Nenhuma tarefa concluída recentemente.
+            </div>
+          ) : (
+            <div className="activity-timeline-modern">
+              <div className="activity-line-modern" />
+              {completedTasks.slice(0, 6).map((task, i) => {
+                const updatedDate = new Date(task.updated_at || task.created_at);
+                const diffMs = Date.now() - updatedDate.getTime();
+                const diffMins = Math.floor(diffMs / 60000);
+                const diffHours = Math.floor(diffMs / 3600000);
+                const diffDays = Math.floor(diffMs / 86400000);
+
+                let timeAgo = '';
+                if (diffMins < 1) timeAgo = 'Agora';
+                else if (diffMins < 60) timeAgo = `${diffMins}m`;
+                else if (diffHours < 24) timeAgo = `${diffHours}h`;
+                else timeAgo = `${diffDays}d`;
+
+                return (
+                  <div key={task.id} className={cn('activity-item-modern', i === 0 && 'recent')}>
+                    <div className="activity-node-modern">
+                      {i === 0 && <Check className="w-2.5 h-2.5 text-on-secondary" strokeWidth={4} />}
+                    </div>
+
+                    <div className="activity-card-modern p-3.5 cursor-pointer" onClick={() => setSelectedTaskDetail(task)}>
+                      <div className="activity-header-modern mb-1.5">
+                        <span className="activity-tag-modern text-[9px] py-0.5 px-1.5">Tarefa Concluída</span>
+
+                        <div className="flex items-center gap-2 ml-auto">
+                          <span className="activity-time-modern text-[10px] tabular-nums">{timeAgo}</span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleTaskComplete(task.id, task.status);
+                            }}
+                            disabled={localSubmitting === task.id}
+                            className={cn('activity-reopen-btn-inline text-[10px]', localSubmitting === task.id && 'pulse')}
+                            title="Restaurar Tarefa"
+                          >
+                            {localSubmitting === task.id ? (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : (
+                              <RotateCcw className="w-3 h-3" />
+                            )}
+                            <span>Restaurar</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      <p className="activity-desc-modern text-xs mb-2">{task.description}</p>
+
+                      <div className="activity-meta-modern mt-0">
+                        {task.responsible && (
+                          <div className="activity-meta-item text-[10px]">
+                            <div className="avatar-modern" style={{ width: '14px', height: '14px', fontSize: '7px' }}>
+                              {task.responsible.charAt(0).toUpperCase()}
+                            </div>
+                            <span>{task.responsible.split(',')[0].trim()}</span>
+                          </div>
+                        )}
+                        {(task.client_name || task.processes?.clients?.name) && (
+                          <div className="activity-meta-item text-[10px]">
+                            <Users className="w-3 h-3" />
+                            <span>{task.client_name || task.processes?.clients?.name}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </section>
       </div>
 
